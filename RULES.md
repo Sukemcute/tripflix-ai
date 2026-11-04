@@ -13,23 +13,23 @@ AI agent: đọc hết file này trước khi làm. Luật nào không làm đư
 ## 2. Nhánh và luồng merge
 
 ```
-<tên>/<TFxx>-<mô-tả>  ──PR──▶  dev  ──PR (release)──▶  main
+<tên>/<TFxx>-<mô-tả>  ──PR──▶  develop  ──PR (release)──▶  main
 ```
 
 | Nhánh | Dùng làm gì | Ai được đưa code vào |
 |---|---|---|
-| `main` | Bản ổn định để demo | Chỉ PR từ `dev` (release) hoặc nhánh hotfix |
-| `dev` | Gộp code của cả team, chạy staging | Chỉ PR từ nhánh task |
+| `main` | Bản ổn định để demo | Chỉ PR từ `develop` (release) hoặc nhánh hotfix |
+| `develop` | Gộp code của cả team, chạy staging | Chỉ PR từ nhánh task |
 | `<tên>/<TFxx>-<mô-tả>` | Làm một task | Người làm task |
 
 - Tên nhánh: `<tên>/<TFxx>-<mô-tả-ngắn>`. `<tên>` là một trong `trang`, `duy`, `dung`, `phong`, `bao`, `thang`, `thanh`. Mô tả viết thường, không dấu, nối bằng `-`. Ví dụ: `trang/TF42-hang-cho-kiem-duyet`.
-- Tạo nhánh từ `dev` mới nhất: `git switch dev && git pull --ff-only && git switch -c <tên-nhánh>`.
+- Tạo nhánh từ `develop` mới nhất: `git switch develop && git pull --ff-only && git switch -c <tên-nhánh>`.
 - Một nhánh chỉ làm một task.
-- Muốn lấy code mới từ dev thì dùng `git merge origin/dev`. Nhánh đã push thì không rebase.
-- **Không bao giờ** commit, merge hay push thẳng lên `main` hoặc `dev`. Mọi thứ đi qua PR.
-- PR nhánh task → `dev`: CI xanh, 1 người duyệt (chủ code nếu có đụng phần của họ), squash merge.
-- Release `dev` → `main`: chỉ làm khi đã test trên staging ổn. Leader tuần duyệt, chọn "merge commit".
-- Hotfix: tạo nhánh `<tên>/<TFxx>-hotfix-<mô-tả>` từ `main`, mở PR vào `main`, sau đó mở PR `main` → `dev`.
+- Muốn lấy code mới từ develop thì dùng `git merge origin/develop`. Nhánh đã push thì không rebase.
+- **Không bao giờ** commit, merge hay push thẳng lên `main` hoặc `develop`. Mọi thứ đi qua PR.
+- PR nhánh task → `develop`: CI xanh, 1 người duyệt (chủ code nếu có đụng phần của họ), squash merge.
+- Release `develop` → `main`: chỉ làm khi đã test trên staging ổn. Leader tuần duyệt, chọn "merge commit".
+- Hotfix: tạo nhánh `<tên>/<TFxx>-hotfix-<mô-tả>` từ `main`, mở PR vào `main`, sau đó mở PR `main` → `develop`.
 - Không force push. Không xoá nhánh của người khác.
 
 ## 3. Không xoá, không ghi đè code của người khác
@@ -48,7 +48,7 @@ AI agent: đọc hết file này trước khi làm. Luật nào không làm đư
 - Khi giải xung đột merge: giữ thay đổi của cả hai bên. Không chọn nguyên cả file theo một bên (`--ours`, `--theirs`). Không chắc đoạn nào thì hỏi người dùng và chủ code.
 - Không format lại, sắp xếp lại import hay đổi tên biến ở file không thuộc task.
 - Không sửa tay file sinh tự động (`contracts/`, client API sinh ra). Sửa nguồn rồi chạy lệnh sinh.
-- Không sửa migration đã merge vào dev. Tạo migration mới.
+- Không sửa migration đã merge vào develop. Tạo migration mới.
 - Không dùng lệnh làm mất code: `git reset --hard`, `git clean -f`, `git checkout -- .`, `git restore .`, `git stash drop/clear`, `git branch -D`, `git push --force`.
 - Có file đang thay đổi chưa commit mà không phải do mình (của người dùng): không ghi đè, không xoá, không stash. Hỏi trước.
 
@@ -104,7 +104,7 @@ Task chỉ được coi là xong khi có đủ 4 thứ sau:
 
 1. **Lint, typecheck, test pass**, có kết quả thật.
 2. **File evidence** `docs/evidence/<TFxx>-<mô-tả>.md` theo mẫu bên dưới, commit trên cùng nhánh. Commit message: `docs(evidence): <mô tả> (TFxx)` kèm `Refs: TFxx`.
-3. **PR vào `dev`**, tiêu đề `<type>(<scope>): <mô tả> (TFxx)`. Nội dung PR gồm link task Notion, link file evidence, ảnh/video nếu đổi giao diện, và ghi có đụng code của ai không.
+3. **PR vào `develop`**, tiêu đề `<type>(<scope>): <mô tả> (TFxx)`. Nội dung PR gồm link task Notion, link file evidence, ảnh/video nếu đổi giao diện, và ghi có đụng code của ai không.
 4. **Notion**: đổi Trạng thái sang `Test`, dán link PR vào cột `Link`, comment tóm tắt kết quả (đạt tiêu chí nào, test ra sao).
 
 AI agent: chỉ push, mở PR hay ghi lên Notion sau khi người dùng đồng ý trong phiên đó.
