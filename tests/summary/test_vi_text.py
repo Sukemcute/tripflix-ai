@@ -1,6 +1,10 @@
+import unicodedata
+
 import pytest
 
 from app.services.summary.vi_text import count_syllables, to_norm, to_raw
+
+TONES = ["", "̀", "́", "̃", "̉", "̣"]
 
 
 @pytest.mark.parametrize(
@@ -34,6 +38,34 @@ def test_to_raw_keeps_diacritics_and_emoji() -> None:
 
 def test_to_raw_composes_to_nfc() -> None:
     assert to_raw("Nẵng") == "Nẵng"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("ignоre", "ignore"),  # Cyrillic о
+        ("ｉｇｎｏｒｅ", "ignore"),  # fullwidth
+        ("\U0001d422\U0001d420\U0001d427\U0001d428\U0001d42b\U0001d41e", "ignore"),  # math bold
+        ("ig­nore", "ignore"),  # soft hyphen
+    ],
+)
+def test_to_norm_folds_filter_evasion_tricks(text: str, expected: str) -> None:
+    assert to_norm(text) == expected
+
+
+def test_to_raw_drops_every_unicode_format_char() -> None:
+    """Hidden text in raw would reach the LLM while rules on norm never see it."""
+    format_chars = [chr(i) for i in range(0x110000) if unicodedata.category(chr(i)) == "Cf"]
+
+    assert to_raw("Phòng" + "".join(format_chars) + " ổn") == "Phòng ổn"
+
+
+def test_to_raw_keeps_every_vietnamese_letter() -> None:
+    """NFKC must not change Vietnamese: it has no compatibility forms."""
+    letters = "aăâeêioôơuưyAĂÂEÊIOÔƠUƯY"
+    words = [unicodedata.normalize("NFC", ch + mark) for ch in letters for mark in TONES]
+
+    assert [to_raw(w) for w in words] == words
 
 
 def test_count_syllables() -> None:
