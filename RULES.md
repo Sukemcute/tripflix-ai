@@ -4,15 +4,11 @@
 
 AI agent: đọc hết file này trước khi làm. Luật nào không làm được thì **dừng lại hỏi người dùng**, không tự tìm cách lách.
 
-## 1. Trước khi code: phải có task Notion
+## 1. Trước khi code: xác nhận phạm vi
 
-- Mọi thay đổi gắn với một task có mã `TFxx` trong Notion: hub [Tripflix — Quản lý dự án](https://app.notion.com/p/40dcb9b9e5c28150bacbdf4d8e8d6c82), bảng **✅ Task Backlog** (data source `collection://fef81a7e-9ca6-46c3-9f55-685a87038196`, mã task ở cột `ID`).
-- Chưa có task thì **không code**: nhờ người dùng tạo task trước.
-- Đọc cột **Cần làm gì** và **Xong khi** của task. Chỉ làm đúng phạm vi đó.
-- Kiểm tra người dùng có phải người phụ trách hoặc phối hợp của task không. Không phải thì hỏi lại trước khi làm.
-- Khi bắt đầu, đổi **Trạng thái** của task sang `Đang làm`.
-
-Trạng thái task: `Chưa bắt đầu` → `Đang làm` (đã tạo nhánh) → `Test` (đã mở PR vào dev) → `Done` (đã vào main). Bị kẹt thì đổi sang `Block` và ghi lý do ở cột Ghi chú.
+- Làm theo yêu cầu hiện tại của người dùng. Nếu người dùng cung cấp task hoặc tiêu chí nghiệm thu, dùng chúng để xác định phạm vi.
+- Không bắt buộc phải tạo hoặc đọc task Notion trước khi bắt đầu.
+- Nếu phạm vi, quyền sở hữu hoặc tiêu chí hoàn tất chưa rõ, hỏi người dùng trước khi sửa.
 
 ## 2. Nhánh và luồng merge
 
