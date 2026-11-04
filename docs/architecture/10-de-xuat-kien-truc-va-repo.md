@@ -336,7 +336,7 @@ Bản 0.6 bỏ `mock-channel-manager`: Tripflix **tự quản lý lịch trống
 
 ## 5. Cấu trúc repo
 
-> Bản chi tiết đã duyệt nằm ở [docs/11 — Đề xuất cấu trúc repo](11-de-xuat-cau-truc-repo.md); khi khác nhau, docs/11 là bản đúng. Mục này giữ lại làm tổng quan.
+> Chi tiết cấu trúc repo nằm ở [docs/11 — Đề xuất cấu trúc repo](11-de-xuat-cau-truc-repo.md). Baseline đã duyệt là v1.0; các thay đổi database ở v1.1 đang chờ team duyệt và chưa thay thế kiến trúc Postgres `core` + `commerce` trong tài liệu này và sơ đồ v4.5.
 
 ### 5.1. `tripflix-fe` — pnpm + Turborepo
 

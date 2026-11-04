@@ -1,8 +1,10 @@
 # Đề xuất cấu trúc repo — Tripflix
 
-**Phiên bản:** 1.0 · **Ngày:** 2026-11-04 · **Trạng thái:** Đã duyệt (còn chờ Q7: tên GitHub org) · **Người đọc:** cả team kỹ thuật · **Dựa trên:** [docs/10 v0.6](10-de-xuat-kien-truc-va-repo.md)
+**Phiên bản:** 1.1 · **Ngày:** 2026-11-04 · **Trạng thái:** Baseline v1.0 đã duyệt (còn chờ Q7: tên GitHub org); các thay đổi database ở v1.1 là đề xuất, chờ duyệt · **Người đọc:** cả team kỹ thuật · **Dựa trên:** [docs/10 v0.6](10-de-xuat-kien-truc-va-repo.md)
 
 > Tóm tắt: giữ **3 repo** như docs/10 (`tripflix-be`, `tripflix-fe`, `tripflix-ai`). Hai repo TypeScript dùng chung một bộ công cụ: **pnpm + Turborepo**. Backend dùng **NestJS + Drizzle**. Mỗi module của `core-api` có **kết nối database và transaction riêng**, nên không thể vô tình mở transaction chéo module. `core-api` chạy được 2 vai trò từ cùng code: `api` (nhận request) và `worker` (job, consumer, outbox relay). Hợp đồng giữa các repo (OpenAPI, schema sự kiện) được sinh ra và commit vào thư mục `contracts/` của repo phát hành. **Cả hệ thống chạy bằng Docker với một lệnh** `pnpm stack:up` từ repo BE (§7): build từ 3 repo đặt cạnh nhau, tự migrate và seed, có chế độ tự cập nhật khi sửa code.
+
+> **Phạm vi thay đổi v1.1 đang chờ duyệt:** gộp schema `commerce` vào database `core` và chuẩn bị đường tách `discovery`. Cho đến khi team chốt, kiến trúc đã duyệt vẫn là docs/10 v0.6 và sơ đồ v4.5 (Postgres `core` + `commerce`); các phần v1.1 liên quan database trong tài liệu này chỉ là phương án, chưa phải chỉ dẫn triển khai.
 
 ---
 
@@ -12,7 +14,7 @@
 |---|---|---|---|---|
 | Q1 | Công cụ monorepo cho BE (docs/10 §10 còn mở) | **pnpm + Turborepo**, giống FE | Một công cụ cho cả 2 repo TS; nhẹ, ít cấu hình. Ranh giới module đã giữ bằng `eslint-plugin-boundaries` và quyền Postgres (§3.6) nên không cần Nx | Nx: có sẵn `@nx/enforce-module-boundaries`, nhưng muốn dùng phải tách mỗi module thành một lib Nx, thêm `project.json`, executor; nặng với nhóm 7 người trong 4 tuần |
 | Q2 | ORM (docs/10 §10 còn mở) | **Drizzle**, ghim đúng bản `1.0.0-rc.5` | Team đã dùng Drizzle ở dự án trước. Viết SQL gần như thuần nên dễ làm cập nhật có điều kiện (`total - held - sold >= qty`), `tsvector`, `pgvector`. Khai báo schema Postgres theo module bằng `pgSchema`. Có adapter cho `@nestjs-cls/transactional` | Prisma: không so sánh được hai cột trong `where` (phải viết `$executeRaw`), nhiều client cho nhiều database thì rườm rà. Drizzle `0.45` (bản ổn định team đã dùng) nếu RC gặp lỗi; đổi lên 1.0 sau sẽ phải đổi định dạng thư mục migration |
-| Q3 | Mỗi module một kết nối database | **Có**: 5 kết nối có tên (`access`, `content`, `discovery`, `analytics`, `commerce`), mỗi kết nối một user Postgres chỉ có quyền trên schema của mình | Quy tắc "không query chéo schema, không transaction chéo module" (docs/10 §3.2) được Postgres và code chặn luôn, không chỉ dựa vào review | Một kết nối chung cho cả core: ít pool hơn nhưng quy tắc chỉ còn trên giấy |
+| Q3 | Mỗi module một kết nối database | **Có**: 5 kết nối có tên (`access`, `content`, `discovery`, `analytics`, `commerce`), cùng vào database `core`, mỗi kết nối một user Postgres chỉ có quyền trên schema của mình | Quy tắc "không query chéo schema, không transaction chéo module" (docs/10 §3.2) được Postgres và code chặn luôn, không chỉ dựa vào review | Một kết nối chung cho cả core: ít pool hơn nhưng quy tắc chỉ còn trên giấy |
 | Q4 | Tách tiến trình job khỏi API | `core-api` có biến `APP_ROLE=api\|worker\|all`. Dev chạy `all`; deploy chạy riêng `api` và `worker` | Job hết hạn đơn, mở lịch trống, outbox relay, consumer của `discovery` và `analytics` không tranh CPU với request; scale API mà không nhân đôi job | Tách app riêng: thêm Dockerfile, CI, mà không thêm lợi ích ở MVP |
 | Q5 | Đồng bộ hợp đồng giữa repo | Repo phát hành **commit** file sinh ra vào `contracts/`; repo dùng đọc từ thư mục anh em `../tripflix-be/contracts` rồi commit code client sinh ra | Repo để private nên không đọc raw URL được nếu không có token; FE, AI build được mà không cần BE đang chạy | Publish package npm/PyPI riêng: quá nặng cho 4 tuần |
 | Q6 | Sinh API client cho FE | **Orval**: hook TanStack Query + schema zod | Ra sẵn hook truy vấn, mutation, query key; zod dùng lại cho form | `openapi-typescript` + `openapi-fetch`: nhẹ hơn, nhưng phải tự viết hook |
@@ -67,7 +69,7 @@ tripflix-be/
 │  │  │     ├─ access/             # auth, sessions, vai trò, JWKS
 │  │  │     ├─ content/            # social/ media/ feed/ moderation/
 │  │  │     ├─ discovery/          # search/ recommend/
-│  │  │     ├─ commerce/           # inventory/ booking/ payment/   → database commerce
+│  │  │     ├─ commerce/           # inventory/ booking/ payment/   → schema commerce (đề xuất v1.1)
 │  │  │     └─ analytics/          # ingest/ marts/ api/
 │  │  ├─ scripts/                  # migrate.ts, seed.ts, export-openapi.ts
 │  │  ├─ test/                     # integration (Testcontainers), e2e
@@ -111,7 +113,7 @@ tripflix-be/
 │  ├─ compose.yaml                 # chạy cả hệ thống, chia profile (§7)
 │  ├─ .env.example                 # cổng, đường dẫn 3 repo, thông tin bucket S3 dev; chép thành deploy/.env
 │  ├─ postgres/init/               # chạy 1 lần bằng superuser
-│  │  ├─ 01-databases.sql          # core, commerce, notification
+│  │  ├─ 01-databases.sql          # core, notification (phương án v1.1; baseline còn commerce)
 │  │  ├─ 02-roles-schemas.sql      # user và schema cho từng module
 │  │  └─ 03-extensions.sql         # vector, unaccent, pg_trgm
 │  ├─ traefik/                     # route, rate limit, kiểm JWT
@@ -179,13 +181,15 @@ Các module khác theo cùng khuôn: thư mục phần con (`content/social`, `c
 
 ### 3.3. Kết nối database và transaction theo module
 
+> **Đề xuất v1.1, chưa triển khai:** các kết nối trong bảng dưới đây đưa `commerce` vào database `core`. Baseline đã duyệt vẫn tách database `commerce` riêng; chỉ đổi sơ đồ và cấu hình khi team phê duyệt.
+
 | Tên kết nối | Database | User Postgres | Schema được phép | Pool (gợi ý) |
 |---|---|---|---|---|
 | `access` | `core` | `tf_access` | `access` | 5 |
 | `content` | `core` | `tf_content` | `content` | 10 |
 | `discovery` | `core` | `tf_discovery` | `discovery` | 5 |
 | `analytics` | `core` | `tf_analytics` | `analytics` | 3 (giới hạn để thống kê không chiếm kết nối) |
-| `commerce` | `commerce` | `tf_commerce` | `commerce` | 10 |
+| `commerce` | `core` | `tf_commerce` | `commerce` | 10 |
 
 `libs/db` đăng ký mỗi kết nối thành một `ClsPluginTransactional` có `connectionName` riêng ([nestjs-cls — Transactional, mục Multiple databases](https://papooch.github.io/nestjs-cls/plugins/available-plugins/transactional); [adapter Drizzle](https://papooch.github.io/nestjs-cls/plugins/available-plugins/transactional/drizzle-orm-adapter)). Use case khai báo rõ transaction thuộc module nào:
 
@@ -212,12 +216,21 @@ export class CheckoutUseCase {
 
 Vì mỗi module là một kết nối riêng, một use case của `content` **không thể** ghi vào bảng `commerce` trong cùng transaction: hai kết nối khác nhau, và user `tf_content` không có quyền trên schema `commerce`.
 
+`commerce` nằm chung database `core` với các module khác (v1.1). Tồn kho, đơn hàng và thanh toán đều là dữ liệu của chính nền tảng (không có hệ thống bán hàng bên ngoài), đơn hàng gắn với `user_id` và bài đăng nguồn, nên tách database riêng chỉ làm khó việc tra cứu chéo ở trang quản trị và thống kê. Ranh giới vẫn được giữ bằng schema `commerce` và user `tf_commerce`.
+
+`discovery` (search, recommend) cũng nằm trong `core` nhưng được chuẩn bị để tách ra khi search tải lớn (v1.1):
+
+- Có biến môi trường riêng `DB_DISCOVERY_URL`. Hôm nay trỏ vào `core`; khi cần thì trỏ sang read replica hoặc một instance Postgres khác và chạy migration của `discovery` ở đó, không phải sửa code.
+- Điều kiện để tách được: `discovery` chỉ đọc, ghi schema của mình, không `JOIN` và không khoá ngoại sang schema khác. Dữ liệu cần từ module khác được chép vào bảng riêng (`posts_search`, `products_search`) qua hàm `indexPost` / `removePost` và job nạp định kỳ.
+- Giới hạn để search không làm chậm module khác khi dùng chung instance: pool 5 kết nối và `ALTER ROLE tf_discovery SET statement_timeout = '500ms'`.
+- Tách khi đo thấy cần: p95 phần SQL của search vượt 300 ms, hoặc checkout chậm đi rõ khi search tải cao. Chi tiết ở tài liệu Search (`10-nghiep-vu-kien-truc-search.md`, mục 7 và D11).
+
 ### 3.4. Migration
 
 - Mỗi module có `db/drizzle.config.ts` riêng: chỉ quét schema của mình, bảng lịch sử migration nằm trong schema của module (`content.__migrations`). Module nào sửa bảng thì chỉ sinh migration trong thư mục của module đó; tách module thành service sau này chỉ cần mang thư mục đi.
 - Phần Drizzle không khai báo được (partition theo ngày của `analytics.events`, index BRIN, trigger `tsvector`) viết bằng migration SQL tự viết (`drizzle-kit generate --custom`).
 - Extension (`vector`, `unaccent`, `pg_trgm`), database và user tạo một lần trong `deploy/postgres/init/` bằng superuser. Migration của module chạy bằng user của module.
-- Lệnh: `pnpm db:migrate` chạy lần lượt `access → content → discovery → analytics → commerce`, rồi `notification-service`. `pnpm db:generate <module>` sinh migration cho một module. `pnpm db:seed` và `pnpm demo:reset` (seed lại database `commerce` và ≤ 500 bài mẫu).
+- Lệnh: `pnpm db:migrate` chạy lần lượt `access → content → discovery → analytics → commerce`, rồi `notification-service`. `pnpm db:generate <module>` sinh migration cho một module. `pnpm db:seed` và `pnpm demo:reset` (seed lại schema `commerce` và ≤ 500 bài mẫu).
 
 ### 3.5. Hai vai trò của `core-api`
 
@@ -259,7 +272,7 @@ Toàn bộ cách chạy bằng Docker ở §7.
 ```
 tripflix-fe/
 ├─ apps/
-│  ├─ mobile/                      # Front Office: Expo SDK 56, Expo Router, Android trước
+│  ├─ mobile/                      # Expo SDK 56, Expo Router, Android trước
 │  │  ├─ app/                      # route theo file: (tabs)/feed, explore, trips, inbox, me; post/[id]; checkout/…
 │  │  ├─ src/
 │  │  │  ├─ features/              # feed (PlayerPool, Preloader), post, search, booking, assistant, inbox, auth
@@ -267,12 +280,12 @@ tripflix-fe/
 │  │  │  └─ lib/                   # gắn token (expo-secure-store), hàng đợi thao tác dở khi mất mạng, gửi sự kiện hành vi
 │  │  ├─ app.config.ts
 │  │  └─ eas.json                  # profile build: development, preview (APK demo), production
-│  ├─ web/                         # Front Office: Next.js 16, App Router, output: 'standalone'
+│  ├─ web/                         # Next.js 16, App Router, output: 'standalone'
 │  │  ├─ Dockerfile
 │  │  └─ src/
 │  │     ├─ app/                   # tìm kiếm, bài đăng, chi tiết khách sạn, checkout, chuyến đi của tôi
 │  │     └─ features/
-│  └─ admin/                       # Back Office: Next.js 16, output: 'standalone'
+│  └─ admin/                       # Next.js 16, output: 'standalone'
 │     ├─ Dockerfile
 │     └─ src/
 │        ├─ app/                   # moderation/, analytics/, inventory/ (Lịch trống & giá), orders/, staff/
@@ -296,9 +309,9 @@ tripflix-fe/
 
 #### Ranh giới Front Office / Back Office
 
-- `apps/mobile` và `apps/web` là Front Office cho khách/thành viên; `apps/admin` là Back Office cho `moderator` và `superadmin`.
-- Hai phía là ứng dụng/giao diện riêng nhưng gọi cùng API Gateway và `core-api`. Back Office dùng các API quản trị trên module `content`, `analytics`, `commerce` và `access`; server bắt buộc kiểm role, không dựa vào ẩn nút ở client.
-- Chức năng Back Office gồm kiểm duyệt, analytics, đơn, lịch trống/giá và nhân viên. MVP chưa có portal cho khách sạn/đối tác.
+- `apps/mobile` và `apps/web` là **Front Office** cho khách/thành viên: khám phá, xem nội dung và đặt dịch vụ. `apps/admin` là **Back Office** (Admin Console nội bộ) dành cho `moderator` và `superadmin`.
+- Hai phía là ứng dụng riêng, cùng đi qua API Gateway và `core-api`. Back Office dùng API quản trị cho `content`, `analytics`, `commerce` và `access`; backend bắt buộc kiểm tra role, không dựa vào ẩn nút phía client.
+- Chức năng Back Office gồm kiểm duyệt, analytics, đơn hàng, lịch trống/giá và nhân sự. MVP chưa có portal cho khách sạn/đối tác.
 
 - Mobile không dùng `ui-web` (khác nền tảng) nhưng dùng chung `api-client`, `tokens`, `i18n`, `utils`. Cách viết style ở mobile (StyleSheet hay NativeWind) do chủ `apps/mobile` chọn.
 - Thư mục chia theo **tính năng** (`features/booking`) thay vì theo loại file, khớp với module BE để dễ tìm người phụ trách.
@@ -413,7 +426,7 @@ Kết hợp được: chạy `pnpm stack:up`, rồi `docker compose stop core-ap
 
 | Service | Profile | Cổng trên máy | Khởi động khi | Ghi chú |
 |---|---|---|---|---|
-| `postgres` | (luôn chạy) | 5432 | — | `pgvector/pgvector:pg17`; lần đầu chạy `deploy/postgres/init/` tạo 3 database, user và schema theo module, extension |
+| `postgres` | (luôn chạy) | 5432 | — | `pgvector/pgvector:pg17`; phương án v1.1 tạo 2 database (`core`, `notification`), user/schema/extension; baseline đã duyệt còn database `commerce` riêng |
 | `redis` | (luôn chạy) | 6379 | — | AOF bật |
 | `mailpit` | (luôn chạy) | 8025 (web), 1025 (SMTP) | — | Xem email gửi đi |
 | `migrate` | be | — | `postgres` healthy | Chạy một lần: migrate mọi module + `notification`, seed nếu database trống |
@@ -578,6 +591,8 @@ Bước 2–3 nên xong trước khi các bước khác bắt đầu viết nghi
 | — | `core-api` có `APP_ROLE` | Q4 |
 | — | Thư mục `contracts/` ở BE và AI | Q5 |
 | `packages/ui` | Tách `ui-web` (web, admin) và `tokens` (dùng cả mobile) | Component web không dùng được trên React Native, nhưng màu, font thì dùng chung được |
+| — | `discovery` có `DB_DISCOVERY_URL` riêng, `statement_timeout` riêng, sẵn sàng tách instance khi đo thấy cần (v1.1) | Search là phần dùng nhiều; giữ đường tách ra mà chưa phải vận hành thêm máy ở pilot |
+| — | *(Đề xuất v1.1, chờ duyệt)* `commerce` là schema trong database `core`, không tách database riêng | Tồn kho do nền tảng tự quản lý, đơn hàng gắn với user và bài đăng; tách database chỉ thêm việc ghép dữ liệu |
 | Dev dùng MinIO thay S3 | Dev dùng bucket S3 dev + CloudFront dev, thêm `libs/storage` | Q9 |
 | `deploy/docker-compose.yml` chỉ có hạ tầng | `deploy/compose.yaml` chạy cả hệ thống (build từ 3 repo), profile `be`, `ai`, `fe`, `gateway`, `tools`; service `migrate` tự migrate, seed; Compose Watch; Dockerfile nhiều stage (`dev`, `prod`) cho mọi app; lệnh `pnpm stack:*` | Q8: ai cũng chạy được cả hệ thống bằng một lệnh |
 
