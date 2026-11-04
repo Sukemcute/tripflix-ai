@@ -2,7 +2,7 @@
 
 These copies keep the approved system design beside the code so agents and contributors can read it locally.
 
-The v4.5 diagrams separate Front Office (mobile and public web for guests/members) from Back Office (internal Admin Console for moderator/superadmin) while showing their shared API Gateway and `core-api`.
+The v4.6 overview diagram separates Front Office (mobile and public web for guests/members) from Back Office (internal Admin Console for moderator/superadmin) while showing their shared API Gateway and `core-api`.
 
 - [10 — System architecture](10-de-xuat-kien-truc-va-repo.md)
 - [11 — Repository structure](11-de-xuat-cau-truc-repo.md), the more recent decision when it differs from 10
