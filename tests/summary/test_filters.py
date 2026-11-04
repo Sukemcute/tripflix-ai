@@ -40,6 +40,7 @@ def reason(**overrides: Any) -> str | None:
         ({"body": "Phòng đẹp lắm, vào abc chấm com mà xem"}, "L6"),
         ({"body": "Nhạc hay quá ad ơi"}, "L12"),
         ({"body": "Ước được đi 1 lần"}, "L12"),
+        ({"body": "Clip hài quá cười đau bụng luôn"}, "L12"),
     ],
 )
 def test_rule_drops_with_its_code(overrides: dict[str, Any], code: str) -> None:

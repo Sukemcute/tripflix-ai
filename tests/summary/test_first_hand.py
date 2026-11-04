@@ -18,6 +18,17 @@ from app.services.summary.vi_text import to_norm
         ("Nghe nói tháng trước ở đây bị mất nước", False),
         ("Đi tới đây vào buổi tối thì đẹp lắm", False),  # toi = tới/tối, not tôi
         ("Mình thấy phòng đẹp", False),  # first person but no past event
+        # v4: phrasings of real TripAdvisor reviews that v3 missed
+        ("Chúng tôi đã có một kỳ nghỉ tuyệt vời", True),
+        ("Nhân viên rất nhiệt tình giúp chúng tôi mang hành lý", True),
+        ("Phòng của chúng tôi nhìn ra biển", True),
+        ("Khi chúng tôi đến, lễ tân đón rất nhanh", True),
+        ("Tôi ở lại hai đêm, rất thoải mái", True),
+        # v4: video-style comments must stay False
+        ("Mình đã xem clip này 3 lần rồi", False),
+        ("Tôi vừa thấy video này trên tiktok", False),
+        ("Ai đi rồi cho xin review với", False),
+        ("Mình định đi dịp tết mà sợ đông", False),
     ],
 )
 def test_detect_first_hand(comment: str, expected: bool) -> None:
