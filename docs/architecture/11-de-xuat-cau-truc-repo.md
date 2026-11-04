@@ -259,7 +259,7 @@ Toàn bộ cách chạy bằng Docker ở §7.
 ```
 tripflix-fe/
 ├─ apps/
-│  ├─ mobile/                      # Expo SDK 56, Expo Router, Android trước
+│  ├─ mobile/                      # Front Office: Expo SDK 56, Expo Router, Android trước
 │  │  ├─ app/                      # route theo file: (tabs)/feed, explore, trips, inbox, me; post/[id]; checkout/…
 │  │  ├─ src/
 │  │  │  ├─ features/              # feed (PlayerPool, Preloader), post, search, booking, assistant, inbox, auth
@@ -267,12 +267,12 @@ tripflix-fe/
 │  │  │  └─ lib/                   # gắn token (expo-secure-store), hàng đợi thao tác dở khi mất mạng, gửi sự kiện hành vi
 │  │  ├─ app.config.ts
 │  │  └─ eas.json                  # profile build: development, preview (APK demo), production
-│  ├─ web/                         # Next.js 16, App Router, output: 'standalone'
+│  ├─ web/                         # Front Office: Next.js 16, App Router, output: 'standalone'
 │  │  ├─ Dockerfile
 │  │  └─ src/
 │  │     ├─ app/                   # tìm kiếm, bài đăng, chi tiết khách sạn, checkout, chuyến đi của tôi
 │  │     └─ features/
-│  └─ admin/                       # Next.js 16, output: 'standalone'
+│  └─ admin/                       # Back Office: Next.js 16, output: 'standalone'
 │     ├─ Dockerfile
 │     └─ src/
 │        ├─ app/                   # moderation/, analytics/, inventory/ (Lịch trống & giá), orders/, staff/
@@ -293,6 +293,12 @@ tripflix-fe/
 ├─ pnpm-workspace.yaml             # khai báo catalog: react, typescript, zod, @tanstack/react-query
 └─ package.json
 ```
+
+#### Ranh giới Front Office / Back Office
+
+- `apps/mobile` và `apps/web` là Front Office cho khách/thành viên; `apps/admin` là Back Office cho `moderator` và `superadmin`.
+- Hai phía là ứng dụng/giao diện riêng nhưng gọi cùng API Gateway và `core-api`. Back Office dùng các API quản trị trên module `content`, `analytics`, `commerce` và `access`; server bắt buộc kiểm role, không dựa vào ẩn nút ở client.
+- Chức năng Back Office gồm kiểm duyệt, analytics, đơn, lịch trống/giá và nhân viên. MVP chưa có portal cho khách sạn/đối tác.
 
 - Mobile không dùng `ui-web` (khác nền tảng) nhưng dùng chung `api-client`, `tokens`, `i18n`, `utils`. Cách viết style ở mobile (StyleSheet hay NativeWind) do chủ `apps/mobile` chọn.
 - Thư mục chia theo **tính năng** (`features/booking`) thay vì theo loại file, khớp với module BE để dễ tìm người phụ trách.
