@@ -92,6 +92,7 @@ def run_summary(
             "model": result.model_name,
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
+            "cost_usd": result.cost_usd,
         },
     )
     try:

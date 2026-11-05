@@ -1,7 +1,6 @@
 """What the summary pipeline needs from an LLM provider (CHECKLIST P9).
 
-The real adapter (OpenAI or Claude) comes once the provider is chosen; until then the
-pipeline runs end to end on FakeLlmClient.
+FakeLlmClient serves tests and offline runs; the production provider is not chosen yet.
 """
 
 from dataclasses import dataclass
@@ -14,6 +13,7 @@ class LlmResult:
     model_name: str
     input_tokens: int
     output_tokens: int
+    cost_usd: float = 0.0  # estimated by the adapter from token counts
 
 
 class LlmClient(Protocol):
