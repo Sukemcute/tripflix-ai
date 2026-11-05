@@ -174,3 +174,13 @@ def test_two_replicas_never_run_the_same_post(client: "redis.Redis") -> None:
 
     assert first.scheduler.claim_due(clock.ms) == [POST]
     assert second.scheduler.claim_due(clock.ms) == []
+
+
+def test_backfill_never_moves_a_live_run(client: "redis.Redis") -> None:
+    scheduler = sw.SummaryScheduler(client)
+    live_due = scheduler.schedule(POST, 1_000)
+
+    assert scheduler.schedule_backfill(POST, 999_999) is False
+    assert scheduler.schedule_backfill("other-post", 5_000) is True
+    assert client.zscore(sw.DUE_KEY, POST) == live_due
+    assert client.zscore(sw.DUE_KEY, "other-post") == 5_000

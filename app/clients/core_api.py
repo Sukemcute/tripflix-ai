@@ -1,6 +1,7 @@
 """HTTP client for core-api: the only way tripflix-ai reads business data (RULES §10).
 
 Endpoints agreed with content (Thành, PR be #49 and #54):
+- GET  /api/v1/posts                             public published posts, cursor, max 50 per page
 - GET  /api/v1/posts/:id                          public post detail (trip already PII-masked)
 - GET  /api/v1/posts/:id/comments?flat=true       every level, cursor paging, max 200 per page
 - GET  /api/v1/posts/:id/ai-summary               last summary with inputHash, 404 if none
@@ -10,7 +11,7 @@ as in the access module README. Responses are validated here, at the trust bound
 """
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import datetime
 
 import httpx
@@ -20,6 +21,7 @@ from pydantic.alias_generators import to_camel
 from app.services.summary.schemas import SaveSummaryRequest
 
 PAGE_SIZE = 200  # flat mode cap in core
+POST_PAGE_SIZE = 50  # public post list cap in core
 # shortcut: newest 50 pages (10k comments) per run; comments older than a year are filtered
 # out anyway (L3). Raise if a post ever has more fresh comments than that.
 MAX_PAGES = 50
@@ -52,6 +54,16 @@ class CorePost(_CoreModel):
 
 class _PostDetail(_CoreModel):
     post: CorePost
+
+
+class CorePostListItem(_CoreModel):
+    id: str
+    comment_count: int = 0
+
+
+class _PostPage(_CoreModel):
+    items: list[CorePostListItem]
+    next_cursor: str | None = None
 
 
 class CoreComment(_CoreModel):
@@ -98,6 +110,21 @@ class CoreApiClient:
             return None
         response.raise_for_status()
         return _PostDetail.model_validate(response.json()).post
+
+    def iter_public_posts(self) -> Iterator[CorePostListItem]:
+        """Every published public post, newest first (what users can open)."""
+        cursor: str | None = None
+        while True:
+            params: dict[str, str | int] = {"limit": POST_PAGE_SIZE}
+            if cursor:
+                params["cursor"] = cursor
+            response = self.http.get("/api/v1/posts", params=params)
+            response.raise_for_status()
+            page = _PostPage.model_validate(response.json())
+            yield from page.items
+            cursor = page.next_cursor
+            if not cursor:
+                return
 
     def fetch_comments(self, post_id: str) -> list[CoreComment]:
         comments: list[CoreComment] = []

@@ -63,6 +63,10 @@ def _last_run_key(post_id: str) -> str:
     return f"ai:summary:last_run:{post_id}"
 
 
+def read_clock_ms() -> int:
+    return int(datetime.now(UTC).timestamp() * 1000)
+
+
 def next_due_ms(now_ms: int, first_event_ms: int, last_run_ms: int | None) -> int:
     due = min(now_ms + DEBOUNCE_MS, first_event_ms + MAX_WAIT_MS)
     return due if last_run_ms is None else max(due, last_run_ms + MIN_GAP_MS)
@@ -99,6 +103,16 @@ class SummaryScheduler:
         self.redis.zadd(DUE_KEY, {post_id: due})
         return due
 
+    def schedule_backfill(self, post_id: str, due_ms: int) -> bool:
+        """Add a run only if the post has none (ZADD NX): a live event's earlier run stays.
+
+        Still honours the 10 min gap; returns False when a run was already scheduled.
+        """
+        last_run = cast(str | None, self.redis.get(_last_run_key(post_id)))
+        if last_run:
+            due_ms = max(due_ms, int(last_run) + MIN_GAP_MS)
+        return bool(self.redis.zadd(DUE_KEY, {post_id: due_ms}, nx=True))
+
     def claim_due(self, now_ms: int, limit: int = BATCH_SIZE) -> list[str]:
         """Posts due now; only the replica whose ZREM removed the entry runs it."""
         due = cast(list[str], self.redis.zrangebyscore(DUE_KEY, "-inf", now_ms, start=0, num=limit))
@@ -129,7 +143,7 @@ class SummaryWorker:
         self.llm = llm
         self.is_llm_killed = is_llm_killed
         self.consumer = consumer_name or f"{socket.gethostname()}-{os.getpid()}"
-        self.clock_ms = clock_ms or (lambda: int(datetime.now(UTC).timestamp() * 1000))
+        self.clock_ms = clock_ms or read_clock_ms
 
     def ensure_group(self) -> None:
         """Read from the start of the stream so events sent while the worker was down count."""

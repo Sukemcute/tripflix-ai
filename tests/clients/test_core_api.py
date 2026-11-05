@@ -40,6 +40,17 @@ class FakeCore:
             return httpx.Response(
                 200, json={"items": items, "nextCursor": "n1" if first_page else None, "total": 3}
             )
+        if path == "/api/v1/posts":
+            first_page = "cursor" not in request.url.params
+            items = [{"id": "p1", "commentCount": 6}] if first_page else [{"id": "p2"}]
+            return httpx.Response(
+                200,
+                json={
+                    "items": items,
+                    "nextCursor": "n1" if first_page else None,
+                    "hasMore": first_page,
+                },
+            )
         if path.endswith("/ai-summary") and request.method == "GET":
             return httpx.Response(404, json={"message": "chưa có"})
         if path.endswith("/ai-summary"):
@@ -103,3 +114,13 @@ def test_put_sends_camel_case_with_a_reused_service_token() -> None:
     assert puts[0].headers["Authorization"] == "Bearer tok"
     body = json.loads(puts[0].content)
     assert body["status"] == "no_comments" and "commentCount" in body
+
+
+def test_public_posts_are_listed_page_by_page() -> None:
+    core = FakeCore()
+
+    posts = list(core.client().iter_public_posts())
+
+    assert [(p.id, p.comment_count) for p in posts] == [("p1", 6), ("p2", 0)]
+    assert core.requests[0].url.params["limit"] == "50"
+    assert core.requests[1].url.params["cursor"] == "n1"
