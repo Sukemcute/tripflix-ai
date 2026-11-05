@@ -23,6 +23,39 @@ def test_safety_recall_on_eval_set(case: dict[str, str]) -> None:
     assert hit.visibility == case["visibility"]
 
 
+SEED_DIR = EVAL.parent / "seed"
+SEED_SAFETY = [
+    (c["body"], label)
+    for path in sorted(SEED_DIR.glob("*.json"))
+    for post in [json.loads(path.read_text(encoding="utf-8"))]
+    for c in post["comments"]
+    for label in post["labels"]["safety"]
+    if label["comment_id"] == c["comment_id"]
+]
+SEED_NOT_SAFETY = [
+    c["body"]
+    for path in sorted(SEED_DIR.glob("*.json"))
+    for post in [json.loads(path.read_text(encoding="utf-8"))]
+    for c in post["comments"]
+    if c["comment_id"] in post["labels"]["not_safety"]
+]
+
+
+@pytest.mark.parametrize(("body", "label"), SEED_SAFETY)
+def test_no_safety_miss_on_seed_posts(body: str, label: dict[str, str]) -> None:
+    """P12 hard gate "0 missed safety" on the labelled seed (snatch theft, "tối qua" first-hand)."""
+    hit = match_safety(body)
+
+    assert hit is not None
+    assert label["category"] in hit.categories
+    assert hit.visibility == label["visibility"]
+
+
+@pytest.mark.parametrize("body", SEED_NOT_SAFETY)
+def test_negated_safety_words_on_seed_posts_are_not_flagged(body: str) -> None:
+    assert match_safety(body) is None
+
+
 def test_hearsay_waits_for_a_moderator() -> None:
     hit = match_safety("nghe đồn chỗ này hay bị ngộ độc")
 
