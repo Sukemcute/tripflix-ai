@@ -13,8 +13,8 @@ from datetime import datetime
 from app.clients.llm.base import LlmClient, LlmResult
 from app.services.summary.claims import build_claims
 from app.services.summary.filters import filter_comments
-from app.services.summary.input_hash import input_hash
-from app.services.summary.lexicon import versions
+from app.services.summary.input_hash import compute_input_hash
+from app.services.summary.lexicon import read_versions
 from app.services.summary.pii import pseudonymize
 from app.services.summary.prompt import build_user_message, load_system_prompt
 from app.services.summary.safety import match_safety
@@ -31,7 +31,7 @@ from app.services.summary.schemas import (
     TopicOut,
     build_llm_json_schema,
 )
-from app.services.summary.selection import MIN_PEOPLE, select_comments, summary_status
+from app.services.summary.selection import MIN_PEOPLE, decide_summary_status, select_comments
 from app.services.summary.validator import (
     InvalidLlmOutputError,
     SummaryPoint,
@@ -67,14 +67,16 @@ def run_summary(
         comments=len(comments), people=selection.people, sent=len(selection.items)
     )
     base = {"comment_count": len(comments), "safety": safety}
-    if summary_status(len(comments), selection) == "insufficient_data":
+    if decide_summary_status(len(comments), selection) == "insufficient_data":
         content = SummaryContent(counts=counts, needed=MIN_PEOPLE - selection.people)
         return SummaryRun(SaveSummaryRequest(status="insufficient_data", content=content, **base))
 
     prompt, codes = pseudonymize(selection.items)
     claims = build_claims(caption, itinerary)
     prompt_version, system = load_system_prompt()
-    fingerprint = input_hash(prompt, codes, claims, versions() | {"prompt": prompt_version})
+    fingerprint = compute_input_hash(
+        prompt, codes, claims, read_versions() | {"prompt": prompt_version}
+    )
     if fingerprint == previous_hash:
         return SummaryRun(None)
     failed = SaveSummaryRequest(
@@ -134,7 +136,7 @@ def _public_safety(comments: Sequence[CommentIn]) -> SummarySafety:
 
 
 def _content(validated: ValidatedSummary, counts: SummaryCounts) -> SummaryContent:
-    def points(items: Sequence[SummaryPoint]) -> list[SummaryPointOut]:
+    def build_points(items: Sequence[SummaryPoint]) -> list[SummaryPointOut]:
         return [
             SummaryPointOut(
                 aspect=p.aspect, text=p.text, comment_ids=list(p.comment_ids), people=p.people
@@ -143,8 +145,8 @@ def _content(validated: ValidatedSummary, counts: SummaryCounts) -> SummaryConte
         ]
 
     return SummaryContent(
-        pros=points(validated.pros),
-        cons=points(validated.cons),
+        pros=build_points(validated.pros),
+        cons=build_points(validated.cons),
         reality_gaps=[
             RealityGapOut(
                 claim=g.claim, reality=g.reality, comment_ids=list(g.comment_ids), people=g.people

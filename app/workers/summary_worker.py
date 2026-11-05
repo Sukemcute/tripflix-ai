@@ -32,7 +32,7 @@ from app.clients.core_api import CoreApiClient
 from app.clients.llm.base import LlmClient
 from app.clients.llm.fake import FakeLlmClient
 from app.core.config import Settings, get_settings
-from app.services.summary.core_adapter import to_caption, to_comments, to_itinerary
+from app.services.summary.core_adapter import build_caption, build_itinerary, convert_comments
 from app.services.summary.pipeline import run_summary
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def read_clock_ms() -> int:
     return int(datetime.now(UTC).timestamp() * 1000)
 
 
-def next_due_ms(now_ms: int, first_event_ms: int, last_run_ms: int | None) -> int:
+def compute_next_due_ms(now_ms: int, first_event_ms: int, last_run_ms: int | None) -> int:
     due = min(now_ms + DEBOUNCE_MS, first_event_ms + MAX_WAIT_MS)
     return due if last_run_ms is None else max(due, last_run_ms + MIN_GAP_MS)
 
@@ -99,7 +99,7 @@ class SummaryScheduler:
         self.redis.set(_first_key(post_id), now_ms, nx=True, px=TIMER_TTL_MS)
         first = int(cast(str, self.redis.get(_first_key(post_id))) or now_ms)
         last_run = cast(str | None, self.redis.get(_last_run_key(post_id)))
-        due = next_due_ms(now_ms, first, int(last_run) if last_run else None)
+        due = compute_next_due_ms(now_ms, first, int(last_run) if last_run else None)
         self.redis.zadd(DUE_KEY, {post_id: due})
         return due
 
@@ -205,9 +205,9 @@ class SummaryWorker:
             return
         previous = self.core.fetch_summary(post_id)
         run = run_summary(
-            comments=to_comments(self.core.fetch_comments(post_id), post.author_id),
-            caption=to_caption(post),
-            itinerary=to_itinerary(post),
+            comments=convert_comments(self.core.fetch_comments(post_id), post.author_id),
+            caption=build_caption(post),
+            itinerary=build_itinerary(post),
             previous_hash=previous.input_hash if previous else None,
             now=datetime.fromtimestamp(self.clock_ms() / 1000, UTC),
             llm=self.llm,
@@ -279,7 +279,7 @@ def main() -> None:
             settings.core_api_url, settings.service_client_id, settings.service_client_secret
         ),
         build_llm(settings),
-        is_llm_killed=settings.summary_llm_kill,
+        is_llm_killed=settings.is_summary_llm_killed,
     )
     worker.run_forever()
 

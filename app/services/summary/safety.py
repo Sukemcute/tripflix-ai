@@ -14,7 +14,7 @@ from typing import Literal
 
 from app.services.summary.first_hand import detect_first_hand
 from app.services.summary.lexicon import load
-from app.services.summary.vi_text import to_norm
+from app.services.summary.vi_text import normalize_text
 
 NEGATION_WINDOW = 5  # NegEx default scope; [HIỆU CHỈNH] on Vietnamese data
 # Clause ends stop a negation scope (NegEx termination terms): "khong co nuoc nong, co gian".
@@ -39,12 +39,12 @@ class SafetyHit:
 def match_safety(body: str) -> SafetyHit | None:
     """Takes the original body: clause breaks are gone once text is normalized."""
     lexicon = load("safety")
-    norm_body = to_norm(body)
+    norm_body = normalize_text(body)
     if not lexicon.matches(norm_body):  # negation only removes hits: most comments stop here
         return None
     categories: list[str] = []
     for clause in _CLAUSE_END.split(body):
-        norm = to_norm(clause)
+        norm = normalize_text(clause)
         for group, regex in lexicon.groups.items():
             if group not in categories and any(
                 not _negated(norm[: m.start()], m.group()) for m in regex.finditer(norm)

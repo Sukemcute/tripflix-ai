@@ -1,7 +1,7 @@
 import pytest
 
 from app.services.summary.first_hand import detect_first_hand
-from app.services.summary.vi_text import to_norm
+from app.services.summary.vi_text import normalize_text
 
 
 @pytest.mark.parametrize(
@@ -32,10 +32,10 @@ from app.services.summary.vi_text import to_norm
     ],
 )
 def test_detect_first_hand(comment: str, expected: bool) -> None:
-    assert detect_first_hand(to_norm(comment)).is_first_hand is expected
+    assert detect_first_hand(normalize_text(comment)).is_first_hand is expected
 
 
 def test_cues_explain_the_decision() -> None:
-    result = detect_first_hand(to_norm("Mình chưa đi bao giờ"))
+    result = detect_first_hand(normalize_text("Mình chưa đi bao giờ"))
 
     assert result.cues == ("first_person", "not_experienced")

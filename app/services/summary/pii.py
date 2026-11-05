@@ -29,7 +29,7 @@ _PII = [
 class PromptComment:
     cid: str  # temporary code sent to the LLM
     text: str  # PII masked
-    first_hand: bool
+    is_first_hand: bool
     context: tuple[str, ...] = ()  # parent texts of replies, PII masked; not this writer's view
 
 
@@ -49,6 +49,8 @@ def pseudonymize(
         cid = f"c{i}"
         text = mask_pii(s.text)  # the shortened text actually sent
         context = tuple(mask_pii(t) for t in s.candidate.contexts)
-        prompt.append(PromptComment(cid=cid, text=text, first_hand=s.first_hand, context=context))
+        prompt.append(
+            PromptComment(cid=cid, text=text, is_first_hand=s.is_first_hand, context=context)
+        )
         codes[cid] = s.candidate.comment_ids
     return prompt, codes

@@ -15,7 +15,7 @@ from app.services.summary.claims import Claim
 from app.services.summary.pii import PromptComment
 
 
-def input_hash(
+def compute_input_hash(
     comments: Sequence[PromptComment],
     real_ids: Mapping[str, tuple[str, ...]],
     claims: Sequence[Claim],
@@ -24,7 +24,7 @@ def input_hash(
     payload = {
         # keyed by real IDs, sorted: temporary codes c1..cN shift when order changes
         "comments": sorted(
-            [list(real_ids[c.cid]), c.text, c.first_hand, list(c.context)] for c in comments
+            [list(real_ids[c.cid]), c.text, c.is_first_hand, list(c.context)] for c in comments
         ),
         "claims": [[c.id, c.text, c.source] for c in claims],
         "versions": dict(versions),

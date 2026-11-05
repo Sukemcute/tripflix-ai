@@ -38,7 +38,9 @@ def build_user_message(comments: Sequence[PromptComment], claims: Sequence[Claim
     lines += [f'<claim id="{c.id}">{_escape(c.text)}</claim>' for c in claims]
     lines += ["</claims>", "<comments>"]
     for c in comments:
-        lines.append(f'<comment id="{c.cid}" first_hand="{"true" if c.first_hand else "false"}">')
+        lines.append(
+            f'<comment id="{c.cid}" first_hand="{"true" if c.is_first_hand else "false"}">'
+        )
         lines += [f"<context>{_escape(parent)}</context>" for parent in c.context]
         lines += [f"<text>{_escape(c.text)}</text>", "</comment>"]
     lines.append("</comments>")

@@ -18,7 +18,7 @@ from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any
 
-from app.services.summary.vi_text import to_raw
+from app.services.summary.vi_text import clean_text
 
 MODEL_DIR = Path(__file__).resolve().parents[2] / "models"
 WORD_PARAMS: dict[str, Any] = {"ngram_range": (1, 2)}
@@ -58,11 +58,11 @@ def load() -> ComplaintModel:
 
 def prepare(body: str) -> str:
     """Model input: raw text, lowercased. Diacritics kept: 2 F1 points better than norm."""
-    return to_raw(body).lower()
+    return clean_text(body).lower()
 
 
 @lru_cache(maxsize=4096)  # selection scores each comment and its sentences; reruns repeat
-def probability(body: str) -> float:
+def predict_probability(body: str) -> float:
     model = load()
     text = prepare(body)
     score = (
@@ -74,7 +74,7 @@ def probability(body: str) -> float:
 
 
 def is_complaint(body: str) -> bool:
-    return probability(body) >= load().threshold
+    return predict_probability(body) >= load().threshold
 
 
 def _block(grams: list[str], vocab: dict[str, tuple[float, float]]) -> float:

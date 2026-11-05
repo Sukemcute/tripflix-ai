@@ -45,7 +45,7 @@ _FOLD_LETTERS = str.maketrans(  # applied after lower(): Ð lowers to ð
 # Filters, safety and injection each normalize the same body: cache the pure functions.
 # 2048 entries x 2 caches x 10k chars max is ~40 MB worst case, ~2 MB for typical comments.
 @lru_cache(maxsize=2048)
-def to_raw(text: str) -> str:
+def clean_text(text: str) -> str:
     """NFKC, no format chars, single spaces. Keeps diacritics and emoji for the LLM.
 
     NFKC (not NFC) also folds fullwidth and math letters ("ｉｇｎｏｒｅ", "𝐢𝐠𝐧𝐨𝐫𝐞")
@@ -57,14 +57,14 @@ def to_raw(text: str) -> str:
 
 
 @lru_cache(maxsize=2048)
-def to_norm(text: str) -> str:
+def normalize_text(text: str) -> str:
     """Lowercase ASCII words for regex rules: no diacritics, emoji or punctuation.
 
     Tone-mark placement ("hoà" vs "hòa") needs no handling: both fold to "hoa".
     Runs of 3+ identical chars collapse to one ("quáaaa" -> "qua"); real double
     letters such as "xoong" are kept.
     """
-    text = to_raw(text).replace(MENTION, " ").lower().translate(_FOLD_LETTERS)
+    text = clean_text(text).replace(MENTION, " ").lower().translate(_FOLD_LETTERS)
     text = _SPLIT_WORD.sub(lambda m: _SPLITTERS.sub("", m.group()), text)
     text = _COMBINING_MARKS.sub("", unicodedata.normalize("NFD", text))
     text = _REPEATS.sub(r"\1", _NON_WORD.sub(" ", text))

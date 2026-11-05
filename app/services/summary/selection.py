@@ -28,7 +28,7 @@ from app.services.summary import complaint_model
 from app.services.summary.filters import Candidate
 from app.services.summary.first_hand import detect_first_hand
 from app.services.summary.lexicon import load
-from app.services.summary.vi_text import count_syllables, to_norm
+from app.services.summary.vi_text import count_syllables, normalize_text
 
 # shortcut: common Vietnamese question endings only; a question without "?" or these
 # endings ranks as a statement.
@@ -63,10 +63,10 @@ GAP = " … "  # marks dropped sentences so the LLM never reads two far-apart on
 class Selected:
     candidate: Candidate
     tier: Literal[1, 2, 3]
-    first_hand: bool
+    is_first_hand: bool
     tokens: int
     text: str  # what is sent: the comment, or its most relevant sentences within the share
-    complaint: bool = False  # classifier label on the whole comment
+    is_complaint: bool = False  # classifier label on the whole comment
 
 
 @dataclass(frozen=True)
@@ -100,7 +100,7 @@ def select_comments(
         # (hotel summarizers split subjective from objective first, Tsai et al. 2020) but
         # still feed topics, so they are not dropped (Meta exempts asking for advice).
         # comment_ids make ties deterministic.
-        key = (tier, c.suspect, question, order, c.comment_ids)
+        key = (tier, c.is_suspect, question, order, c.comment_ids)
         ranked.append((key, tier, first_hand, complaint, c))
     ranked.sort(key=lambda r: r[0])
 
@@ -126,19 +126,19 @@ def select_comments(
                 Selected(
                     candidate=c,
                     tier=tier,
-                    first_hand=first_hand,
+                    is_first_hand=first_hand,
                     tokens=cost,
                     text=text,
-                    complaint=complaint,
+                    is_complaint=complaint,
                 )
             )
             used += cost
             picked[k] += 1
-    people = len({s.candidate.author_id for s in items if not s.candidate.suspect})
+    people = len({s.candidate.author_id for s in items if not s.candidate.is_suspect})
     return Selection(items=items, tokens=used, skipped=len(ranked) - len(items), people=people)
 
 
-def summary_status(
+def decide_summary_status(
     total_comments: int, selection: Selection
 ) -> Literal["no_comments", "insufficient_data", "ready"]:
     """Gate before any LLM call. "ready" means the selection may be summarized."""
@@ -172,7 +172,7 @@ def fit_to_share(text: str, max_tokens: int) -> str:
 
 
 def _sentence_weight(sentence: str) -> int:
-    norm = to_norm(sentence)
+    norm = normalize_text(sentence)
     weights = [w for name, w in _SENTENCE_LEXICONS if load(name).matches(norm)]
     if complaint_model.is_complaint(sentence):
         weights.append(COMPLAINT_SENTENCE_WEIGHT)
@@ -202,7 +202,7 @@ def _cut_words(sentence: str, max_tokens: int) -> str:
 def _is_question(text: str) -> bool:
     """Every merged part of the candidate asks something and states nothing."""
     return all(
-        part.rstrip().endswith("?") or bool(_QUESTION_END.search(to_norm(part)))
+        part.rstrip().endswith("?") or bool(_QUESTION_END.search(normalize_text(part)))
         for part in text.split(" | ")
     )
 

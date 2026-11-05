@@ -84,8 +84,8 @@ def test_same_text_from_many_accounts_keeps_earliest_copy_as_suspect() -> None:
 
     assert result.dropped == {"c2": "L8"}
     by_author = {c.author_id: c for c in result.candidates}
-    assert by_author["u-c1"].suspect is True
-    assert by_author["u-c3"].suspect is False
+    assert by_author["u-c1"].is_suspect is True
+    assert by_author["u-c3"].is_suspect is False
 
 
 def test_same_author_comments_merge_into_one_voice() -> None:
@@ -100,7 +100,7 @@ def test_same_author_comments_merge_into_one_voice() -> None:
     [merged] = result.candidates
     assert merged.comment_ids == ("c1", "c2")
     assert merged.text == "Phòng sạch, view biển | Bữa sáng ít món lắm"
-    assert (merged.like_count, merged.created_at, merged.suspect) == (7, NOW, False)
+    assert (merged.like_count, merged.created_at, merged.is_suspect) == (7, NOW, False)
 
 
 @pytest.mark.parametrize(
@@ -169,7 +169,7 @@ def test_near_copy_from_another_account_is_caught_like_an_exact_copy() -> None:
     result = filter_comments([near, first], NOW)
 
     assert result.dropped == {"c2": "L8"}
-    assert result.candidates[0].suspect is True
+    assert result.candidates[0].is_suspect is True
 
 
 def test_different_short_comments_are_not_near_copies() -> None:

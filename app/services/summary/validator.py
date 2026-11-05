@@ -36,10 +36,10 @@ from app.services.summary.schemas import (
     SummaryLlmOutput,
 )
 from app.services.summary.selection import Selected
-from app.services.summary.vi_text import to_norm
+from app.services.summary.vi_text import normalize_text
 
 MIN_PEOPLE_PER_POINT = 2  # V3/V4/V8; same threshold the read path re-checks (QT §15)
-# to_norm strips symbols, so "70%" or "$20" are checked on the raw sentence.
+# normalize_text strips symbols, so "70%" or "$20" are checked on the raw sentence.
 _SYMBOL_NUMBER = re.compile(r"\d\s*[%$₫€]|[$₫€]\s*\d")
 
 Section = Literal["excluded", "safety_mentions", "pros", "cons", "reality_gaps", "topics"]
@@ -207,10 +207,10 @@ class _Validator:
                 merged[gap.claim_id] = (codes, gap.reality, len(codes))
         gaps: list[RealityGapPoint] = []
         for claim_id, (codes, reality, _) in merged.items():
-            first_hand = [c for c in dict.fromkeys(codes) if self.by_code[c].first_hand]
+            first_hand = [c for c in dict.fromkeys(codes) if self.by_code[c].is_first_hand]
             for code in set(codes) - set(first_hand):
                 self._note("V4", "reality_gaps", "drop_id", f"{code} not first-hand")
-            people = self._people(first_hand, with_supporters=False)
+            people = self._people(first_hand, should_count_supporters=False)
             if self._is_kept("reality_gaps", reality, first_hand, people, "V4", [reality]):
                 gaps.append(
                     RealityGapPoint(
@@ -228,7 +228,7 @@ class _Validator:
         merged: dict[str, tuple[str, str, list[str], int]] = {}
         for topic in output.topics:
             codes = self._evidence("topics", topic.comment_ids)
-            key = to_norm(topic.label)
+            key = normalize_text(topic.label)
             if key in merged:
                 self._note("V8", "topics", "merge", topic.label)
                 label, summary, old_codes, old_size = merged[key]
@@ -284,15 +284,15 @@ class _Validator:
             return False
         return True
 
-    def _people(self, codes: Iterable[str], *, with_supporters: bool = True) -> int:
+    def _people(self, codes: Iterable[str], *, should_count_supporters: bool = True) -> int:
         """Distinct writers; L8 suspects do not count. Agreeing repliers count for V3/V8."""
         people: set[str] = set()
         for code in codes:
             candidate = self.by_code[code].candidate
-            if candidate.suspect:
+            if candidate.is_suspect:
                 continue
             people.add(candidate.author_id)
-            if with_supporters:
+            if should_count_supporters:
                 people |= candidate.supporters
         return len(people)
 
@@ -305,7 +305,7 @@ class _Validator:
 
 def _banned_reason(text: str) -> str | None:
     """V6: counts, shares and money are the code's job; PII must never be shown."""
-    hit = load("summary_bans").matches(to_norm(text))
+    hit = load("summary_bans").matches(normalize_text(text))
     if hit:
         return hit[0]
     if _SYMBOL_NUMBER.search(text):

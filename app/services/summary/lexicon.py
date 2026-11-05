@@ -1,6 +1,6 @@
 """Versioned pattern lists (app/lexicons/<name>.v<N>.yaml) compiled into one regex per group.
 
-Patterns match text produced by vi_text.to_norm. A file never changes once used:
+Patterns match text produced by vi_text.normalize_text. A file never changes once used:
 new patterns go into a new version, and the version feeds input_hash.
 """
 
@@ -48,7 +48,7 @@ def load(name: str) -> Lexicon:
     return parse(versions[max(versions)])
 
 
-def versions() -> dict[str, int]:
+def read_versions() -> dict[str, int]:
     """Version in use of every lexicon; feeds input_hash so a new version re-summarizes."""
     names = {m["name"] for p in LEXICON_DIR.glob("*.yaml") if (m := _FILE_NAME.match(p.name))}
     return {name: load(name).version for name in sorted(names)}

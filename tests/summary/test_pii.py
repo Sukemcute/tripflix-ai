@@ -47,11 +47,11 @@ def test_pseudonymize_swaps_real_ids_for_temporary_codes() -> None:
         text_norm="",
         like_count=0,
         created_at=datetime(2026, 11, 1, tzinfo=UTC),
-        suspect=False,
+        is_suspect=False,
     )
 
     prompt, codes = pseudonymize(
-        [Selected(candidate=cand, tier=3, first_hand=False, tokens=10, text=cand.text)]
+        [Selected(candidate=cand, tier=3, is_first_hand=False, tokens=10, text=cand.text)]
     )
 
     assert prompt[0].cid == "c1"
@@ -68,11 +68,11 @@ def test_reply_context_is_masked_too() -> None:
         text_norm="goi so do roi khong ai nghe",
         like_count=0,
         created_at=datetime(2026, 11, 5, tzinfo=UTC),
-        suspect=False,
+        is_suspect=False,
         contexts=("Ai cần phòng gọi 0912 345 678",),
     )
     [prompt], _ = pseudonymize(
-        [Selected(candidate=cand, tier=3, first_hand=False, tokens=10, text=cand.text)]
+        [Selected(candidate=cand, tier=3, is_first_hand=False, tokens=10, text=cand.text)]
     )
 
     assert prompt.context == ("Ai cần phòng gọi [đã che]",)
@@ -86,11 +86,11 @@ def test_the_shortened_text_is_what_gets_masked_and_sent() -> None:
         text_norm="",
         like_count=0,
         created_at=datetime(2026, 11, 5, tzinfo=UTC),
-        suspect=False,
+        is_suspect=False,
     )
     sent = "… Gọi 0912 345 678 bị ngộ độc."
     [prompt], _ = pseudonymize(
-        [Selected(candidate=cand, tier=2, first_hand=False, tokens=10, text=sent)]
+        [Selected(candidate=cand, tier=2, is_first_hand=False, tokens=10, text=sent)]
     )
 
     assert prompt.text == "… Gọi [đã che] bị ngộ độc."

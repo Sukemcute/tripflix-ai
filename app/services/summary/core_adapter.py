@@ -8,7 +8,7 @@ from app.services.summary.schemas import CommentIn, ItineraryItemIn
 _PLACE_NAME_MAX = 200
 
 
-def to_comments(comments: Sequence[CoreComment], post_author_id: str) -> list[CommentIn]:
+def convert_comments(comments: Sequence[CoreComment], post_author_id: str) -> list[CommentIn]:
     """Core only lists live comments and keeps no like count yet, so every one is visible, 0."""
     return [
         CommentIn(
@@ -25,11 +25,11 @@ def to_comments(comments: Sequence[CoreComment], post_author_id: str) -> list[Co
     ]
 
 
-def to_caption(post: CorePost) -> str:
+def build_caption(post: CorePost) -> str:
     return "\n".join(part for part in (post.title, post.body) if part)
 
 
-def to_itinerary(post: CorePost) -> list[ItineraryItemIn]:
+def build_itinerary(post: CorePost) -> list[ItineraryItemIn]:
     """The booked hotel is the one service claim; day items are free text (caption rules)."""
     trip = post.trip_attachment
     if trip is None or not trip.hotel_name:

@@ -31,7 +31,7 @@ def test_defaults() -> None:
 
     assert settings.llm_timeout_seconds == 30.0
     assert settings.llm_max_output_tokens == 3000
-    assert settings.summary_llm_kill is False
+    assert settings.is_summary_llm_killed is False
 
 
 def test_env_overrides_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,7 +42,7 @@ def test_env_overrides_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = load()
 
     assert settings.llm_provider == "openai"
-    assert settings.summary_llm_kill is True
+    assert settings.is_summary_llm_killed is True
     assert settings.llm_max_output_tokens == 2000
 
 

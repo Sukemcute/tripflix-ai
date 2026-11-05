@@ -8,12 +8,12 @@ from app.services.summary.selection import (
     GAP,
     MIN_PEOPLE,
     MIN_SHARE_TOKENS,
+    decide_summary_status,
     estimate_tokens,
     fit_to_share,
     select_comments,
-    summary_status,
 )
-from app.services.summary.vi_text import to_norm
+from app.services.summary.vi_text import normalize_text
 
 NOW = datetime(2026, 11, 5, tzinfo=UTC)
 FIRST_HAND = "Mình ở đây tháng trước, phòng sạch, nhân viên dễ thương"
@@ -21,15 +21,15 @@ COMPLAINT = "Phòng bẩn, đồ ăn dở tệ, nhân viên thô lỗ, thất v�
 NEUTRAL = "Resort nằm gần biển, nhìn khá rộng"
 
 
-def cand(i: int, text: str, likes: int = 0, days: float = 1, suspect: bool = False) -> Candidate:
+def cand(i: int, text: str, likes: int = 0, days: float = 1, is_suspect: bool = False) -> Candidate:
     return Candidate(
         author_id=f"u{i}",
         comment_ids=(f"c{i}",),
         text=text,
-        text_norm=to_norm(text),
+        text_norm=normalize_text(text),
         like_count=likes,
         created_at=NOW - timedelta(days=days),
-        suspect=suspect,
+        is_suspect=is_suspect,
     )
 
 
@@ -83,7 +83,7 @@ def test_tier3_ranks_by_likes_and_recency() -> None:
 
 
 def test_suspect_copies_go_last_and_are_not_counted_as_people() -> None:
-    picked = select_comments([cand(1, NEUTRAL, suspect=True), cand(2, NEUTRAL)], NOW)
+    picked = select_comments([cand(1, NEUTRAL, is_suspect=True), cand(2, NEUTRAL)], NOW)
 
     assert [s.candidate.author_id for s in picked.items] == ["u2", "u1"]
     assert picked.people == 1
@@ -102,9 +102,9 @@ def test_summary_status_gates_the_llm_call() -> None:
     enough = select_comments([cand(i, NEUTRAL) for i in range(MIN_PEOPLE)], NOW)
     too_few = select_comments([cand(i, NEUTRAL) for i in range(MIN_PEOPLE - 1)], NOW)
 
-    assert summary_status(0, too_few) == "no_comments"
-    assert summary_status(10, too_few) == "insufficient_data"
-    assert summary_status(10, enough) == "ready"
+    assert decide_summary_status(0, too_few) == "no_comments"
+    assert decide_summary_status(10, too_few) == "insufficient_data"
+    assert decide_summary_status(10, enough) == "ready"
 
 
 def test_questions_rank_after_statements_in_their_tier() -> None:
@@ -165,7 +165,7 @@ def test_fair_share_lets_more_voices_in_and_keeps_flags_from_the_whole_comment()
 
     assert len(shared.items) > len(whole.items)
     # "Mình ở đây 3 đêm..." may be dropped from the text; the tier was set before that
-    assert all(s.first_hand and s.tier == 1 for s in shared.items)
+    assert all(s.is_first_hand and s.tier == 1 for s in shared.items)
     assert all(s.text != s.candidate.text for s in shared.items)
 
 
@@ -181,10 +181,10 @@ def test_over_budget_pick_keeps_the_complaint_share(monkeypatch: pytest.MonkeyPa
     budget = sum(estimate_tokens(c.text) for c in praise[:20])  # room for about 20 of 100
 
     picked = select_comments([*praise, *complaints], NOW, token_budget=budget)
-    share = sum(s.complaint for s in picked.items) / len(picked.items)
+    share = sum(s.is_complaint for s in picked.items) / len(picked.items)
 
     assert 0.25 <= share <= 0.35
-    assert all(s.tier == 1 for s in picked.items if not s.complaint)  # tier order inside
+    assert all(s.tier == 1 for s in picked.items if not s.is_complaint)  # tier order inside
 
 
 def test_everything_is_sent_when_it_fits() -> None:
@@ -199,4 +199,4 @@ def test_a_question_is_never_counted_as_a_complaint() -> None:
     """The review-trained model scores many questions as complaints; questions state no view."""
     [picked] = select_comments([cand(1, "Trẻ em dưới 6 tuổi có tính tiền không ạ")], NOW).items
 
-    assert picked.complaint is False
+    assert picked.is_complaint is False

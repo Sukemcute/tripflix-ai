@@ -31,10 +31,10 @@ def _selected(
         text_norm="",
         like_count=0,
         created_at=datetime(2026, 11, 5, tzinfo=UTC),
-        suspect=is_suspect,
+        is_suspect=is_suspect,
         supporters=supporters,
     )
-    return Selected(candidate=candidate, tier=3, first_hand=is_first_hand, tokens=10, text=text)
+    return Selected(candidate=candidate, tier=3, is_first_hand=is_first_hand, tokens=10, text=text)
 
 
 BY_CODE = {

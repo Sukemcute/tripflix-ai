@@ -87,7 +87,7 @@ def main() -> None:
     out.write_text(json.dumps(model, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     complaint_model.load.cache_clear()
-    ours = np.array([complaint_model.probability(r["body"]) for r in rows])
+    ours = np.array([complaint_model.predict_probability(r["body"]) for r in rows])
     theirs = pipe.predict_proba(texts)[:, 1]
     gap = float(np.abs(ours - theirs).max())
     assert gap < 1e-9, f"pure-Python scoring differs from scikit-learn by {gap}"

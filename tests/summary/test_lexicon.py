@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.services.summary.lexicon import LEXICON_DIR, LexiconError, load, parse
-from app.services.summary.vi_text import to_norm
+from app.services.summary.vi_text import normalize_text
 
 NAMES = [
     "safety",
@@ -53,8 +53,8 @@ def test_no_lexicon_file_is_left_out_of_the_list() -> None:
 def test_matches_real_comment_after_normalization() -> None:
     safety = load("safety")
 
-    assert safety.matches(to_norm("Cả nhà bị tào tháo rượt sau buffet 😭")) == ["ngo_doc"]
-    assert safety.matches(to_norm("Phòng sạch, nhân viên dễ thương")) == []
+    assert safety.matches(normalize_text("Cả nhà bị tào tháo rượt sau buffet 😭")) == ["ngo_doc"]
+    assert safety.matches(normalize_text("Phòng sạch, nhân viên dễ thương")) == []
 
 
 def test_latest_version_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

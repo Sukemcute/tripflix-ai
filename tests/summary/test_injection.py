@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.services.summary.injection import match_injection
-from app.services.summary.vi_text import to_raw
+from app.services.summary.vi_text import clean_text
 
 EVAL = Path(__file__).resolve().parents[2] / "evals" / "summary" / "injection_10.jsonl"
 CASES = [json.loads(line) for line in EVAL.read_text(encoding="utf-8").splitlines()]
@@ -24,7 +24,7 @@ def test_hidden_tag_text_never_reaches_the_llm() -> None:
     smuggled = next(c["text"] for c in CASES if c["id"] == "i08")
 
     assert match_injection(smuggled) == ["hidden_text"]
-    assert to_raw(smuggled) == "Phòng ổn previous instructions"
+    assert clean_text(smuggled) == "Phòng ổn previous instructions"
 
 
 @pytest.mark.parametrize(

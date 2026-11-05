@@ -16,7 +16,7 @@ from app.services.summary.injection import match_injection
 from app.services.summary.lexicon import load
 from app.services.summary.safety import match_safety
 from app.services.summary.schemas import CommentIn
-from app.services.summary.vi_text import MENTION, count_syllables, to_norm, to_raw
+from app.services.summary.vi_text import MENTION, clean_text, count_syllables, normalize_text
 
 MAX_AGE = timedelta(days=365)  # Tripadvisor: review within one year of the visit
 MIN_SYLLABLES = 4  # QT L5, [HIỆU CHỈNH]
@@ -42,11 +42,13 @@ class Candidate:
 
     author_id: str
     comment_ids: tuple[str, ...]
-    text: str  # to_raw bodies joined by " | "
+    text: str  # clean_text bodies joined by " | "
     text_norm: str
     like_count: int  # highest among the merged comments
     created_at: datetime  # latest among the merged comments
-    suspect: bool  # holds the kept copy of a cross-account duplicate (L8): not counted as a person
+    is_suspect: (
+        bool  # holds the kept copy of a cross-account duplicate (L8): not counted as a person
+    )
     # Parent texts of this author's replies, cut to PARENT_CONTEXT_CHARS: context for the
     # LLM, never this author's opinion (CQA: the question frames the answer).
     contexts: tuple[str, ...] = ()
@@ -65,7 +67,7 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
     dropped: dict[str, str] = {}
     kept: list[tuple[CommentIn, str, str]] = []
     for comment in comments:
-        text, norm = to_raw(comment.body), to_norm(comment.body)
+        text, norm = clean_text(comment.body), normalize_text(comment.body)
         reason = _rule_for(comment, text, norm, now)
         if reason:
             dropped[comment.comment_id] = reason
@@ -98,7 +100,7 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
     # Threads: a reply leans on its parent for context, and an agreeing reply is a vote.
     by_id = {c.comment_id: c for c in comments}
 
-    def parent_of(c: CommentIn) -> CommentIn | None:
+    def find_parent(c: CommentIn) -> CommentIn | None:
         parent = by_id.get(c.parent_id) if c.parent_id else None
         if parent is None or dropped.get(parent.comment_id) in _NO_PARENT_CONTEXT:
             return None
@@ -106,13 +108,13 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
 
     votes: dict[str, set[str]] = {}
     for c in comments:
-        parent = parent_of(c)
+        parent = find_parent(c)
         if parent and dropped.get(c.comment_id) not in _NOT_A_VOTE and _agrees(c.body):
             votes.setdefault(parent.comment_id, set()).add(c.author_id)
 
-    def contexts(group: list[tuple[CommentIn, str, str]]) -> tuple[str, ...]:
-        parents = (parent_of(c) for c, _, _ in group)
-        texts = (to_raw(p.body)[:PARENT_CONTEXT_CHARS] for p in parents if p)
+    def collect_contexts(group: list[tuple[CommentIn, str, str]]) -> tuple[str, ...]:
+        parents = (find_parent(c) for c, _, _ in group)
+        texts = (clean_text(p.body)[:PARENT_CONTEXT_CHARS] for p in parents if p)
         return tuple(dict.fromkeys(texts))  # dedupe, keep order
 
     candidates = [
@@ -123,8 +125,8 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
             text_norm=" | ".join(norm for _, _, norm in group),
             like_count=max(c.like_count for c, _, _ in group),
             created_at=group[-1][0].created_at,
-            suspect=bool(group_clusters[author_id] & copied),
-            contexts=contexts(group),
+            is_suspect=bool(group_clusters[author_id] & copied),
+            contexts=collect_contexts(group),
             supporters=frozenset().union(*(votes.get(c.comment_id, ()) for c, _, _ in group))
             - {author_id},
         )
@@ -137,7 +139,7 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
 def _agrees(body: str) -> bool:
     if _PLUS_ONE.search(body):
         return True
-    groups = load("agreement").matches(to_norm(body))
+    groups = load("agreement").matches(normalize_text(body))
     return "agree" in groups and "disagree" not in groups
 
 

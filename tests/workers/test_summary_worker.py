@@ -14,7 +14,7 @@ from app.workers.summary_worker import (
     MIN_GAP_MS,
     SummaryScheduler,
     SummaryWorker,
-    next_due_ms,
+    compute_next_due_ms,
 )
 
 POST = "018d9f20-0000-7000-8000-000000000001"
@@ -84,7 +84,7 @@ def _event(event_type: str = "content.comment.created", **payload: object) -> di
 def test_next_due_follows_the_three_timing_rules(
     now: int, first: int, last_run: int | None, due: int
 ) -> None:
-    assert next_due_ms(now, first, last_run) == due
+    assert compute_next_due_ms(now, first, last_run) == due
 
 
 def test_events_push_the_run_back_and_only_one_claim_wins() -> None:

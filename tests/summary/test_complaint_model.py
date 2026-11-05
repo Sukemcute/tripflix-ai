@@ -1,7 +1,7 @@
 import pytest
 
 from app.services.summary import complaint_model
-from app.services.summary.complaint_model import _char_ngrams, is_complaint, probability
+from app.services.summary.complaint_model import _char_ngrams, is_complaint, predict_probability
 
 
 def test_model_file_loads_with_both_feature_blocks() -> None:
@@ -30,7 +30,7 @@ def test_clear_complaints_are_flagged(text: str) -> None:
 )
 def test_praise_and_neutral_are_not(text: str) -> None:
     assert not is_complaint(text)
-    assert 0 <= probability(text) < 0.5
+    assert 0 <= predict_probability(text) < 0.5
 
 
 def test_char_ngrams_follow_scikit_learn_char_wb() -> None:
