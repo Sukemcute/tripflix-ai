@@ -63,6 +63,20 @@ AI agent: đọc hết file này trước khi làm. Luật nào không làm đư
 - Không tự đổi cấu hình chung (tsconfig, eslint, turbo, Dockerfile, compose, CI, `RULES.md`) khi task không yêu cầu.
 - Task lớn (hơn 2–3 file, hoặc đụng module khác): lập kế hoạch trước, gồm file sẽ sửa và chủ của chúng, đưa người dùng duyệt rồi mới code. AI dùng plan mode.
 
+### 4.1 Quy ước đặt tên, schema và hàm
+
+- **TypeScript/JavaScript:** biến, tham số, hàm, method và property dùng `camelCase`; type, interface, class, enum và Zod schema dùng `PascalCase`; hằng số cấu hình bất biến dùng `UPPER_SNAKE_CASE`.
+- **Python:** biến, tham số, hàm, method và module dùng `snake_case`; class, type và Pydantic model dùng `PascalCase`; hằng số cấu hình bất biến dùng `UPPER_SNAKE_CASE`.
+- **File và thư mục:** dùng `kebab-case`; giữ nguyên tên bắt buộc của framework và file đặc biệt như `index.ts`, `page.tsx`, `route.ts`, `__init__.py`, `Dockerfile`.
+- **Boolean:** đặt tên theo câu hỏi có nghĩa, bắt đầu bằng `is`, `has`, `can` hoặc `should` (ví dụ `isAvailable`, `hasPermission`, `is_available`).
+- **Hàm:** bắt đầu bằng động từ mô tả hành động (`createBooking`, `findUser`, `calculateTotal`); hàm kiểm tra dùng `is`/`has`/`can`. Mỗi hàm làm một việc, khai báo kiểu input và output rõ ràng; không dùng tham số boolean positional để thay đổi nhiều nhánh hành vi, hãy dùng options object hoặc tách hàm.
+- **Schema ở ranh giới hệ thống:** validate dữ liệu nhận từ HTTP, message queue, env và input bên ngoài trước khi dùng. OpenAPI trong `contracts/` là hợp đồng API chuẩn; JSON request/response dùng key `camelCase` ở cả ba repo. Python dùng `snake_case` bên trong và alias khi serialize/parse hợp đồng `camelCase`.
+- **Schema TypeScript:** Zod schema đặt tên `PascalCase` có hậu tố `Schema` (ví dụ `CreateBookingRequestSchema`); suy ra type bằng `z.infer<typeof ...Schema>` để tránh khai báo schema và type trùng lặp. DTO dùng hậu tố `Dto`; không trả trực tiếp model database ra API.
+- **Schema Python:** Pydantic request/response model đặt tên `PascalCase` với hậu tố `Request` hoặc `Response`; khai báo kiểu cho mọi field và dùng alias rõ ràng khi tên JSON khác tên Python.
+- **Database (BE):** tên bảng, cột, enum, index và constraint vật lý dùng `snake_case`; bảng dùng danh từ số nhiều; khóa chính là `id`, khóa ngoại là `<entity>_id`, thời gian dùng `created_at`/`updated_at`. Đặt tên constraint ổn định theo mẫu `fk_<table>_<column>`, `uq_<table>_<column>`, `idx_<table>_<columns>`, `ck_<table>_<meaning>`; tên property Drizzle trong TypeScript vẫn dùng `camelCase` và map tường minh sang tên vật lý.
+- Schema API, schema validation và schema database là các lớp riêng; không dùng schema database làm hợp đồng API. Thay đổi API chỉ thêm field tương thích ngược, cập nhật nguồn hợp đồng rồi sinh lại artifact theo hướng dẫn repo; không sửa tay file sinh.
+- Không viết tắt tùy ý, không đặt tên chung chung như `data`, `result`, `item` nếu ngữ cảnh không rõ; dùng tên thể hiện vai trò và đơn vị (ví dụ `durationSeconds`, `bookingRequest`).
+
 ## 5. Test: bắt buộc trước khi commit cuối và trước khi push
 
 - Logic mới phải có test. Sửa bug phải có test tái hiện bug đó.

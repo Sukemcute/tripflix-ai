@@ -66,10 +66,12 @@ Nguyên tắc chia module: **những gì phải đổi cùng nhau trong một tr
 
 ```mermaid
 flowchart TB
-  subgraph Clients
+  subgraph FO["Front Office — khách và thành viên"]
     APP[App mobile<br/>Expo]
     WEB[Web người dùng<br/>Next.js]
-    ADM[Trang quản trị<br/>Next.js]
+  end
+  subgraph BO["Back Office — vận hành nội bộ"]
+    ADM[Admin console<br/>moderator · superadmin]
   end
 
   GW[API Gateway<br/>rate limit, JWT, routing]
@@ -95,8 +97,9 @@ flowchart TB
   PUSH[[Expo Push · FCM/APNs · email]]
   LLM[[OpenAI / LLM]]
 
-  APP & WEB & ADM --> GW
-  GW -->|/api, /analytics| Core
+  APP & WEB -->|API public / member| GW
+  ADM -->|API quản trị · JWT role guard| GW
+  GW -->|/api, /admin, /analytics| Core
   GW -->|/notifications, /ws| NS
   GW -->|/ai, SSE| AI
 
@@ -112,6 +115,8 @@ flowchart TB
   APP & WEB -->|HLS| S3
 ```
 
+**Ranh giới Front Office / Back Office.** Front Office gồm app mobile và web công khai cho khách/thành viên (`member`): khám phá nội dung, tìm kiếm và đặt dịch vụ. Back Office là `apps/admin`, chỉ dành cho nhân sự nội bộ (`moderator`, `superadmin`): kiểm duyệt, analytics, xử lý đơn, quản lý lịch trống/giá và tài khoản nhân viên. Đây là hai bề mặt sản phẩm riêng nhưng dùng chung Traefik và `core-api`; quyền Back Office phải được kiểm tra ở API/service bằng role guard, không chỉ ẩn chức năng trên giao diện. MVP không có cổng riêng cho khách sạn/đối tác; Tripflix tự quản lý lịch trống và giá.
+
 ### 3.1. Các deployable
 
 | Deployable | Repo | Công nghệ | Sở hữu dữ liệu | Lý do tách |
@@ -120,7 +125,7 @@ flowchart TB
 | `notification-service` | BE | NestJS, BullMQ, Socket.IO | Postgres `notification` (database riêng) | Nhận sự kiện từ mọi module, tải theo đợt, scale ngang riêng |
 | `video-worker` | BE | Node + FFmpeg | Không; ghi kết quả vào S3, báo về core bằng sự kiện | CPU nặng, scale riêng |
 | `ai-service` | AI | Python, FastAPI | Không giữ dữ liệu nghiệp vụ | Ecosystem Python, vòng đánh giá riêng |
-| `mobile`, `web`, `admin` | FE | Expo, Next.js | — | — |
+| `mobile`, `web`, `admin` | FE | Expo, Next.js | — | Mobile/web là Front Office; admin là Back Office, API được role guard |
 
 `video-worker` và `notification-service` build từ cùng monorepo BE với `core-api` (dùng chung `libs/`), mỗi cái một entrypoint và một Dockerfile.
 
@@ -283,7 +288,7 @@ Chỉ mục có trễ vài giây cũng chỉ làm bài mới xuất hiện muộ
 
 ### 3.10. Xác thực: tự viết JWT trong module `access`
 
-Không dùng Keycloak. Hệ thống có 3 vai trò cố định (`member`, `moderator`, `superadmin`), không cần RBAC chi tiết.
+Không dùng Keycloak. Hệ thống có 3 vai trò cố định: `member` thuộc Front Office; `moderator` và `superadmin` thuộc Back Office. Phân quyền theo role cố định, không cần RBAC tuỳ biến chi tiết.
 
 | Thành phần | Cách làm |
 |---|---|
@@ -331,7 +336,7 @@ Bản 0.6 bỏ `mock-channel-manager`: Tripflix **tự quản lý lịch trống
 
 ## 5. Cấu trúc repo
 
-> Bản chi tiết đã duyệt nằm ở [docs/11 — Đề xuất cấu trúc repo](11-de-xuat-cau-truc-repo.md); khi khác nhau, docs/11 là bản đúng. Mục này giữ lại làm tổng quan.
+> Chi tiết cấu trúc repo nằm ở [docs/11 — Đề xuất cấu trúc repo](11-de-xuat-cau-truc-repo.md). Baseline đã duyệt là v1.0; các thay đổi database ở v1.1 đang chờ team duyệt và chưa thay thế kiến trúc Postgres `core` + `commerce` trong tài liệu này và sơ đồ v4.5.
 
 ### 5.1. `tripflix-fe` — pnpm + Turborepo
 
