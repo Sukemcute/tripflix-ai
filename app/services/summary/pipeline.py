@@ -109,7 +109,9 @@ def run_summary(
     text = _summary_text(validated)
     if not text:
         # Enough people, but no point had 2+ of them: nothing honest to show (proposal).
-        return SummaryRun(SaveSummaryRequest(status="insufficient_data", content=content, **base))
+        # Keep the LLM result: the call was paid for and must be recorded.
+        empty = SaveSummaryRequest(status="insufficient_data", content=content, **base)
+        return SummaryRun(empty, result)
     request = SaveSummaryRequest(
         status="ready",
         summary=text,

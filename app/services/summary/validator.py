@@ -278,7 +278,7 @@ class _Validator:
         if people < MIN_PEOPLE_PER_POINT or not codes:
             self._note(rule, section, "drop_item", f"{people} people: {name}")
             return False
-        banned = next((reason for t in texts if (reason := _banned_reason(t))), None)
+        banned = next((reason for t in texts if (reason := find_banned_reason(t))), None)
         if banned:
             self._note("V6", section, "drop_item", f"{banned}: {name}")
             return False
@@ -303,7 +303,7 @@ class _Validator:
         self.report.append(Finding(rule, section, action, detail))
 
 
-def _banned_reason(text: str) -> str | None:
+def find_banned_reason(text: str) -> str | None:
     """V6: counts, shares and money are the code's job; PII must never be shown."""
     hit = load("summary_bans").matches(normalize_text(text))
     if hit:

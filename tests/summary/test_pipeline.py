@@ -125,6 +125,7 @@ def test_no_point_with_two_people_is_not_shown_as_ready() -> None:
     run = _run(_comments(), _llm(pros=lonely))
 
     assert run.request is not None and run.request.status == "insufficient_data"
+    assert run.llm is not None  # the paid call is still reported for cost
 
 
 def test_only_first_hand_safety_warnings_are_public() -> None:
