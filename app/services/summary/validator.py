@@ -13,10 +13,11 @@ guardrail (RN ai_guardrails_evaluation §1), so every check here is a rule:
 V7 (season from bookings) is gone: comments are no longer tied to bookings.
 """
 
+import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import ValidationError
 
@@ -24,7 +25,16 @@ from app.services.summary.claims import Claim
 from app.services.summary.lexicon import load
 from app.services.summary.pii import mask_pii
 from app.services.summary.safety import match_safety
-from app.services.summary.schemas import Aspect, AspectPoint, SummaryLlmOutput
+from app.services.summary.schemas import (
+    MAX_EVIDENCE,
+    MAX_POINTS,
+    MAX_REALITY_GAPS,
+    MAX_SAFETY_MENTIONS,
+    MAX_TOPICS,
+    Aspect,
+    AspectPoint,
+    SummaryLlmOutput,
+)
 from app.services.summary.selection import Selected
 from app.services.summary.vi_text import to_norm
 
@@ -33,7 +43,7 @@ MIN_PEOPLE_PER_POINT = 2  # V3/V4/V8; same threshold the read path re-checks (QT
 _SYMBOL_NUMBER = re.compile(r"\d\s*[%$₫€]|[$₫€]\s*\d")
 
 Section = Literal["excluded", "safety_mentions", "pros", "cons", "reality_gaps", "topics"]
-Action = Literal["drop_id", "drop_item", "merge"]
+Action = Literal["drop_id", "drop_item", "merge", "trim"]
 
 
 class InvalidLlmOutputError(ValueError):
@@ -89,11 +99,61 @@ def validate_summary(
     raw_output: str, by_code: Mapping[str, Selected], claims: Sequence[Claim]
 ) -> ValidatedSummary:
     """Check the LLM output against what was sent. by_code maps c1..cN to the selection."""
+    data, trims = _trim_overflow(raw_output)
     try:
-        output = SummaryLlmOutput.model_validate_json(raw_output)
+        output = SummaryLlmOutput.model_validate(data)
     except ValidationError as e:
         raise InvalidLlmOutputError(str(e)) from e
-    return _Validator(by_code, claims).run(output)
+    validator = _Validator(by_code, claims)
+    validator.report += trims
+    return validator.run(output)
+
+
+_SECTION_CAPS: dict[Section, int] = {
+    "safety_mentions": MAX_SAFETY_MENTIONS,
+    "pros": MAX_POINTS,
+    "cons": MAX_POINTS,
+    "reality_gaps": MAX_REALITY_GAPS,
+    "topics": MAX_TOPICS,
+}
+
+
+def _trim_overflow(raw_output: str) -> tuple[Any, list[Finding]]:
+    """V1: keep the first N items or ids when the LLM writes too many; anything else wrong
+    (broken JSON, wrong types, unknown aspect, extra field) still fails the run.
+
+    A JSON mode without a strict schema ignores maxItems: in a real LLM trial, 22 of 47
+    real runs failed only for an extra item or id.
+    """
+    try:
+        data: Any = json.loads(raw_output)
+    except json.JSONDecodeError as e:
+        raise InvalidLlmOutputError(f"not JSON: {e}") from e
+    findings: list[Finding] = []
+    if not isinstance(data, dict):
+        return data, findings
+    sections = cast(dict[str, Any], data)
+    for section, cap in _SECTION_CAPS.items():
+        items = sections.get(section)
+        if not isinstance(items, list):
+            continue
+        items = cast(list[Any], items)
+        if len(items) > cap:
+            findings.append(Finding("V1", section, "trim", f"{len(items)} items, kept {cap}"))
+            sections[section] = items = items[:cap]
+        for item in items:
+            ids = cast(dict[str, Any], item).get("comment_ids") if isinstance(item, dict) else None
+            if isinstance(ids, list) and len(cast(list[Any], ids)) > MAX_EVIDENCE:
+                findings.append(
+                    Finding(
+                        "V1",
+                        section,
+                        "trim",
+                        f"{len(cast(list[Any], ids))} ids, kept {MAX_EVIDENCE}",
+                    )
+                )
+                cast(dict[str, Any], item)["comment_ids"] = cast(list[Any], ids)[:MAX_EVIDENCE]
+    return data, findings
 
 
 class _Validator:

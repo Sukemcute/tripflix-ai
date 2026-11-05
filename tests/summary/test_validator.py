@@ -95,6 +95,41 @@ def test_v1_unknown_ids_and_claims_are_dropped() -> None:
     assert _rules(summary) == {"V1"}
 
 
+def test_v1_too_many_items_or_ids_are_trimmed_not_failed() -> None:
+    """A JSON mode without strict schema ignores maxItems; one extra item must not fail the run."""
+    many_ids = ["c1", "c2"] + [f"c{i}" for i in range(100, 160)]  # 62 ids, 2 known
+    pros = [_pro(["c1", "c2"], f"Ý {i}.") for i in range(7)] + [_pro(many_ids)]
+
+    summary = _run(_output(pros=pros))
+
+    assert [p.text for p in summary.pros] == [f"Ý {i}." for i in range(5)]
+    trims = [f.detail for f in summary.report if f.action == "trim"]
+    assert trims == ["8 items, kept 5"]
+
+
+def test_v1_too_many_ids_in_one_item_keeps_the_first_fifty() -> None:
+    by_code = {f"c{i}": _selected(f"u{i}") for i in range(1, 61)}
+    ids = [f"c{i}" for i in range(1, 61)]
+
+    summary = _run(_output(pros=[_pro(ids)]), by_code)
+
+    assert summary.pros[0].people == 50
+    assert [f.detail for f in summary.report if f.action == "trim"] == ["60 ids, kept 50"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "not json at all",
+        _output(pros=[{"comment_ids": ["c1", "c2"], "aspect": "khop_video", "text": "x"}]),
+        _output(pros=[{**_pro(["c1", "c2"]), "people": 3}]),
+    ],
+)
+def test_v1_real_schema_errors_still_fail(raw: str) -> None:
+    with pytest.raises(InvalidLlmOutputError):
+        _run(raw)
+
+
 # V2
 
 

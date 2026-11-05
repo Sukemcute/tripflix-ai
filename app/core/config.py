@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["fake", "openai", "anthropic"]
     llm_model: str = ""
     llm_timeout_seconds: float = 30.0
-    llm_max_output_tokens: int = 1500
+    llm_max_output_tokens: int = 3000  # 1500 cut big posts mid-JSON (real LLM trial 2026-11-05)
     summary_llm_kill: bool = False
 
     # Service client created with core's auth:create-service-client (secret printed once).

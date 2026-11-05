@@ -49,7 +49,15 @@ Aspect = Literal[
 ]
 CommentCode = Annotated[str, Field(pattern=r"^c[0-9]+$")]  # temporary IDs from pii.pseudonymize
 ClaimCode = Annotated[str, Field(pattern=r"^clm_[0-9]+$")]  # IDs from claims.build_claims
-Evidence = Annotated[list[CommentCode], Field(min_length=1, max_length=10)]
+# Caps the validator trims to (V1): a JSON mode without strict schema ignores maxItems, and a
+# whole run should not fail for one extra item. Evidence is high because people are counted
+# from these ids (a 10-id cap failed big posts and undercounted).
+MAX_EVIDENCE = 50
+MAX_SAFETY_MENTIONS = 5
+MAX_POINTS = 5
+MAX_REALITY_GAPS = 3
+MAX_TOPICS = 6
+Evidence = Annotated[list[CommentCode], Field(min_length=1, max_length=MAX_EVIDENCE)]
 _STRICT = ConfigDict(extra="forbid", frozen=True)
 
 # comment_ids comes first in every item: the model picks its evidence before it writes
@@ -94,11 +102,11 @@ class SummaryLlmOutput(BaseModel):
 
     model_config = _STRICT
     excluded: Excluded
-    safety_mentions: list[SafetyMention] = Field(max_length=5)
-    pros: list[AspectPoint] = Field(max_length=5)
-    cons: list[AspectPoint] = Field(max_length=5)
-    reality_gaps: list[RealityGap] = Field(max_length=3)
-    topics: list[Topic] = Field(max_length=6)
+    safety_mentions: list[SafetyMention] = Field(max_length=MAX_SAFETY_MENTIONS)
+    pros: list[AspectPoint] = Field(max_length=MAX_POINTS)
+    cons: list[AspectPoint] = Field(max_length=MAX_POINTS)
+    reality_gaps: list[RealityGap] = Field(max_length=MAX_REALITY_GAPS)
+    topics: list[Topic] = Field(max_length=MAX_TOPICS)
 
 
 # Claude structured outputs reject length, count and numeric constraints; OpenAI strict mode

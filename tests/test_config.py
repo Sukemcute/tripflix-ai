@@ -30,7 +30,7 @@ def test_defaults() -> None:
     settings = load()
 
     assert settings.llm_timeout_seconds == 30.0
-    assert settings.llm_max_output_tokens == 1500
+    assert settings.llm_max_output_tokens == 3000
     assert settings.summary_llm_kill is False
 
 
