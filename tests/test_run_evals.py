@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 from app.services.summary.pipeline import SummaryRun
@@ -26,6 +27,7 @@ def _ready(
         content=content,
         safety=SummarySafety(warnings=list(warnings)),
         comment_count=len(post["comments"]),
+        generated_at=datetime(2026, 11, 5, tzinfo=UTC),
     )
     return SummaryRun(request)
 

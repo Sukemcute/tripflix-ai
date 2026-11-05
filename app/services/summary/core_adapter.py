@@ -9,7 +9,7 @@ _PLACE_NAME_MAX = 200
 
 
 def convert_comments(comments: Sequence[CoreComment], post_author_id: str) -> list[CommentIn]:
-    """Core only lists live comments and keeps no like count yet, so every one is visible, 0."""
+    """Core only lists live comments (deleted ones are gone), so every one is visible."""
     return [
         CommentIn(
             comment_id=c.id,
@@ -17,6 +17,7 @@ def convert_comments(comments: Sequence[CoreComment], post_author_id: str) -> li
             parent_id=c.parent_comment_id,
             body=c.body,
             status="visible",
+            like_count=c.like_count,
             created_at=c.created_at,
             edited_at=c.updated_at if c.is_edited else None,
             is_post_author=c.author_id == post_author_id,

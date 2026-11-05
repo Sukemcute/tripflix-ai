@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
@@ -172,7 +173,9 @@ def test_failed_run_keeps_the_previous_ready_summary(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(
         summary_worker,
         "run_summary",
-        lambda **_: SummaryRun(SaveSummaryRequest(status="failed")),  # pyright: ignore[reportUnknownLambdaType]
+        lambda **_: SummaryRun(
+            SaveSummaryRequest(status="failed", generated_at=datetime(2026, 11, 5, tzinfo=UTC))
+        ),  # pyright: ignore[reportUnknownLambdaType]
     )
 
     _worker(FakeRedis(), core).summarize_post(POST)

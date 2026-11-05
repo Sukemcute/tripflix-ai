@@ -60,13 +60,13 @@ def run_summary(
 ) -> SummaryRun:
     safety = _public_safety(comments)
     if not comments:
-        return SummaryRun(SaveSummaryRequest(status="no_comments", safety=safety))
+        return SummaryRun(SaveSummaryRequest(status="no_comments", safety=safety, generated_at=now))
 
     selection = select_comments(filter_comments(comments, now).candidates, now)
     counts = SummaryCounts(
         comments=len(comments), people=selection.people, sent=len(selection.items)
     )
-    base = {"comment_count": len(comments), "safety": safety}
+    base = {"comment_count": len(comments), "safety": safety, "generated_at": now}
     if decide_summary_status(len(comments), selection) == "insufficient_data":
         content = SummaryContent(counts=counts, needed=MIN_PEOPLE - selection.people)
         return SummaryRun(SaveSummaryRequest(status="insufficient_data", content=content, **base))
@@ -79,9 +79,7 @@ def run_summary(
     )
     if fingerprint == previous_hash:
         return SummaryRun(None)
-    failed = SaveSummaryRequest(
-        status="failed", prompt_version=prompt_version, generated_at=now, **base
-    )
+    failed = SaveSummaryRequest(status="failed", prompt_version=prompt_version, **base)
     if is_llm_killed:
         logger.warning("summary LLM kill switch is on")
         return SummaryRun(failed)
@@ -121,7 +119,6 @@ def run_summary(
         input_hash=fingerprint,
         prompt_version=prompt_version,
         model_name=result.model_name,
-        generated_at=now,
         **base,
     )
     return SummaryRun(request, result)
