@@ -1,6 +1,7 @@
 from functools import cache
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,11 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_max_output_tokens: int = 1500
     summary_llm_kill: bool = False
+
+    # Service client created with core's auth:create-service-client (secret printed once).
+    service_client_id: str = "ai-service"
+    service_client_secret: SecretStr = SecretStr("")
+    redis_url: str = "redis://localhost:6379/0"
 
 
 @cache

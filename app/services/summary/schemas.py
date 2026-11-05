@@ -1,6 +1,7 @@
 from typing import Annotated, Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 
 class CommentIn(BaseModel):
@@ -127,3 +128,73 @@ def _strip(node: Any) -> Any:
     if isinstance(node, list):
         return [_strip(v) for v in node]
     return node
+
+
+# ---- Body of core's PUT /api/v1/posts/:postId/ai-summary (PR be #54). An API contract, so
+# JSON keys are camelCase (RULES §4.1); comment ids here are the real core ids.
+
+
+class _CamelModel(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
+
+
+class SummaryPointOut(_CamelModel):
+    aspect: Aspect
+    text: str
+    comment_ids: list[str]
+    people: int  # counted by code (V6)
+
+
+class RealityGapOut(_CamelModel):
+    claim: str
+    reality: str
+    comment_ids: list[str]
+    people: int
+
+
+class TopicOut(_CamelModel):
+    label: str
+    summary: str
+    comment_ids: list[str]
+    people: int
+
+
+class SummaryCounts(_CamelModel):
+    comments: int  # comments core returned
+    people: int  # distinct writers left after filtering
+    sent: int  # comments sent to the LLM
+
+
+class SummaryContent(_CamelModel):
+    pros: list[SummaryPointOut] = []
+    cons: list[SummaryPointOut] = []
+    reality_gaps: list[RealityGapOut] = []
+    topics: list[TopicOut] = []
+    counts: SummaryCounts
+    needed: int | None = None  # more people needed before a summary (insufficient_data)
+
+
+class SafetyWarning(_CamelModel):
+    categories: list[str]
+    comment_ids: list[str]
+
+
+class SummarySafety(_CamelModel):
+    # Public warnings only: core's GET ai-summary is public, hearsay must wait for review.
+    warnings: list[SafetyWarning]
+
+
+SummaryStatus = Literal["no_comments", "insufficient_data", "ready", "failed"]
+
+
+class SaveSummaryRequest(_CamelModel):
+    status: SummaryStatus
+    summary: str | None = None
+    key_takeaways: list[str] = []
+    content: SummaryContent | None = None
+    safety: SummarySafety | None = None
+    input_hash: str | None = None
+    comment_count: int = 0
+    prompt_version: str | None = None
+    model_name: str | None = None
+    generated_at: AwareDatetime | None = None
