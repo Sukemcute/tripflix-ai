@@ -1,0 +1,41 @@
+import pytest
+
+from app.services.summary.first_hand import detect_first_hand
+from app.services.summary.vi_text import normalize_text
+
+
+@pytest.mark.parametrize(
+    ("comment", "expected"),
+    [
+        ("Mình đi cách đây 2 tháng, nước biển không sạch lắm", True),
+        ("Năm ngoái tụi mình ở đây, phòng nhỏ xíu", True),
+        ("Đi rồi, nước biển bẩn, 500k một đêm", True),  # no pronoun: Vietnamese drops the subject
+        ("Tôi đã ở tầng 12, view đẹp", True),
+        ("Nhìn có vẻ đẹp ghê", False),
+        ("Ước được đi 1 lần", False),
+        ("Mình chưa đi bao giờ, tháng sau sẽ đi", False),
+        ("Tháng trước mình định đi mà huỷ", False),
+        ("Nghe nói tháng trước ở đây bị mất nước", False),
+        ("Đi tới đây vào buổi tối thì đẹp lắm", False),  # toi = tới/tối, not tôi
+        ("Mình thấy phòng đẹp", False),  # first person but no past event
+        # v4: phrasings of real TripAdvisor reviews that v3 missed
+        ("Chúng tôi đã có một kỳ nghỉ tuyệt vời", True),
+        ("Nhân viên rất nhiệt tình giúp chúng tôi mang hành lý", True),
+        ("Phòng của chúng tôi nhìn ra biển", True),
+        ("Khi chúng tôi đến, lễ tân đón rất nhanh", True),
+        ("Tôi ở lại hai đêm, rất thoải mái", True),
+        # v4: video-style comments must stay False
+        ("Mình đã xem clip này 3 lần rồi", False),
+        ("Tôi vừa thấy video này trên tiktok", False),
+        ("Ai đi rồi cho xin review với", False),
+        ("Mình định đi dịp tết mà sợ đông", False),
+    ],
+)
+def test_detect_first_hand(comment: str, expected: bool) -> None:
+    assert detect_first_hand(normalize_text(comment)).is_first_hand is expected
+
+
+def test_cues_explain_the_decision() -> None:
+    result = detect_first_hand(normalize_text("Mình chưa đi bao giờ"))
+
+    assert result.cues == ("first_person", "not_experienced")

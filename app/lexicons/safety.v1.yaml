@@ -1,0 +1,48 @@
+# Safety complaints, caught by rules before any LLM (Which?/Tripadvisor lesson).
+# Patterns run on vi_text.to_norm output: lowercase, no diacritics, đ -> d.
+# Groups from QT Bước 7.1; full category list and slang are still [CẦN NC].
+# v1: drafted by Claude from QT, pending review by Bảo, 2026-11-04.
+name: safety
+version: 1
+groups:
+  ngo_doc:
+    patterns:
+      - 'ngo doc'
+      - 'trung doc'
+      - 'tao thao ruot'
+      - 'tieu chay'
+      - 'non mua'
+      - 'dau bung'
+    match:
+      - 'ca nha bi tao thao ruot sau buffet'
+      - 'an xong bi ngo doc'
+    no_match:
+      - 'do an ngon khong bi gi'
+  quay_roi:
+    patterns:
+      - 'sam so'
+      - 'quay roi'
+      - 'dong cham (nguoi|vao)'
+    match:
+      - 'nhan vien le tan sam so ban minh'
+    no_match:
+      - 'nhan vien nhiet tinh than thien'
+  ve_sinh:
+    patterns:
+      - 'co (gian|chuot|rep)'
+      - 'thay (gian|chuot|rep)'
+      - 'do an (song|thiu|oi|hong)'
+    match:
+      - 'phong co gian bo khap noi'
+      - 'buffet do an thiu'
+    no_match:
+      - 'phong sach se thom tho'
+  tu_vong_danh_thuoc:
+    patterns:
+      - 'chet duoi'
+      - 'tu vong'
+      - 'bi (danh|bo) thuoc'
+    match:
+      - 'nam ngoai co nguoi chet duoi o bai nay'
+    no_match:
+      - 'dep chet di duoc'

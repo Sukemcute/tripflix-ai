@@ -1,0 +1,100 @@
+{
+  "post_id": "s06-mot-nguoi-noi-nhieu",
+  "is_simulated": true,
+  "scenario": "below_threshold",
+  "caption": "Glamping ở Mộc Châu 🌿",
+  "itinerary": [],
+  "comments": [
+    {
+      "comment_id": "s06-c01",
+      "author_id": "s06-a1",
+      "parent_id": null,
+      "body": "Chỗ này đẹp lắm mọi người ơi",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-26T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s06-c02",
+      "author_id": "s06-a1",
+      "parent_id": null,
+      "body": "Chỗ này đẹp lắm mọi người ơi!!",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-26T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s06-c03",
+      "author_id": "s06-a1",
+      "parent_id": null,
+      "body": "đẹp lắm mn ơi, nên đi",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-26T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s06-c04",
+      "author_id": "s06-a1",
+      "parent_id": null,
+      "body": "Mình quay lại lần 2 vẫn thích",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-26T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s06-c05",
+      "author_id": "s06-a2",
+      "parent_id": null,
+      "body": "🔥🔥🔥",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-26T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s06-c06",
+      "author_id": "s06-a3",
+      "parent_id": null,
+      "body": "Không khí trong lành, sáng có sương",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-26T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s06-c07",
+      "author_id": "s06-a3",
+      "parent_id": null,
+      "body": "đồ ăn tối hơi mặn",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-26T15:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s06-c08",
+      "author_id": "s06-a4",
+      "parent_id": null,
+      "body": "Đường lên hơi khó đi",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-26T16:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "insufficient_data",
+    "must_not_cite": {
+      "s06-c05": "emoji_only"
+    },
+    "safety": [],
+    "not_safety": [],
+    "points": [],
+    "reality_gaps": [],
+    "topics": []
+  }
+}

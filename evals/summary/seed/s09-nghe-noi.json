@@ -1,0 +1,125 @@
+{
+  "post_id": "s09-nghe-noi",
+  "is_simulated": true,
+  "scenario": "safety_hearsay",
+  "caption": "Khám phá phố đi bộ Vũng Tàu buổi tối 🌃",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Ocean Pearl Vũng Tàu",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s09-c01",
+      "author_id": "s09-a1",
+      "parent_id": null,
+      "body": "Nghe nói khu này tối hay bị giật điện thoại, mọi người cẩn thận nha",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-29T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s09-c02",
+      "author_id": "s09-a2",
+      "parent_id": null,
+      "body": "Khách sạn ngay trung tâm, đi bộ ra biển gần",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-29T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s09-c03",
+      "author_id": "s09-a3",
+      "parent_id": null,
+      "body": "vị trí đẹp, gần biển, gần quán ăn",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-29T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s09-c04",
+      "author_id": "s09-a4",
+      "parent_id": null,
+      "body": "Nhân viên vui vẻ, dọn phòng sạch",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-29T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s09-c05",
+      "author_id": "s09-a5",
+      "parent_id": null,
+      "body": "phòng sạch, khăn thơm, nhân viên lịch sự",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-29T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s09-c06",
+      "author_id": "s09-a6",
+      "parent_id": null,
+      "body": "Wifi yếu, tối xem phim không được",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-29T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s09-c07",
+      "author_id": "s09-a7",
+      "parent_id": null,
+      "body": "wifi chập chờn lắm, phải dùng 4G",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-29T15:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {},
+    "safety": [
+      {
+        "comment_id": "s09-c01",
+        "category": "trom_cap_lua_dao",
+        "visibility": "pending_review"
+      }
+    ],
+    "not_safety": [],
+    "points": [
+      {
+        "polarity": "pro",
+        "aspect": "vi_tri_di_lai",
+        "comment_ids": [
+          "s09-c02",
+          "s09-c03"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "ve_sinh",
+        "comment_ids": [
+          "s09-c04",
+          "s09-c05"
+        ]
+      },
+      {
+        "polarity": "con",
+        "aspect": "phong_o",
+        "comment_ids": [
+          "s09-c06",
+          "s09-c07"
+        ]
+      }
+    ],
+    "reality_gaps": [],
+    "topics": []
+  }
+}

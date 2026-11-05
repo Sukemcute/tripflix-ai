@@ -1,0 +1,102 @@
+{
+  "post_id": "s13-chi-khen-video",
+  "is_simulated": true,
+  "scenario": "video_only",
+  "caption": "Một ngày ở Côn Đảo qua góc máy của mình 🎬",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Island Lodge Côn Đảo",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s13-c01",
+      "author_id": "s13-v1",
+      "parent_id": null,
+      "body": "edit mượt quá bạn ơi",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-02T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s13-c02",
+      "author_id": "s13-v2",
+      "parent_id": null,
+      "body": "nhạc nền tên gì vậy ạ",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-02T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s13-c03",
+      "author_id": "s13-v3",
+      "parent_id": null,
+      "body": "quay bằng máy gì mà đẹp vậy",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-02T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s13-c04",
+      "author_id": "s13-v4",
+      "parent_id": null,
+      "body": "giọng bạn dễ thương ghê",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-02T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s13-c05",
+      "author_id": "s13-v5",
+      "parent_id": null,
+      "body": "xem đi xem lại 10 lần rồi",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-02T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s13-c06",
+      "author_id": "s13-v6",
+      "parent_id": null,
+      "body": "màu phim đẹp quá, xin preset",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-02T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s13-c07",
+      "author_id": "s13-v7",
+      "parent_id": null,
+      "body": "video chất lượng quá, follow liền",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-02T15:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "insufficient_data",
+    "must_not_cite": {
+      "s13-c01": "video_reaction",
+      "s13-c02": "video_reaction",
+      "s13-c03": "video_reaction",
+      "s13-c04": "video_reaction",
+      "s13-c05": "video_reaction",
+      "s13-c06": "video_reaction",
+      "s13-c07": "video_reaction"
+    },
+    "safety": [],
+    "not_safety": [],
+    "points": [],
+    "reality_gaps": [],
+    "topics": []
+  }
+}

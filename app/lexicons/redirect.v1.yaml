@@ -1,0 +1,43 @@
+# Rule L6 (with links): comments that pull viewers off the platform or into private chat.
+# YouTube spam policy: comments whose purpose is to gather personal info or misleadingly
+# drive viewers off the platform; Booking.com removes promotional content.
+# Patterns are imperatives aimed at the viewer: a guest saying "khach san ho tro qua zalo
+# nhanh" or "di dep lao ra bien" is experience, not redirect.
+# v1: drafted by Claude, pending review by Bảo, 2026-11-05.
+name: redirect
+version: 1
+groups:
+  messaging_app:
+    patterns:
+      - '(ket ban|add|lien he|ib|nhan tin|inbox) (qua )?(zalo|zl|dep lao|tele|telegram)'
+      - '(zalo|zl) (\d+|so)'
+    match:
+      - 'ket ban zl 0912345678 de co gia tot'
+      - 'ket ban dep lao de book phong re'
+      - 'zalo 09 1234'
+    no_match:
+      - 'khach san ho tro qua zalo rat nhanh'
+      - 'di dep lao ra bien cho tien'
+  private_message:
+    patterns:
+      - '(ib|inbox|nhan tin) (rieng )?(em|minh|shop|ad|e|m)'
+      - 'check (ib|inbox|tin nhan)'
+      - 'rep ib'
+    match:
+      - 'shop rep ib em voi'
+      - 'gia phong bao nhieu ib minh nha'
+      - 'check ib di ban oi'
+    no_match:
+      - 'minh nhan tin cho khach san thi ho tra loi ngay'
+  profile_link:
+    patterns:
+      - 'vao tuong (nha )?(minh|em|toi|tui)'
+      - '(link|xem) (o |trong )?(bio|tieu su)'
+      - 'nhin ten nick'
+      - 'trang ca nhan (minh|em|toi)'
+    match:
+      - 'vao tuong nha minh xem full khong che nhe'
+      - 'link o tieu su bio nha moi nguoi'
+      - 'nhin ten nick minh di moi nguoi'
+    no_match:
+      - 'tuong phong hoi bong troc'

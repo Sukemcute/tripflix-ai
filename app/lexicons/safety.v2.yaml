@@ -1,0 +1,112 @@
+# Safety complaints, caught by rules before any LLM (Which?/Tripadvisor 2026 lesson).
+# Patterns run on vi_text.to_norm output: lowercase, no diacritics, đ -> d.
+# v2 (BAO_CAO P5): more ways to say v1's groups, plus tai_nan and trom_cap_lua_dao
+# (QT 7.1 [CẦN NC] list; Airbnb reports: hidden cameras, carbon monoxide, pests, mould).
+# Figurative uses are excluded where common ("cuoi dau bung", "dep chet di duoc").
+# v2: drafted by Claude, pending review by Bảo, 2026-11-04.
+name: safety
+version: 2
+groups:
+  ngo_doc:
+    patterns:
+      - 'ngo doc'
+      - 'trung doc'
+      - 'food poisoning'
+      - 'tao thao (ruot|duoi)'
+      - 'tieu chay'
+      - 'di ngoai (lien|ca|suot|may)'
+      - '(non|oi) (mua|thoc thao|lien|ca dem|suot)'
+      - 'non oi'
+      - '(buon|bi) non'
+      - '(?<!cuoi )dau bung'
+      - 'roi loan tieu hoa'
+      - '(nhap vien|cap cuu|di vien|vao vien)'
+    match:
+      - 'ca nha bi tao thao ruot sau buffet'
+      - 'an xong non oi ca dem'
+      - 'an hai san xong phai nhap vien'
+      - 'got food poisoning o day'
+    no_match:
+      - 'do an ngon khong bi gi'
+      - 'clip hai cuoi dau bung'
+      - 'non la dep qua'
+  quay_roi:
+    patterns:
+      - 'sam so'
+      - 'so mo'
+      - 'quay roi'
+      - 'ga gam'
+      - 'xam hai'
+      - 'hiep dam'
+      - '(dong|dung) cham (nguoi|vao|co the)'  # động chạm / đụng chạm
+      - 'quay len'
+      - 'camera (an|giau|quay len|trong phong tam)'
+    match:
+      - 'nhan vien le tan sam so ban minh'
+      - 'phat hien camera giau trong phong'
+    no_match:
+      - 'nhan vien nhiet tinh than thien'
+      - 'camera quay dep lam'
+  ve_sinh:
+    patterns:
+      - 'co (gian|chuot|rep|mot|dong)'
+      - 'thay (gian|chuot|rep|mot|dong)'
+      - 'rep (can|giuong|khap)'
+      - 'bi rep'
+      - '(nam|moc) (moc|meo|den)'
+      - 'do an (song|thiu|oi|hong|bi moc|co mui)'
+      - '(thit|ca|hai san) (bi )?(thiu|uon|boc mui)'
+    match:
+      - 'phong co gian bo khap noi'
+      - 'buffet do an thiu'
+      - 'nem bi rep can sung het chan'
+      - 'tuong nam moc den xi'
+    no_match:
+      - 'phong sach se thom tho'
+      - 'nam nay moc chau dep'
+  tu_vong_danh_thuoc:
+    patterns:
+      - 'chet duoi'
+      - 'duoi nuoc'
+      - 'tu vong'
+      - 'thiet mang'
+      - 'bi (danh|bo) thuoc'
+      - 'mat tich'
+    match:
+      - 'nam ngoai co nguoi chet duoi o bai nay'
+      - 'ban minh bi bo thuoc vao do uong'
+    no_match:
+      - 'dep chet di duoc'
+  tai_nan:
+    patterns:
+      - 'tai nan'
+      - 'bi thuong'
+      - 'gay (chan|tay|xuong)'
+      - 'dien giat'
+      - 'ro ri (gas|khi)'
+      - 'ngat (khi|xiu vi khi)'
+      - 'hoa hoan'
+      - 'sap (tran|cau thang|lan can|ban cong)'
+      - '(lan can|ban cong|tran nha|cau thang) (bi |lung lay |muon |sap )*sap'
+      - '(te|nga) (cau thang|ho boi|truot)'
+      - 'truot nga'
+    match:
+      - 'con minh truot nga o ho boi'
+      - 'o cam bi ro dien giat ca nguoi'
+      - 'lan can ban cong sap luon'
+    no_match:
+      - 'cau thang dep chup hinh xinh'
+  trom_cap_lua_dao:
+    patterns:
+      - '(bi|mat) trom'
+      - 'trom (do|tien|dien thoai|vi)'
+      - 'moc tui'
+      - '(bi|vu) cuop'
+      - 'lua dao'
+      - 'mat (vi|dien thoai|ho chieu|do trong phong)'
+    match:
+      - 'de do trong phong bi mat trom'
+      - 'bi moc tui o cho dem'
+      - 'tour nay lua dao khach'
+    no_match:
+      - 'mat ca buoi sang de check in'

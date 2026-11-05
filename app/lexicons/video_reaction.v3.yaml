@@ -1,0 +1,98 @@
+# Rule L12: comments not about the real place (Google Maps "off-topic", Tripadvisor
+# "irrelevant to your experience"). Seed patterns from QT Bước 5 (L12); the LLM still flags
+# harder cases via `excluded`.
+# v2: "clip hai" and other clip/video praise slipped through v1 (seen on the local demo).
+# v3 (BAO_CAO "Sửa theo use case"): engagement bait after Meta's categories (comment/tag
+# bait, 2017), check-in roll calls, "xin via" chains, pointers into the video ("giay 0:12").
+# Asking for advice is NOT bait (Meta exempts it): "nen di mua nao" stays.
+# v3: drafted by Claude, pending review by Bảo, 2026-11-05.
+name: video_reaction
+version: 3
+groups:
+  speculation:
+    patterns:
+      - 'nhin co ve'
+      - 'chac la'
+      - 'nghe don'
+    match:
+      - 'nhin co ve sau lam'
+    no_match:
+      - 'nuoc sau lam nha'
+  wish:
+    patterns:
+      - 'uoc (gi )?(duoc )?di'
+      - 'mong (mot|1) lan'
+      - 'them di'
+    match:
+      - 'uoc duoc di 1 lan'
+      - 'them di qua'
+    no_match:
+      - 'minh di roi dep lam'
+  video_praise:
+    patterns:
+      - 'nhac hay'
+      - 'edit (dinh|xin|cuon)'
+      - 'flycam muot'
+      - '(clip|video|vid) (hai|hay|cuon|xinh|dinh|chill|dep|bo ich)'
+      - 'quay dep'
+    match:
+      - 'nhac hay qua ad oi'
+      - 'flycam muot ghe'
+      - 'clip hai qua cuoi dau bung luon'
+      - 'video chill that su'
+      - 'video bo ich qua'
+    no_match:
+      - 'phong dep view bien'
+  engagement_bait:
+    patterns:
+      - 'len (xu huong|top|trend)'
+      - 'day (top|xu huong|trend|thuyen|bai|video|clip)'
+      - 'tuong tac (cho|giup|day|nuoi)'
+      - 'cham (cai|1 cai|mot cai|phat)'
+      - 'do troi'
+      - 'binh luan (du|de) \d+ chu'
+      - 'tha tim (de|cho binh luan|binh luan)'
+    match:
+      - 'binh luan du 15 chu de video cua anh len xu huong nhe'
+      - 'cham cai cho do troi bai'
+      - 'tuong tac day thuyen cho hai anh chi'
+    no_match:
+      - 'nhan vien tuong tac voi khach rat vui ve'
+      - 'nen di mua nao dep moi nguoi'
+  check_in:
+    patterns:
+      - 'diem danh'
+      - 'ai (nam \d{4} )?con (xem|nghe|luot)'
+      - 'den som (thu|top) ?\d+'  # bare "den som" is travel advice: "nen den som de co cho"
+      - 'xem (luc|vao luc) \d+ ?h'
+      - 'moi dang (duoc )?\d+ (phut|giay)'
+    match:
+      - 'xem luc 2h sang diem danh'
+      - 'ai nam 2026 con xem video nay bam like'
+      - 'xem khi video moi dang 1 phut truoc'
+      - 'den som thu 2'
+    no_match:
+      - 'nhan phong luc 2h chieu nhanh gon'
+      - 'nen den som de co cho dep'
+  manifestation:
+    patterns:
+      - 'xin via'
+      - 'nha via'
+      - 'ai tha tim binh luan nay'
+    match:
+      - 'xin via da dep nhu chi chu kenh'
+      - 'nha via thi do toeic 800 cho ai di ngang qua'
+      - 'ai tha tim binh luan nay thang sau co nguoi yeu'
+    no_match:
+      - 'vi tri resort rat dep'
+  deictic:
+    patterns:
+      - 'giay (thu )?\d+'
+      - 'phut thu \d+'
+      - 'khuc (cuoi|dau|giua)'
+      - 'doan (cuoi|dau|giua) (video|clip)'
+    match:
+      - 'cai mau xanh o giay 0 12 gia sao shop'
+      - 'khuc cuoi nhin hai thuc su'
+    no_match:
+      - 'di bo 5 phut ra bien'
