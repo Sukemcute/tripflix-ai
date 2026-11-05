@@ -14,6 +14,7 @@ NAMES = [
     "service_terms",
     "redirect",
     "agreement",
+    "summary_bans",
 ]
 
 
