@@ -71,3 +71,45 @@ def test_to_raw_keeps_every_vietnamese_letter() -> None:
 def test_count_syllables() -> None:
     assert count_syllables(to_norm("Mình đi cách đây 2 tháng!")) == 6
     assert count_syllables("") == 0
+
+
+def test_count_syllables_counts_a_repeated_phrase_once() -> None:
+    """Use case #1: copy-pasting a phrase must not pass the length rule (L5)."""
+    assert count_syllables(to_norm("Đẹp quá đẹp quá đẹp quá đẹp quá đẹp quá")) == 2
+    assert count_syllables(to_norm("Phòng sạch sẽ " * 6)) == 3
+    assert count_syllables(to_norm("hoà bình, hòa bình")) == 2
+
+
+def test_count_syllables_skips_padding_runs_but_not_single_numbers() -> None:
+    """Use case #4: "1 2 3 ... a b c" is padding; "đi 2 tháng" is content."""
+    assert count_syllables(to_norm("Video bổ ích quá 1 2 3 4 5 6 7 8 9 10 a b c d e f")) == 4
+    assert count_syllables(to_norm("Mình đi 2 tháng, giá 500k")) == 6
+
+
+def test_to_raw_strips_zalgo_marks_but_keeps_vietnamese() -> None:
+    """Use case #8: stacked marks would reach the LLM and waste tokens."""
+    zalgo = "B̸̡̛̖̙̗̓̈́ã̴̢̛̗͚̓i̵̢̗̓ ̴̢̛̗̓b̵̢̛̗̓i̴̢̛̗̓ể̵̢̛̗n̴̢̛̗̓"
+    assert to_raw(zalgo) == "Bãi biển"
+    assert to_raw("Đ̷ẹ̷p̷ ̷x̷ỉ̷u̷") == "Đẹp xỉu"
+
+
+def test_mentions_become_a_placeholder_and_emails_stay() -> None:
+    """Use case #15: names in @tags must not reach the LLM (BERTweet's @USER)."""
+    assert to_raw("@linh @huy.nguyen_99 nhìn quen không") == "@USER @USER nhìn quen không"
+    assert to_norm("@linh nhìn quen không") == "nhin quen khong"
+    assert to_raw("mail abc@gmail.com") == "mail abc@gmail.com"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("l.ừ.a đ.ả.o mọi người", "lua dao moi nguoi"),
+        ("dùng ch.án lắm", "dung chan lam"),
+        ("k*é*m chất lượng", "kem chat luong"),
+        ("Giá 1.500k, wifi 2.5km", "gia 1 500k wifi 2 5km"),  # numbers are not glued
+        ("Đẹp lắm.Phòng rộng", "dep lam phong rong"),  # missing space is not glued
+    ],
+)
+def test_to_norm_joins_letters_split_to_dodge_filters(text: str, expected: str) -> None:
+    """Use case #10: letters split by . * _ - are joined for the rules only."""
+    assert to_norm(text) == expected
