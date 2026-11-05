@@ -1,0 +1,127 @@
+{
+  "post_id": "s10-khen-lan-tai-nan",
+  "is_simulated": true,
+  "scenario": "safety_mixed",
+  "caption": "Resort gia đình ở Hạ Long, có hồ bơi trẻ em 👨‍👩‍👧",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Bay View Hạ Long",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s10-c01",
+      "author_id": "s10-a1",
+      "parent_id": null,
+      "body": "Phòng đẹp, nhân viên dễ thương nhưng mình bị trượt ngã ở sàn hồ bơi vì sàn trơn, trầy hết chân",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-30T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s10-c02",
+      "author_id": "s10-a2",
+      "parent_id": null,
+      "body": "Phòng sạch, không hề thấy gián hay muỗi gì",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-30T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s10-c03",
+      "author_id": "s10-a3",
+      "parent_id": null,
+      "body": "Nhân viên nhiệt tình, hỗ trợ gia đình có em bé chu đáo",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-30T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s10-c04",
+      "author_id": "s10-a4",
+      "parent_id": null,
+      "body": "nhân viên dễ thương, chuẩn bị cũi cho bé luôn",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-30T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s10-c05",
+      "author_id": "s10-a5",
+      "parent_id": null,
+      "body": "View vịnh từ phòng đẹp mê",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-30T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s10-c06",
+      "author_id": "s10-a6",
+      "parent_id": null,
+      "body": "sáng ra ban công nhìn vịnh đẹp lắm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-30T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s10-c07",
+      "author_id": "s10-a7",
+      "parent_id": null,
+      "body": "Phòng sạch sẽ, thơm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-30T15:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {},
+    "safety": [
+      {
+        "comment_id": "s10-c01",
+        "category": "tai_nan",
+        "visibility": "public"
+      }
+    ],
+    "not_safety": [
+      "s10-c02"
+    ],
+    "points": [
+      {
+        "polarity": "pro",
+        "aspect": "phuc_vu",
+        "comment_ids": [
+          "s10-c03",
+          "s10-c04"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "canh_quan",
+        "comment_ids": [
+          "s10-c05",
+          "s10-c06"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "ve_sinh",
+        "comment_ids": [
+          "s10-c02",
+          "s10-c07"
+        ]
+      }
+    ],
+    "reality_gaps": [],
+    "topics": []
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "post_id": "s08-ngo-doc",
+  "is_simulated": true,
+  "scenario": "safety_first_hand",
+  "caption": "Resort biển Mũi Né, có nhà hàng hải sản ngay trong khuôn viên 🦞",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Blue Bay Mũi Né",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s08-c01",
+      "author_id": "s08-a1",
+      "parent_id": null,
+      "body": "Tối qua ăn buffet hải sản ở nhà hàng resort xong mình với bạn bị tào tháo rượt cả đêm, sáng phải đi khám",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-28T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s08-c02",
+      "author_id": "s08-a2",
+      "parent_id": null,
+      "body": "Phòng rộng, ban công nhìn ra biển",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-28T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s08-c03",
+      "author_id": "s08-a3",
+      "parent_id": null,
+      "body": "phòng to, giường lớn, nằm sướng",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-28T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s08-c04",
+      "author_id": "s08-a4",
+      "parent_id": null,
+      "body": "Bãi biển riêng sạch, sáng ra ngắm bình minh đẹp",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-28T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s08-c05",
+      "author_id": "s08-a5",
+      "parent_id": null,
+      "body": "biển trong, cát mịn, chụp hình đẹp",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-28T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s08-c06",
+      "author_id": "s08-a6",
+      "parent_id": null,
+      "body": "Giá hơi cao so với chất lượng phòng",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-28T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s08-c07",
+      "author_id": "s08-a7",
+      "parent_id": null,
+      "body": "giá phòng cuối tuần đắt quá, ngày thường thì ok",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-28T15:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {},
+    "safety": [
+      {
+        "comment_id": "s08-c01",
+        "category": "ngo_doc",
+        "visibility": "public"
+      }
+    ],
+    "not_safety": [],
+    "points": [
+      {
+        "polarity": "pro",
+        "aspect": "phong_o",
+        "comment_ids": [
+          "s08-c02",
+          "s08-c03"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "canh_quan",
+        "comment_ids": [
+          "s08-c04",
+          "s08-c05"
+        ]
+      },
+      {
+        "polarity": "con",
+        "aspect": "gia_ca",
+        "comment_ids": [
+          "s08-c06",
+          "s08-c07"
+        ]
+      }
+    ],
+    "reality_gaps": [],
+    "topics": []
+  }
+}
