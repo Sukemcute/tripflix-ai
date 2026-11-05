@@ -12,7 +12,8 @@ class CommentIn(BaseModel):
     comment_id: str = Field(min_length=1)
     author_id: str = Field(min_length=1)
     parent_id: str | None = None
-    # 10k chars: limit agreed with content (Thành, 2026-11-05); core enforces the same cap.
+    # Core caps comments at 2,000 chars (Comment.MAX_BODY_LENGTH, be PR #58); 10k is a defensive
+    # bound so a later raise in core does not fail a whole batch here.
     body: str = Field(max_length=10_000)
     status: Literal["visible", "hidden", "deleted"]
     like_count: int = Field(default=0, ge=0)
@@ -205,4 +206,5 @@ class SaveSummaryRequest(_CamelModel):
     comment_count: int = 0
     prompt_version: str | None = None
     model_name: str | None = None
-    generated_at: AwareDatetime | None = None
+    # Required: core's Zod rejects null and orders writes by it (saveIfNewer, be PR #58).
+    generated_at: AwareDatetime

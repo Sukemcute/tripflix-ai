@@ -71,6 +71,7 @@ class CoreComment(_CoreModel):
     author_id: str
     parent_comment_id: str | None = None
     body: str
+    like_count: int = 0  # likeCount, added by be PR #58 (comment reactions)
     is_edited: bool = False
     created_at: AwareDatetime
     updated_at: AwareDatetime

@@ -139,3 +139,22 @@ def test_only_first_hand_safety_warnings_are_public() -> None:
 
     assert run.request is not None and run.request.safety is not None
     assert [w.comment_ids for w in run.request.safety.warnings] == [["cmt_7"]]
+
+
+def test_every_status_sends_generated_at_because_core_rejects_null() -> None:
+    """Core's Zod schema refuses generatedAt=null and orders writes by it (be PR #58)."""
+    runs = [
+        _run([], _llm()),  # no_comments
+        _run(_comments(3), _llm()),  # insufficient_data before the LLM
+        _run(_comments(), _llm(pros=[{"comment_ids": ["c1"], "aspect": "canh_quan", "text": "x"}])),
+        _run(_comments(), FakeLlmClient('{"pros": "x"}')),  # failed
+        _run(_comments(), _llm(pros=PROS)),  # ready
+    ]
+
+    statuses = []
+    for run in runs:
+        assert run.request is not None
+        body = run.request.model_dump(mode="json", by_alias=True)
+        assert body["generatedAt"] == NOW.isoformat().replace("+00:00", "Z")
+        statuses.append(body["status"])
+    assert statuses == ["no_comments", "insufficient_data", "insufficient_data", "failed", "ready"]

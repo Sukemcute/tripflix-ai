@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 import httpx
 from pydantic import SecretStr
@@ -6,6 +7,7 @@ from pydantic import SecretStr
 from app.clients.core_api import CoreApiClient
 from app.services.summary.schemas import SaveSummaryRequest
 
+NOW = datetime(2026, 11, 5, tzinfo=UTC)
 POST_ID = "018d9f20-0000-7000-8000-000000000001"
 
 
@@ -16,6 +18,7 @@ def _comment(i: int) -> dict[str, object]:
         "authorId": f"u-{i}",
         "parentCommentId": None,
         "body": f"bình luận {i}",
+        "likeCount": i,
         "isEdited": False,
         "createdAt": "2026-11-05T08:00:00.000Z",
         "updatedAt": "2026-11-05T08:00:00.000Z",
@@ -83,6 +86,7 @@ def test_comments_are_read_page_by_page_in_flat_mode() -> None:
     comments = core.client().fetch_comments(POST_ID)
 
     assert [c.id for c in comments] == ["c-1", "c-2", "c-3"]
+    assert [c.like_count for c in comments] == [1, 2, 3]
     assert core.requests[0].url.params["flat"] == "true"
     assert core.requests[0].url.params["limit"] == "200"
     assert core.requests[1].url.params["cursor"] == "n1"
@@ -101,11 +105,11 @@ def test_put_sends_camel_case_with_a_reused_service_token() -> None:
     core = FakeCore()
     client = core.client()
 
-    client.save_summary(POST_ID, SaveSummaryRequest(status="no_comments"))
+    client.save_summary(POST_ID, SaveSummaryRequest(status="no_comments", generated_at=NOW))
     core.now = 200  # still more than 30 s before the 300 s expiry
-    client.save_summary(POST_ID, SaveSummaryRequest(status="no_comments"))
+    client.save_summary(POST_ID, SaveSummaryRequest(status="no_comments", generated_at=NOW))
     core.now = 280  # inside the 30 s margin: ask again
-    client.save_summary(POST_ID, SaveSummaryRequest(status="no_comments"))
+    client.save_summary(POST_ID, SaveSummaryRequest(status="no_comments", generated_at=NOW))
 
     token_calls = [r for r in core.requests if r.url.path == "/api/auth/service-token"]
     puts = [r for r in core.requests if r.method == "PUT"]
