@@ -5,7 +5,16 @@ import pytest
 from app.services.summary.lexicon import LEXICON_DIR, LexiconError, load, parse
 from app.services.summary.vi_text import to_norm
 
-NAMES = ["safety", "injection", "video_reaction", "first_hand_cues", "complaint", "service_terms"]
+NAMES = [
+    "safety",
+    "injection",
+    "video_reaction",
+    "first_hand_cues",
+    "complaint",
+    "service_terms",
+    "redirect",
+    "agreement",
+]
 
 
 def doc(
