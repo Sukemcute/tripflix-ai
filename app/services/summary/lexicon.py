@@ -48,6 +48,12 @@ def load(name: str) -> Lexicon:
     return parse(versions[max(versions)])
 
 
+def versions() -> dict[str, int]:
+    """Version in use of every lexicon; feeds input_hash so a new version re-summarizes."""
+    names = {m["name"] for p in LEXICON_DIR.glob("*.yaml") if (m := _FILE_NAME.match(p.name))}
+    return {name: load(name).version for name in sorted(names)}
+
+
 def parse(path: Path) -> Lexicon:
     m = _FILE_NAME.match(path.name)
     if not m:

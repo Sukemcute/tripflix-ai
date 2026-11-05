@@ -18,3 +18,13 @@ class CommentIn(BaseModel):
     created_at: AwareDatetime
     edited_at: AwareDatetime | None = None
     is_post_author: bool = False
+
+
+class ItineraryItemIn(BaseModel):
+    """One itinerary item of the post (QT §2.1 itinerary_items); used to build claims."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["service", "manual"]
+    place_name: str = Field(min_length=1, max_length=200)
+    service_type: str | None = None
