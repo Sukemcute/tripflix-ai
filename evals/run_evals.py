@@ -186,6 +186,8 @@ def make_llm(mode: str, post_id: str, prompt_version: str) -> LlmClient:
         return FakeLlmClient()
     if mode == "cassette":
         path = CASSETTE_DIR / f"{prompt_version}.{post_id}.json"
+        if not path.exists():  # posts under the threshold never call the LLM: no cassette
+            return FakeLlmClient()
         return FakeLlmClient(json.loads(path.read_text(encoding="utf-8"))["output"])
     from app.core.config import get_settings  # noqa: PLC0415  # live needs .env only here
     from app.workers.summary_worker import build_llm  # noqa: PLC0415

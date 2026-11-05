@@ -55,7 +55,10 @@ def test_token_budget_caps_long_comments_not_a_fixed_count() -> None:
 
 
 def test_short_comments_fill_up_to_the_comment_cap() -> None:
-    picked = select_comments([cand(i, NEUTRAL) for i in range(500)], NOW, max_comments=300)
+    budget = estimate_tokens(NEUTRAL) * 1_000  # room for all 500: only the cap may stop them
+    picked = select_comments(
+        [cand(i, NEUTRAL) for i in range(500)], NOW, token_budget=budget, max_comments=300
+    )
 
     assert len(picked.items) == 300
 
@@ -64,12 +67,13 @@ def test_item_too_long_for_what_is_left_is_skipped_and_shorter_ones_still_fit() 
     long_text = "phòng rộng " * 100  # one unpunctuated sentence: cut close to the share
     first, second = cand(1, long_text, likes=10), cand(2, long_text, likes=5)
     short = cand(3, NEUTRAL)
-    # budget 100 -> share 53 (the floor): the first long one is shortened to fit,
-    # the second no longer fits the 47 tokens left, the short one still does
-    picked = select_comments([first, second, short], NOW, token_budget=100, target_comments=2)
+    # share = the floor: the first long one is shortened to fit it, the second no longer
+    # fits what is left, the short one still does
+    budget = MIN_SHARE_TOKENS + estimate_tokens(NEUTRAL) + 5
+    picked = select_comments([first, second, short], NOW, token_budget=budget, target_comments=2)
 
     assert [s.candidate.author_id for s in picked.items] == ["u1", "u3"]
-    assert picked.tokens <= 100
+    assert picked.tokens <= budget
 
 
 def test_tier3_ranks_by_likes_and_recency() -> None:
@@ -138,10 +142,11 @@ def test_short_comment_is_sent_whole() -> None:
 
 def test_long_comment_keeps_its_most_relevant_sentences_in_order() -> None:
     """Pre-extraction (Bhaskar et al. 2023): safety first, then complaints, then the rest."""
-    short = fit_to_share(LONG_REVIEW, 40)
+    room = 60  # fits the safety sentence plus the wrapper, not the whole review
+    short = fit_to_share(LONG_REVIEW, room)
 
     assert "ngộ độc" in short
-    assert estimate_tokens(short) <= 40
+    assert estimate_tokens(short) <= room
     assert short.startswith(GAP.strip())  # dropped sentences are marked, not hidden
     assert all(part.strip() in LONG_REVIEW for part in short.split(GAP.strip()) if part.strip())
 

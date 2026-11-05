@@ -95,6 +95,8 @@ def run_summary(
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
             "cost_usd": result.cost_usd,
+            # compare with input_tokens to refit CHARS_PER_TOKEN for a new provider
+            "estimated_comment_tokens": selection.tokens,
         },
     )
     try:

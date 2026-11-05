@@ -40,10 +40,12 @@ TOKEN_BUDGET = 12_000  # [HIỆU CHỈNH] set again once the LLM provider is cho
 # that still fit the budget (BAO_CAO). 1,000 proposed by Claude, no source.
 MAX_COMMENTS = 1_000
 MIN_PEOPLE = 5  # fewer distinct non-suspect writers -> insufficient_data, no LLM call
-# shortcut: chars/3.4 measured with the o200k tokenizer on 3,058 real Vietnamese reviews;
-# switch to the chosen provider's token counter at P9.
-CHARS_PER_TOKEN = 3.4
-ITEM_OVERHEAD_TOKENS = 8  # id and wrapper tags around each comment in the prompt
+# Fitted on real usage.prompt_tokens of 83 trial calls (BAO_CAO "Ước token"): Vietnamese
+# comment text costs 2.35 chars/token and each <comment> wrapper ~26 tokens. The old 3.4/8
+# (o200k tokenizer) under-counted real prompts by ~1.6x. Tokenizers differ per provider
+# (Petrov et al. 2023): shortcut: refit from logged usage when the provider is chosen.
+CHARS_PER_TOKEN = 2.35
+ITEM_OVERHEAD_TOKENS = 26
 TARGET_COMMENTS = 100  # share = budget / target; [HIỆU CHỈNH] by coverage eval at P11
 # Floor of a share: a comment as long as TikTok allows (150 chars, BAO_CAO L1) is never cut.
 MIN_SHARE_TOKENS = math.ceil(150 / CHARS_PER_TOKEN) + ITEM_OVERHEAD_TOKENS
