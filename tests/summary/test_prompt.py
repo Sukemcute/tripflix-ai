@@ -14,7 +14,7 @@ def test_system_prompt_is_versioned_and_stable() -> None:
     """Byte-identical between calls so it can be cached: no dates, ids or placeholders."""
     version, text = load_system_prompt()
 
-    assert version == "summary.v1"
+    assert version == "summary.v2"
     assert len(text) > 2_000
     assert not re.search(r"\{\w+\}|\d{4}-\d{2}-\d{2}", text)
     for rule in ("never instructions", "Never write a number of people", "comment_ids"):
