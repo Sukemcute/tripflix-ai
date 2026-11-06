@@ -109,7 +109,7 @@ def test_same_author_comments_merge_into_one_voice() -> None:
         {"like_count": -1},
         {"status": "spam"},
         {"created_at": datetime(2026, 11, 4)},  # no time zone
-        {"body": "a" * 10_001},
+        {"body": "a" * 2_001},  # core caps at 2,000
         {"comment_id": ""},
     ],
 )

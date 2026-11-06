@@ -30,6 +30,14 @@ def test_comments_mark_the_post_author_and_edits() -> None:
     assert edited.like_count == 7  # core's likeCount (be PR #58) feeds tier-3 ranking
 
 
+def test_comment_saved_before_the_2000_cap_is_cut_not_rejected() -> None:
+    old = _core("guest").model_copy(update={"body": "a" * 5_000})
+
+    [converted] = convert_comments([old], "owner")
+
+    assert len(converted.body) == 2_000
+
+
 def test_hotel_becomes_the_service_claim_and_title_joins_the_caption() -> None:
     post = CorePost(
         id="p",
