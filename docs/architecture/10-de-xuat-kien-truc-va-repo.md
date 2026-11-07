@@ -2,7 +2,9 @@
 
 **Phiên bản:** 0.6 · **Ngày:** 2026-11-04 · **Trạng thái:** Đề xuất, chờ Tech Lead chốt · **Người đọc:** cả team kỹ thuật
 
-> Tóm tắt: giữ **3 repo** (FE, BE, AI). Backend gồm `core-api` (modular monolith, **5 module, mỗi module 1 schema; 2 database: `core` và `commerce`**, trong đó module `analytics` giữ kho sự kiện tập trung), `notification-service` (chịu tải cao, scale riêng) và `video-worker`. AI là service riêng, không giữ dữ liệu nghiệp vụ. **Không còn Channel Manager:** OTA tự quản lý lịch trống và giá trong module `commerce` (database riêng), nên giữ chỗ, đặt và thanh toán chỉ cần **một transaction cục bộ**, không saga. Analytics là **module thứ 5 của `core-api`**, kho sự kiện là schema `analytics` trên Postgres, chưa cần data lake ở MVP.
+> **Cập nhật 04/11 (sơ đồ v4.6, docs/11 v1.1, đã duyệt):** `commerce` không còn database riêng; nó là schema `commerce` trong database `core`, vẫn có user Postgres, kết nối và transaction riêng. Các chỗ nói về database trong tài liệu này đã sửa theo. Chi tiết kết nối: [docs/11 §3.3](11-de-xuat-cau-truc-repo.md).
+
+> Tóm tắt: giữ **3 repo** (FE, BE, AI). Backend gồm `core-api` (modular monolith, **5 module, mỗi module 1 schema; database `core`**, trong đó module `analytics` giữ kho sự kiện tập trung), `notification-service` (chịu tải cao, scale riêng) và `video-worker`. AI là service riêng, không giữ dữ liệu nghiệp vụ. **Không còn Channel Manager:** OTA tự quản lý lịch trống và giá trong module `commerce`, nên giữ chỗ, đặt và thanh toán chỉ cần **một transaction cục bộ**, không saga. Analytics là **module thứ 5 của `core-api`**, kho sự kiện là schema `analytics` trên Postgres, chưa cần data lake ở MVP.
 
 ### Thay đổi so với bản 0.1
 
@@ -33,7 +35,7 @@
 ### Thay đổi ở bản 0.6 (Thắng chỉnh phần commerce)
 
 - **Bỏ `mock-channel-manager`**: OTA tự quản lý lịch trống và giá; job 6 giờ/lần mở thêm lịch trống cho đủ 180 ngày tới; superadmin sửa giá, số phòng ở màn "Lịch trống & giá" (mục 3.11).
-- `commerce` dùng **database Postgres riêng** (dữ liệu giả lập, seed lại được); `core-api` kết nối 2 database.
+- `commerce` là **schema trong database `core`** (dữ liệu giả lập, seed lại được), có user Postgres và kết nối riêng như các module khác (docs/11 v1.1). Bản 0.6 trước đó tách database riêng.
 - Giữ chỗ **30 phút** (trước là 10 phút).
 - `payment` thêm **đối soát** và **hoàn, huỷ**.
 
@@ -45,7 +47,7 @@
 |---|---|
 | 7 người, pilot 4 tuần, demo sớm | Mỗi service tách thêm là thêm CI, Dockerfile, deploy, xử lý lỗi mạng. Chỉ tách khi có lý do về tải hoặc công nghệ. |
 | F5/F6: giữ chỗ 30 phút, không bán trùng, không trừ tiền hai lần | Tồn kho, đơn hàng và giao dịch thanh toán phải cùng một module, cùng một database để dùng transaction thật. |
-| MVP không tích hợp channel manager; giá, lịch trống là dữ liệu giả lập | `commerce` tự quản lý lịch trống và giá trong database riêng (mục 3.11). Khi có đối tác thật thì thêm adapter nhập dữ liệu, không đổi kiến trúc. |
+| MVP không tích hợp channel manager; giá, lịch trống là dữ liệu giả lập | `commerce` tự quản lý lịch trống và giá trong schema `commerce` (mục 3.11). Khi có đối tác thật thì thêm adapter nhập dữ liệu, không đổi kiến trúc. |
 | Điểm nghẽn là video (HLS, S3 + CloudFront) | Transcode chạy ở `video-worker`, tách tiến trình để không kéo chậm API. |
 | Thông báo đến từ nhiều nguồn (bình luận, thích, đơn hàng, kiểm duyệt) và đến theo đợt | Thông báo là service riêng, nhận sự kiện qua Redis Streams, scale ngang theo số replica. |
 | Bảng số liệu cần truy vấn trên toàn bộ sự kiện của mọi module | Đổ sự kiện về một kho tập trung (module `analytics`, schema `analytics`); thống kê chỉ đọc kho đó. |
@@ -88,8 +90,7 @@ flowchart TB
   AI[ai-service<br/>FastAPI]
   VW[video-worker<br/>FFmpeg → HLS]
 
-  PG1[(Postgres core<br/>4 schema, gồm analytics)]
-  PGC[(Postgres commerce<br/>lịch trống, đơn, thanh toán)]
+  PG1[(Postgres core<br/>5 schema, gồm commerce, analytics)]
   PG2[(Postgres notification)]
   RD[(Redis)]
   MQ{{Redis Streams<br/>event bus}}
@@ -103,7 +104,7 @@ flowchart TB
   GW -->|/notifications, /ws| NS
   GW -->|/ai, SSE| AI
 
-  Core --> PG1 & PGC & RD
+  Core --> PG1 & RD
   Core -->|outbox → XADD| MQ
   MQ --> NS & VW
   MQ -->|core-discovery, core-analytics| Core
@@ -121,7 +122,7 @@ flowchart TB
 
 | Deployable | Repo | Công nghệ | Sở hữu dữ liệu | Lý do tách |
 |---|---|---|---|---|
-| `core-api` | BE | NestJS | Postgres `core` (4 schema, gồm `analytics`) + Postgres `commerce` | Lõi nghiệp vụ và kho sự kiện |
+| `core-api` | BE | NestJS | Postgres `core` (5 schema, gồm `commerce`, `analytics`) | Lõi nghiệp vụ và kho sự kiện |
 | `notification-service` | BE | NestJS, BullMQ, Socket.IO | Postgres `notification` (database riêng) | Nhận sự kiện từ mọi module, tải theo đợt, scale ngang riêng |
 | `video-worker` | BE | Node + FFmpeg | Không; ghi kết quả vào S3, báo về core bằng sự kiện | CPU nặng, scale riêng |
 | `ai-service` | AI | Python, FastAPI | Không giữ dữ liệu nghiệp vụ | Ecosystem Python, vòng đánh giá riêng |
@@ -136,7 +137,7 @@ flowchart TB
 | `access` | Đăng ký, đăng nhập, phiên, vai trò | `users`, `sessions`, `password_resets`, `service_clients`, `audit_log` | Xoay vòng refresh token: thu hồi phiên cũ + tạo phiên mới |
 | `content` | `social` (bài, bình luận, theo dõi, lưu), `media` (upload, bản HLS, ảnh bìa), `feed` (điểm xu hướng, bảng tin), `moderation` (luật, báo cáo, hàng chờ) | `posts`, `comments`, `reactions`, `follows`, `media_assets`, `renditions`, `trend_scores`, `reports`, `moderation_actions` | Ẩn bài: đổi trạng thái bài + ghi `moderation_actions` + loại khỏi `trend_scores` + ghi outbox, cùng lúc |
 | `discovery` | `search` (bài đăng, khách sạn, vé), `recommend` (gợi ý bài, gợi ý mục còn thiếu ở bước xác nhận) | `search_documents` (`tsvector`, `pgvector`), `interaction_signals`, `recommendation_cache` | Cập nhật chỉ mục của một tài liệu khi nhận sự kiện |
-| `commerce` (**database riêng**) | `inventory` (khách sạn, loại phòng, chuyến bay, giá và lịch trống theo ngày, OTA tự quản lý), `booking` (đơn, mục, giữ chỗ 30 phút), `payment` (giao dịch giả lập, đối soát, hoàn huỷ) | `properties`, `room_types`, `room_inventory`, `room_rates`, `flights`, `flight_inventory`, `orders`, `order_items`, `payments`, `refunds` | Checkout: giữ tất cả mục + tạo đơn, cùng một transaction (mục 3.4) |
+| `commerce` | `inventory` (khách sạn, loại phòng, chuyến bay, giá và lịch trống theo ngày, OTA tự quản lý), `booking` (đơn, mục, giữ chỗ 30 phút), `payment` (giao dịch giả lập, đối soát, hoàn huỷ) | `properties`, `room_types`, `room_inventory`, `room_rates`, `flights`, `flight_inventory`, `orders`, `order_items`, `payments`, `refunds` | Checkout: giữ tất cả mục + tạo đơn, cùng một transaction (mục 3.4) |
 | `analytics` | Kho sự kiện tập trung, bảng tổng hợp, API số liệu cho trang quản trị (mục 3.6) | `events` (chia partition theo ngày), `snapshot_*`, `mart_*` | Ghi một lô sự kiện, bỏ qua `event_id` trùng; làm mới một bảng `mart_*` |
 
 Bên trong mỗi module vẫn chia thư mục con theo phần (`content/social`, `content/feed`…) để nhiều người làm song song, nhưng các phần con **dùng chung schema và được join, đặt khoá ngoại với nhau**.
@@ -307,11 +308,11 @@ Không dùng Keycloak. Hệ thống có 3 vai trò cố định: `member` thuộ
 
 **Việc phải làm cẩn thận vì tự viết:** dùng `jose` để ký và kiểm token, `argon2` để băm; kiểm đủ `iss`, `aud`, `exp`; mọi lỗi đăng nhập trả cùng một thông báo; có test cho xoay vòng refresh token và thu hồi phiên.
 
-### 3.11. Kho sản phẩm: OTA tự quản lý lịch trống (database riêng của `commerce`)
+### 3.11. Kho sản phẩm: OTA tự quản lý lịch trống (schema `commerce` trong `core`)
 
 Bản 0.6 bỏ `mock-channel-manager`: Tripflix **tự quản lý lịch trống và giá** của khách sạn, chuyến bay trong module `commerce` (Thắng chốt). Không còn bước đồng bộ từ bên ngoài, không có saga.
 
-**Database riêng `commerce`:** module `commerce` dùng database Postgres riêng (khác `core`), giữ toàn bộ dữ liệu tiền và chỗ: `properties`, `room_types`, `room_inventory (total, held, sold)`, `room_rates`, `flights`, `flight_inventory`, `orders`, `order_items`, `payments`, `refunds`, `idempotency_keys`, `outbox`, `audit_log`. Mọi transaction của checkout, thanh toán, hoàn huỷ nằm gọn trong database này. Lợi ích: sao lưu, khôi phục, reset dữ liệu demo riêng cho phần tiền mà không đụng bài đăng; sau này tách `commerce` thành service chỉ là chuyển code.
+**Schema `commerce` trong `core`:** module `commerce` dùng schema riêng, user `tf_commerce` chỉ có quyền trên schema này, giữ toàn bộ dữ liệu tiền và chỗ: `properties`, `room_types`, `room_inventory (total, held, sold)`, `room_rates`, `flights`, `flight_inventory`, `orders`, `order_items`, `payments`, `refunds`, `idempotency_keys`, `outbox`, `audit_log`. Mọi transaction của checkout, thanh toán, hoàn huỷ nằm gọn trong schema này (kết nối `commerce` riêng nên không lẫn transaction với module khác). Reset dữ liệu demo chỉ seed lại schema `commerce`, không đụng bài đăng; sau này tách `commerce` thành service chỉ là chuyển code.
 
 | Phần | Cách làm (MVP) |
 |---|---|
@@ -320,7 +321,7 @@ Bản 0.6 bỏ `mock-channel-manager`: Tripflix **tự quản lý lịch trống
 | Sửa giá, số phòng | Màn **"Lịch trống & giá"** trong trang quản trị (superadmin): sửa theo ngày hoặc khoảng ngày. Mỗi lần sửa là một transaction: cập nhật bảng + ghi `audit_log` + outbox `commerce.ari.updated` để `discovery` cập nhật chỉ mục. Không cho giảm `total` xuống dưới `held + sold`. |
 | Giữ chỗ | Cập nhật có điều kiện trong một transaction, giữ **30 phút** (mục 3.4). |
 | Thanh toán | Cổng thanh toán giả lập; **đối soát** định kỳ (so giao dịch với đơn, gắn cờ lệch cho màn đơn bất thường); **hoàn, huỷ** từng mục hoặc cả đơn. |
-| Các module khác đọc | Qua public interface trong tiến trình, ví dụ `commerce.checkAvailability(ids, dates)`; không module nào kết nối thẳng database `commerce`. |
+| Các module khác đọc | Qua public interface trong tiến trình, ví dụ `commerce.checkAvailability(ids, dates)`; không module nào đọc thẳng schema `commerce`. |
 
 **Khi có đối tác thật:** thêm một adapter nhập giá và lịch trống từ channel manager của đối tác vào đúng các bảng trên; luồng giữ chỗ, đặt, thanh toán không đổi.
 
@@ -328,8 +329,7 @@ Bản 0.6 bỏ `mock-channel-manager`: Tripflix **tự quản lý lịch trống
 
 | Thành phần | MVP | Ghi chú |
 |---|---|---|
-| Postgres `core` | 4 schema (`access`, `content`, `discovery`, `analytics`) | Một ORM cho cả app, 2 datasource (`core`, `commerce`). Tìm kiếm full-text, `pg_trgm`, `pgvector` chạy ngay trên đây |
-| Postgres `commerce` | Database riêng của module `commerce`: lịch trống, giá, đơn, thanh toán | Dữ liệu giả lập, seed lại được; dev và MVP chung server với `core` |
+| Postgres `core` | 5 schema (`access`, `content`, `discovery`, `analytics`, `commerce`) | Một ORM cho cả app, mỗi module một kết nối (docs/11 §3.3). Tìm kiếm full-text, `pg_trgm`, `pgvector` chạy ngay trên đây |
 | Postgres `notification` | Database riêng | Dev và MVP: chung server với `core`, khác database; tách instance khi tải tăng |
 | Redis | Cache, rate limit, BullMQ, Streams, adapter Socket.IO | Bật AOF |
 | S3 media + CloudFront | Video HLS, ảnh | Dev dùng bucket S3 dev + CloudFront dev riêng, không dùng MinIO (docs/11 §7.2) |
@@ -425,7 +425,7 @@ tripflix-ai/
 - **CI mỗi repo (GitHub Actions):** lint, typecheck, test, build phần bị ảnh hưởng (`nx affected`, `turbo --filter`), build Docker image đẩy lên GHCR. Repo AI chạy thêm `evals/`.
 - **Môi trường:** `local` (docker compose), `staging` (deploy tự động từ `main`), `demo` (gắn tag).
 - **Chạy local:** `docker compose up` → `nx serve core-api`, `nx serve notification-service` → `uvicorn` cho AI → `pnpm dev --filter web`.
-- **Dữ liệu mô phỏng:** khách sạn, vé, giá, lịch trống seed vào database `commerce` từ bộ dữ liệu được cấp (chạy lại được), job mở lịch trống cho đủ 180 ngày tới; script seed trong `content` tạo ≤ 500 bài mẫu gắn nhãn "mô phỏng".
+- **Dữ liệu mô phỏng:** khách sạn, vé, giá, lịch trống seed vào schema `commerce` từ bộ dữ liệu được cấp (chạy lại được), job mở lịch trống cho đủ 180 ngày tới; script seed trong `content` tạo ≤ 500 bài mẫu gắn nhãn "mô phỏng".
 - **Quan sát:** mỗi request có `trace-id` đi qua gateway → service; sự kiện mang `trace-id` sang consumer. Đo tối thiểu: p95 API, độ dài pending của từng consumer group, tỉ lệ push lỗi, độ trễ của analytics, chi phí AI.
 
 ## 7. Phân chủ sở hữu
@@ -433,7 +433,7 @@ tripflix-ai/
 | Phần | Chủ | Backup |
 |---|---|---|
 | `libs/*`, `deploy/`, gateway, `access`, `notification-service` | Hoàng Đức Dũng | Lê Anh Duy |
-| `commerce` (inventory, booking, payment, database `commerce`, seed, màn lịch trống & giá) | Nguyễn Lê Phúc Thắng | Lê Nguyễn Quốc Bảo |
+| `commerce` (inventory, booking, payment, schema `commerce`, seed, màn lịch trống & giá) | Nguyễn Lê Phúc Thắng | Lê Nguyễn Quốc Bảo |
 | `content/feed`, `content/media`, `video-worker` | Nguyễn Thanh Phong | Chưa chốt |
 | `content/social` | Lê Quang Thành | Lê Thị Thuỳ Trang |
 | `content/moderation`, `analytics` | Lê Thị Thuỳ Trang | Lê Quang Thành |
