@@ -167,7 +167,8 @@ Hỏi người dùng thay vì đoán, nhất là khi: yêu cầu mơ hồ, đụ
 
 | Phần | Chủ | Backup |
 |---|---|---|
-| BE: `libs/`, `deploy/`, `access`, `notification-service`, gateway | Dũng | Duy |
+| BE: `libs/`, `access`, `notification-service`, gateway | Dũng | Duy |
+| BE: `deploy/` | Phong | — |
 | BE: `commerce` (inventory, booking, payment, seed) | Thắng | Bảo |
 | BE: `content/feed`, `content/media`, `video-worker` | Phong | — |
 | BE: `content/social` | Thành | Trang |
