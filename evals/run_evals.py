@@ -11,7 +11,8 @@ evals/summary/seed and checks the P12 hard gates, then scores against the labels
   written by the LLM, every topic has 2+ people;
 - soft scores (Key Point Analysis, Bar-Haim et al. 2020): a labelled point is found when an
   output point has the same polarity and aspect and cites at least one of its comments;
-  likewise for reality gaps; plus comments cited that must not be;
+  likewise for reality gaps, which must also be about the same claim (CLAIM_MATCH); plus
+  comments cited that must not be;
 - operations: latency p50/p95, LLM calls, tokens, estimated cost.
 Cassettes live in data/cassettes (git-ignored): recorded outputs stay out of the repo.
 """
@@ -31,14 +32,20 @@ sys.path.insert(0, str(ROOT))
 
 from app.clients.llm.base import LlmClient  # noqa: E402
 from app.clients.llm.fake import FakeLlmClient  # noqa: E402
+from app.services.summary.comment_classifier import (  # noqa: E402
+    CommentClassifier,
+    load_comment_classifier,
+)
 from app.services.summary.pipeline import SummaryRun, run_summary  # noqa: E402
 from app.services.summary.prompt import load_system_prompt  # noqa: E402
 from app.services.summary.schemas import CommentIn, ItineraryItemIn  # noqa: E402
 from app.services.summary.validator import find_banned_reason  # noqa: E402
+from app.services.summary.vi_text import normalize_text  # noqa: E402
 
 SEED_DIR = ROOT / "evals" / "summary" / "seed"
 CASSETTE_DIR = ROOT / "data" / "cassettes"
 NOW = datetime(2026, 11, 5, tzinfo=UTC)  # seed comments are dated October 2026
+CLAIM_MATCH = 0.6  # share of the labelled claim's words; proposal by Claude
 GATES = (
     "valid_output",
     "citations_exist",
@@ -128,7 +135,10 @@ def score_post(post: dict[str, Any], run: SummaryRun, seconds: float) -> PostRes
         for pol, p in points
     )
     result.gaps_labelled = len(labels["reality_gaps"])
-    result.gaps_found = sum(found(g["comment_ids"], gaps) for g in labels["reality_gaps"])
+    result.gaps_found = sum(
+        found(g["comment_ids"], [o for o in gaps if is_same_claim(g["claim"], o["claim"])])
+        for g in labels["reality_gaps"]
+    )
     result.wrongly_cited = sorted(cited & set(labels["must_not_cite"]))
     if run.llm:
         result.llm_called = True
@@ -138,7 +148,20 @@ def score_post(post: dict[str, Any], run: SummaryRun, seconds: float) -> PostRes
     return result
 
 
-def run_post(post: dict[str, Any], llm: LlmClient) -> tuple[SummaryRun, float]:
+def is_same_claim(label_claim: str, output_claim: str) -> bool:
+    """Most words of the labelled claim appear in the claim the output answered.
+
+    Without it one gap citing many comments counted for every claim of the caption (BAO_CAO).
+    """
+    label = set(normalize_text(label_claim).split())
+    return bool(label) and len(label & set(normalize_text(output_claim).split())) >= (
+        CLAIM_MATCH * len(label)
+    )
+
+
+def run_post(
+    post: dict[str, Any], llm: LlmClient, classifier: CommentClassifier | None = None
+) -> tuple[SummaryRun, float]:
     started = time.perf_counter()
     run = run_summary(
         comments=[CommentIn.model_validate(c) for c in post["comments"]],
@@ -147,6 +170,7 @@ def run_post(post: dict[str, Any], llm: LlmClient) -> tuple[SummaryRun, float]:
         previous_hash=None,
         now=NOW,
         llm=llm,
+        classifier=classifier,
     )
     return run, time.perf_counter() - started
 
@@ -200,13 +224,23 @@ def main() -> None:
     parser.add_argument("--llm", choices=["fake", "cassette", "live"], default="fake")
     parser.add_argument("--record", action="store_true", help="live only: save cassettes")
     parser.add_argument("--out", type=Path, help="write the full JSON report here")
+    parser.add_argument(
+        "--classifier-dir", type=Path, help="comment classifier bundle; default: rules only"
+    )
     args = parser.parse_args()
+    classifier = (
+        load_comment_classifier(args.classifier_dir, threads=2, batch=8)
+        if args.classifier_dir
+        else None
+    )
+    if args.classifier_dir and classifier is None:
+        raise SystemExit(f"no usable classifier bundle in {args.classifier_dir}")
 
     prompt_version, _ = load_system_prompt()
     results: list[PostResult] = []
     for post in load_seed():
         llm = make_llm(args.llm, post["post_id"], prompt_version)
-        run, seconds = run_post(post, llm)
+        run, seconds = run_post(post, llm, classifier)
         if args.record and args.llm == "live" and run.llm:
             CASSETTE_DIR.mkdir(parents=True, exist_ok=True)
             record = run.llm.__dict__ | {"seconds": seconds, "prompt_version": prompt_version}

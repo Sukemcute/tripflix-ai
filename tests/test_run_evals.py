@@ -4,6 +4,7 @@ from typing import Any
 
 from app.services.summary.pipeline import SummaryRun
 from app.services.summary.schemas import (
+    RealityGapOut,
     SafetyWarning,
     SaveSummaryRequest,
     SummaryContent,
@@ -81,3 +82,23 @@ def test_summary_counts_gates_and_scores() -> None:
     assert set(report["gates_passed"]) == set(GATES)
     assert report["all_gates_pass"] is True
     assert report["point_recall"] == round(1 / 3, 3)
+
+
+def test_a_gap_counts_only_for_the_claim_it_answers() -> None:
+    """A gap citing the right comments under another claim of the caption is not found."""
+    post = SEED["s03-di-bo-ra-bien"]
+    ids = post["labels"]["reality_gaps"][0]["comment_ids"]
+
+    def run_with(claim: str) -> SummaryRun:
+        gap = RealityGapOut(
+            claim=claim, reality="Đi bộ 15 phút mới tới biển.", comment_ids=ids, people=2
+        )
+        content = SummaryContent(reality_gaps=[gap], counts=COUNTS)
+        run = _ready(post, [])
+        assert run.request is not None
+        return SummaryRun(run.request.model_copy(update={"content": content}))
+
+    right = score_post(post, run_with("đi bộ 2 phút là ra biển"), 1.0)
+    wrong = score_post(post, run_with("Homestay xinh ở Quy Nhơn"), 1.0)
+
+    assert (right.gaps_found, wrong.gaps_found) == (1, 0)
