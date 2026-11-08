@@ -1,4 +1,4 @@
-# TF14 — AI tóm tắt bình luận: classifier, DeepSeek, chọn ý theo độ phủ, prompt v3
+# TF14 — AI tóm tắt bình luận: classifier, DeepSeek, chọn ý theo độ phủ, prompt v3, che tên người
 
 - Notion: (Bảo dán link TF14) · Nhánh: `bao/TF14-ai-summary` · Người làm: Bảo (dùng AI: có) · Ngày: 2026-11-08
 
@@ -21,6 +21,12 @@
   - `summary_bans.v2`: không còn coi "muỗi ban đêm" là đếm người.
 - **Claim:** caption được tách theo vế.
 - **Hiệu năng:** classifier chạy sau bộ lọc (25 s → 17 s cho 1.000 bình luận).
+- **Che tên người** (`pii.py`):
+  - Họ tên là dữ liệu cá nhân cơ bản (Nghị định 13/2023/NĐ-CP); trước đây chỉ che `@tên`.
+  - Từ thân tộc/nghề (anh, chị, bạn, lễ tân, a/c/e…) + tên viết hoa → `[tên]`.
+  - Họ phổ biến + Thị/Văn + tên → `[tên]`, trừ khi đứng sau đường/phố/quận.
+  - Loại trừ địa danh như Ông Lang, Cô Tô, Bà Rịa. Validator V6 dùng lại nên chặn cả tên LLM tự viết.
+  - Che cả caption (claim) vì caption cũng gửi cho LLM.
 - **Eval:** chấm gap theo đúng claim; thêm cờ `--classifier-dir`.
 
 ## Đối chiếu "Xong khi"
@@ -34,6 +40,7 @@ Chép từ yêu cầu của Bảo trong phiên làm việc (chưa đối chiếu
 | Không bỏ sót khía cạnh khi LLM viết thừa ý | Có | `test_v1_overflow_keeps_one_point_per_aspect_before_a_second_of_the_same` |
 | Đoạn tóm tắt chứa đủ khen, chê, khác video | Có | `test_short_forms_let_the_text_hold_every_point`, `test_a_con_resting_on_the_writers_of_a_video_gap_is_left_to_the_gap` |
 | Bắt được tai nạn tự kể mà không bắt nhầm | Có | Mẫu `match`/`no_match` trong `safety.v6.yaml`; đo trên 100.995 câu thật: 6 câu đổi kết quả, đều đúng |
+| Không gửi tên người sang LLM | Có, theo mẫu | `test_person_names_after_a_cue_or_with_thi_van_are_masked`, `test_places_streets_and_common_words_keep_their_text`, `test_names_and_phones_in_the_caption_are_masked`; đo trên 3.058 review và 92.977 bình luận YouTube: khoảng 85% và 92% chỗ bắt là tên thật (đọc 40 mẫu mỗi bộ) |
 | Đổi prompt hoặc agent có điểm trước/sau (RULES §10) | Có | Bảng bên dưới |
 
 ## Kết quả kiểm tra
@@ -41,7 +48,7 @@ Chép từ yêu cầu của Bảo trong phiên làm việc (chưa đối chiếu
 `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest`:
 - ruff sạch;
 - pyright 0 lỗi;
-- pytest 378 passed, 5 skipped (6 skipped khi không có bundle model).
+- pytest 390 passed, 5 skipped (6 skipped khi không có bundle model).
 - Đã chạy lại riêng từng commit của nhánh: commit nào cũng pass.
 
 **Eval live** (`uv run python evals/run_evals.py --llm live --classifier-dir app/models/comment_classifier`, DeepSeek):
@@ -59,6 +66,9 @@ Chép từ yêu cầu của Bảo trong phiên làm việc (chưa đối chiếu
 
 - Chi phí: khoảng 0,005–0,007 USD cho mỗi lượt 15 bài, khoảng 0,005 USD cho bài 1.000 bình luận.
 - Bài 1.000 bình luận là dữ liệu mô phỏng, sinh ở máy local, chưa commit.
+- **Sau khi thêm che tên** (1 lượt): seed recall 0.931, precision 0.871, đạt mọi cổng; bài lớn 7/8, 10/10, đạt mọi cổng.
+  - Hai bộ eval không có câu nào chứa tên (0/1.121), nên bước che tên không đổi prompt của chúng. Chênh lệch so với bảng trên là dao động của LLM.
+  - Phần che tên được kiểm bằng unit test và kết quả đo ở dòng "Không gửi tên người sang LLM".
 
 ## Cách kiểm lại
 
@@ -75,5 +85,6 @@ Chép từ yêu cầu của Bảo trong phiên làm việc (chưa đối chiếu
 - Không sửa code của người khác.
 - Hợp đồng với core không đổi: body PUT ai-summary không thêm trường.
 - **Còn chờ:**
+  - Che tên mới bắt theo mẫu: chưa bắt tên viết thường hoặc không dấu, tên sau "và" hoặc dấu phẩy, tên không có từ dẫn (ghi `shortcut:` trong `pii.py`). Cần thêm bài eval có tên người.
   - Bước tải model trong CI/Dockerfile (chủ: Tech Lead/deploy) chưa làm; image hiện tại chạy bằng luật.
   - GitHub Release của bundle chưa tạo.
