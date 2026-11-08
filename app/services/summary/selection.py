@@ -1,7 +1,8 @@
 """Pick the comments sent to the LLM (QT Bước 9, BAO_CAO P6 §5): a token budget, not a fixed 120.
 
-Tiers: 1 first-hand, 2 complaint, 3 the rest by score. Within tiers 1-2 newer comes first;
-tier 3 ranks by likes, length and recency. When everything fits, everything is sent.
+Tiers: 1 experienced (first-hand or hearsay), 2 complaint, 3 the rest by score. Within
+tiers 1-2 newer comes first; tier 3 ranks by likes, length and recency.
+When everything fits, everything is sent.
 
 When it does not fit, the pick is stratified (BAO_CAO "Chọn bằng luật có làm lệch"):
 complaints and the rest are drawn so the selection keeps the complaint share of all
@@ -15,16 +16,23 @@ token_budget / target_comments tokens, so long reviews cannot crowd out other vo
 A longer comment keeps its most relevant sentences instead of being cut blindly
 (pre-extraction before summarizing: Bhaskar et al. 2023; sentence-level budget: LLMLingua).
 Tier, first-hand flag and safety are decided on the whole comment before it is shortened.
+
+Labels come from the comment classifier when it ran on every comment of a candidate
+(comment_classifier.py: experienced F1 0.768 on YouTube gold); otherwise from the rules
+(first-hand cues and complaint_model on the merged text), where experienced = first-hand.
+The video_reaction label is not used: it misreads real visits ("cô chủ dễ thương, cho mượn xe
+đạp free"); dropping on it, then ranking on it, both cost points on the live eval (BAO_CAO).
 """
 
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
 from app.services.summary import complaint_model
+from app.services.summary.comment_classifier import CommentLabels
 from app.services.summary.filters import Candidate
 from app.services.summary.first_hand import detect_first_hand
 from app.services.summary.lexicon import load
@@ -89,13 +97,21 @@ def select_comments(
     token_budget: int = TOKEN_BUDGET,
     max_comments: int = MAX_COMMENTS,
     target_comments: int = TARGET_COMMENTS,
+    labels: Mapping[str, CommentLabels] | None = None,
 ) -> Selection:
     ranked = []
     for c in candidates:
-        first_hand = detect_first_hand(c.text_norm).is_first_hand
         question = _is_question(c.text)
-        complaint = is_complaint_candidate(c.text)
-        tier = 1 if first_hand else 2 if complaint else 3
+        found = [labels[i] for i in c.comment_ids if i in labels] if labels else []
+        if found and len(found) == len(c.comment_ids):
+            # one voice per author: any of the merged comments carries the label
+            first_hand = any(label.is_first_hand for label in found)
+            experienced = any(label.is_experienced for label in found)
+            complaint = not question and any(label.is_complaint for label in found)
+        else:
+            first_hand = experienced = detect_first_hand(c.text_norm).is_first_hand
+            complaint = is_complaint_candidate(c.text)
+        tier = 1 if experienced else 2 if complaint else 3
         newer_first = -c.created_at.timestamp()
         order = newer_first if tier < 3 else -_score(c, now)
         # suspects (L8 copies) go last in their tier, then questions: they are no opinion

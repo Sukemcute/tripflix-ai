@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from app.services.summary.comment_classifier import CommentLabels
 from app.services.summary.filters import Candidate
 from app.services.summary.selection import (
     GAP,
@@ -205,3 +206,30 @@ def test_a_question_is_never_counted_as_a_complaint() -> None:
     [picked] = select_comments([cand(1, "Trẻ em dưới 6 tuổi có tính tiền không ạ")], NOW).items
 
     assert picked.is_complaint is False
+
+
+def test_classifier_labels_put_hearsay_in_tier_1_and_set_complaints() -> None:
+    hearsay = CommentLabels(
+        is_experienced=True,
+        is_first_hand=False,
+        is_hearsay=True,
+        is_complaint=False,
+        is_praise=False,
+        is_video_reaction=False,
+    )
+    complaint = CommentLabels(
+        is_experienced=False,
+        is_first_hand=False,
+        is_hearsay=False,
+        is_complaint=True,
+        is_praise=False,
+        is_video_reaction=False,
+    )
+    labels = {"c1": hearsay, "c2": complaint}  # c3 has no label: rules decide
+
+    picked = select_comments(
+        [cand(1, NEUTRAL), cand(2, NEUTRAL), cand(3, FIRST_HAND)], NOW, labels=labels
+    )
+
+    tiers = {s.candidate.author_id: (s.tier, s.is_first_hand, s.is_complaint) for s in picked.items}
+    assert tiers == {"u1": (1, False, False), "u2": (2, False, True), "u3": (1, True, False)}

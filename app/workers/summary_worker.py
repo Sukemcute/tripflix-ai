@@ -33,6 +33,7 @@ from app.clients.llm.base import LlmClient
 from app.clients.llm.deepseek import DeepSeekClient
 from app.clients.llm.fake import FakeLlmClient
 from app.core.config import Settings, get_settings
+from app.services.summary.comment_classifier import CommentClassifier, load_comment_classifier
 from app.services.summary.core_adapter import build_caption, build_itinerary, convert_comments
 from app.services.summary.pipeline import run_summary
 
@@ -135,6 +136,7 @@ class SummaryWorker:
         llm: LlmClient,
         *,
         is_llm_killed: bool = False,
+        classifier: CommentClassifier | None = None,
         consumer_name: str | None = None,
         clock_ms: Callable[[], int] | None = None,
     ) -> None:
@@ -143,6 +145,7 @@ class SummaryWorker:
         self.core = core
         self.llm = llm
         self.is_llm_killed = is_llm_killed
+        self.classifier = classifier
         self.consumer = consumer_name or f"{socket.gethostname()}-{os.getpid()}"
         self.clock_ms = clock_ms or read_clock_ms
 
@@ -213,6 +216,7 @@ class SummaryWorker:
             now=datetime.fromtimestamp(self.clock_ms() / 1000, UTC),
             llm=self.llm,
             is_llm_killed=self.is_llm_killed,
+            classifier=self.classifier,
         )
         if run.request is None:
             logger.info("post %s: same input as last summary, LLM not called", post_id)
@@ -291,6 +295,9 @@ def main() -> None:
         ),
         build_llm(settings),
         is_llm_killed=settings.is_summary_llm_killed,
+        classifier=load_comment_classifier(
+            settings.classifier_dir, settings.classifier_threads, settings.classifier_batch
+        ),
     )
     worker.run_forever()
 
