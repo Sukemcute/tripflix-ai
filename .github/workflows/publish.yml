@@ -41,6 +41,8 @@ jobs:
           file: Dockerfile
           target: prod
           push: true
+          # Không đẩy attestation: mỗi lần build chỉ còn một phiên bản trong GHCR thay vì ba.
+          provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=ai-service
