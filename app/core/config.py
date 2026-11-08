@@ -1,4 +1,5 @@
 from functools import cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr
@@ -26,6 +27,13 @@ class Settings(BaseSettings):
     service_client_id: str = "ai-service"
     service_client_secret: SecretStr = SecretStr("")
     redis_url: str = "redis://localhost:6379/0"
+
+    # Comment classifier bundle, baked into the image (scripts/fetch_classifier.py); missing
+    # means rules. Threads set explicitly: onnxruntime defaults to the host's physical cores,
+    # not the container's CPU limit. 2 threads, batch 8: ~19 comments/s (BAO_CAO benchmark).
+    classifier_dir: Path = Path(__file__).resolve().parents[1] / "models" / "comment_classifier"
+    classifier_threads: int = Field(default=2, ge=1)
+    classifier_batch: int = Field(default=8, ge=1)
 
 
 @cache
