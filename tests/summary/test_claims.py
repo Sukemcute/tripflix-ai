@@ -57,3 +57,13 @@ def test_claims_are_capped() -> None:
     caption = ", ".join(f"điểm số {i} rất đẹp" for i in range(12))
 
     assert len(build_claims(caption, [])) == 8
+
+
+def test_names_and_phones_in_the_caption_are_masked() -> None:
+    """The caption reaches the LLM like a comment (PRD: no PII to the LLM)."""
+    caption = "Đi Phú Quốc cùng bạn Lan, đặt phòng qua 0912345678"
+
+    assert [c.text for c in build_claims(caption, [])] == [
+        "Đi Phú Quốc cùng bạn [tên]",
+        "đặt phòng qua [đã che]",
+    ]

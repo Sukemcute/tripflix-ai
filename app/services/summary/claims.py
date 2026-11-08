@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.services.summary.injection import match_injection
+from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import ItineraryItemIn
 from app.services.summary.vi_text import clean_text, count_syllables, normalize_text
 
@@ -45,10 +46,11 @@ def build_claims(caption: str, itinerary: Sequence[ItineraryItemIn]) -> list[Cla
     # split before clean_text: it folds newlines into spaces and would lose line breaks
     for sentence in _SENTENCE_END.split(caption):
         texts.extend((clause, "caption") for clause in _clauses(sentence))
-    # The creator writes caption and itinerary: untrusted remote content too (OWASP).
+    # The creator writes caption and itinerary: untrusted remote content too (OWASP), and it
+    # reaches the LLM like a comment, so phone numbers and names are masked the same way.
     texts = [(t, s) for t, s in texts if not match_injection(t)]
     return [
-        Claim(id=f"clm_{i}", text=t, source=s)
+        Claim(id=f"clm_{i}", text=mask_pii(t), source=s)
         for i, (t, s) in enumerate(texts[:MAX_CLAIMS], start=1)
     ]
 
