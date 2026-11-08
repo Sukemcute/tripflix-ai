@@ -27,7 +27,8 @@ AI agent: đọc hết file này trước khi làm. Luật nào không làm đư
 - Một nhánh chỉ làm một task.
 - Muốn lấy code mới từ develop thì dùng `git merge origin/develop`. Nhánh đã push thì không rebase.
 - **Không bao giờ** commit, merge hay push thẳng lên `main` hoặc `develop`. Mọi thứ đi qua PR.
-- PR nhánh task → `develop`: CI xanh, 1 người duyệt (chủ code nếu có đụng phần của họ), squash merge.
+- PR nhánh task → `develop`: CI xanh, 1 người duyệt (chủ code nếu có đụng phần của họ), merge bằng **"Create a merge commit"** (`gh pr merge --merge`). **Không dùng squash merge hay rebase merge**: squash gộp mọi commit thành một commit mới, mất lịch sử từng bước và khiến nhánh tách từ nhánh đó bị conflict giả với chính code đã có trên `develop`.
+- Nhánh tách từ một nhánh task khác chưa merge: ghi rõ "phụ thuộc PR #…" trong PR, merge PR của nhánh gốc trước rồi mới merge PR sau.
 - Release `develop` → `main`: chỉ làm khi đã test trên staging ổn. Leader tuần duyệt, chọn "merge commit".
 - Hotfix: tạo nhánh `<tên>/<TFxx>-hotfix-<mô-tả>` từ `main`, mở PR vào `main`, sau đó mở PR `main` → `develop`.
 - Không force push. Không xoá nhánh của người khác.
