@@ -10,10 +10,18 @@ permissions:
   packages: write
 
 jobs:
+  # CI đỏ thì không build image, để server không kéo phải bản lỗi.
+  check:
+    uses: ./.github/workflows/ci.yml
+
   image:
+    needs: check
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # Builder buildx cần cho cache type=gha (driver docker mặc định không ghi được cache này).
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -33,5 +41,9 @@ jobs:
           file: Dockerfile
           target: prod
           push: true
+          # Không đẩy attestation: mỗi lần build chỉ còn một phiên bản trong GHCR thay vì ba.
+          provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=ai-service
+          cache-to: type=gha,scope=ai-service,mode=max

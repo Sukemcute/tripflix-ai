@@ -1,10 +1,8 @@
 # Đề xuất cấu trúc repo — Tripflix
 
-**Phiên bản:** 1.1 · **Ngày:** 2026-11-04 · **Trạng thái:** Baseline v1.0 đã duyệt (còn chờ Q7: tên GitHub org); các thay đổi database ở v1.1 là đề xuất, chờ duyệt · **Người đọc:** cả team kỹ thuật · **Dựa trên:** [docs/10 v0.6](10-de-xuat-kien-truc-va-repo.md)
+**Phiên bản:** 1.1 · **Ngày:** 2026-11-04 · **Trạng thái:** Đã duyệt (còn chờ Q7: tên GitHub org); v1.1 (duyệt 04/11) gộp `commerce` vào database `core` và chuẩn bị đường tách `discovery` · **Người đọc:** cả team kỹ thuật · **Dựa trên:** [docs/10 v0.6](10-de-xuat-kien-truc-va-repo.md)
 
 > Tóm tắt: giữ **3 repo** như docs/10 (`tripflix-be`, `tripflix-fe`, `tripflix-ai`). Hai repo TypeScript dùng chung một bộ công cụ: **pnpm + Turborepo**. Backend dùng **NestJS + Drizzle**. Mỗi module của `core-api` có **kết nối database và transaction riêng**, nên không thể vô tình mở transaction chéo module. `core-api` chạy được 2 vai trò từ cùng code: `api` (nhận request) và `worker` (job, consumer, outbox relay). Hợp đồng giữa các repo (OpenAPI, schema sự kiện) được sinh ra và commit vào thư mục `contracts/` của repo phát hành. **Cả hệ thống chạy bằng Docker với một lệnh** `pnpm stack:up` từ repo BE (§7): build từ 3 repo đặt cạnh nhau, tự migrate và seed, có chế độ tự cập nhật khi sửa code.
-
-> **Phạm vi thay đổi v1.1 đang chờ duyệt:** gộp schema `commerce` vào database `core` và chuẩn bị đường tách `discovery`. Cho đến khi team chốt, kiến trúc đã duyệt vẫn là docs/10 v0.6 và sơ đồ v4.5 (Postgres `core` + `commerce`); các phần v1.1 liên quan database trong tài liệu này chỉ là phương án, chưa phải chỉ dẫn triển khai.
 
 ---
 
@@ -69,7 +67,7 @@ tripflix-be/
 │  │  │     ├─ access/             # auth, sessions, vai trò, JWKS
 │  │  │     ├─ content/            # social/ media/ feed/ moderation/
 │  │  │     ├─ discovery/          # search/ recommend/
-│  │  │     ├─ commerce/           # inventory/ booking/ payment/   → schema commerce (đề xuất v1.1)
+│  │  │     ├─ commerce/           # inventory/ booking/ payment/   → schema commerce
 │  │  │     └─ analytics/          # ingest/ marts/ api/
 │  │  ├─ scripts/                  # migrate.ts, seed.ts, export-openapi.ts
 │  │  ├─ test/                     # integration (Testcontainers), e2e
@@ -113,7 +111,7 @@ tripflix-be/
 │  ├─ compose.yaml                 # chạy cả hệ thống, chia profile (§7)
 │  ├─ .env.example                 # cổng, đường dẫn 3 repo, thông tin bucket S3 dev; chép thành deploy/.env
 │  ├─ postgres/init/               # chạy 1 lần bằng superuser
-│  │  ├─ 01-databases.sql          # core, notification (phương án v1.1; baseline còn commerce)
+│  │  ├─ 01-databases.sql          # core, notification
 │  │  ├─ 02-roles-schemas.sql      # user và schema cho từng module
 │  │  └─ 03-extensions.sql         # vector, unaccent, pg_trgm
 │  ├─ traefik/                     # route, rate limit, kiểm JWT
@@ -180,8 +178,6 @@ Các module khác theo cùng khuôn: thư mục phần con (`content/social`, `c
 | `consumers/`, `jobs/` | Nghe sự kiện, job định kỳ; chỉ đăng ký khi `APP_ROLE` là `worker` hoặc `all` | — |
 
 ### 3.3. Kết nối database và transaction theo module
-
-> **Đề xuất v1.1, chưa triển khai:** các kết nối trong bảng dưới đây đưa `commerce` vào database `core`. Baseline đã duyệt vẫn tách database `commerce` riêng; chỉ đổi sơ đồ và cấu hình khi team phê duyệt.
 
 | Tên kết nối | Database | User Postgres | Schema được phép | Pool (gợi ý) |
 |---|---|---|---|---|
@@ -426,7 +422,7 @@ Kết hợp được: chạy `pnpm stack:up`, rồi `docker compose stop core-ap
 
 | Service | Profile | Cổng trên máy | Khởi động khi | Ghi chú |
 |---|---|---|---|---|
-| `postgres` | (luôn chạy) | 5432 | — | `pgvector/pgvector:pg17`; phương án v1.1 tạo 2 database (`core`, `notification`), user/schema/extension; baseline đã duyệt còn database `commerce` riêng |
+| `postgres` | (luôn chạy) | 5432 | — | `pgvector/pgvector:pg17`; lần đầu chạy `deploy/postgres/init/` tạo 2 database (`core`, `notification`), user và schema theo module, extension |
 | `redis` | (luôn chạy) | 6379 | — | AOF bật |
 | `mailpit` | (luôn chạy) | 8025 (web), 1025 (SMTP) | — | Xem email gửi đi |
 | `migrate` | be | — | `postgres` healthy | Chạy một lần: migrate mọi module + `notification`, seed nếu database trống |
@@ -592,7 +588,7 @@ Bước 2–3 nên xong trước khi các bước khác bắt đầu viết nghi
 | — | Thư mục `contracts/` ở BE và AI | Q5 |
 | `packages/ui` | Tách `ui-web` (web, admin) và `tokens` (dùng cả mobile) | Component web không dùng được trên React Native, nhưng màu, font thì dùng chung được |
 | — | `discovery` có `DB_DISCOVERY_URL` riêng, `statement_timeout` riêng, sẵn sàng tách instance khi đo thấy cần (v1.1) | Search là phần dùng nhiều; giữ đường tách ra mà chưa phải vận hành thêm máy ở pilot |
-| — | *(Đề xuất v1.1, chờ duyệt)* `commerce` là schema trong database `core`, không tách database riêng | Tồn kho do nền tảng tự quản lý, đơn hàng gắn với user và bài đăng; tách database chỉ thêm việc ghép dữ liệu |
+| — | `commerce` là schema trong database `core`, không tách database riêng (v1.1, duyệt 04/11) | Tồn kho do nền tảng tự quản lý, đơn hàng gắn với user và bài đăng; tách database chỉ thêm việc ghép dữ liệu |
 | Dev dùng MinIO thay S3 | Dev dùng bucket S3 dev + CloudFront dev, thêm `libs/storage` | Q9 |
 | `deploy/docker-compose.yml` chỉ có hạ tầng | `deploy/compose.yaml` chạy cả hệ thống (build từ 3 repo), profile `be`, `ai`, `fe`, `gateway`, `tools`; service `migrate` tự migrate, seed; Compose Watch; Dockerfile nhiều stage (`dev`, `prod`) cho mọi app; lệnh `pnpm stack:*` | Q8: ai cũng chạy được cả hệ thống bằng một lệnh |
 
