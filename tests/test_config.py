@@ -14,7 +14,14 @@ def load() -> Settings:
 def no_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # Run from an empty dir so a developer's local .env cannot leak into the assertions.
     monkeypatch.chdir(tmp_path)
-    for name in ("LLM_MODEL", "LLM_TIMEOUT_SECONDS", "SUMMARY_LLM_KILL", "LLM_MAX_OUTPUT_TOKENS"):
+    for name in (
+        "LLM_MODEL",
+        "LLM_TIMEOUT_SECONDS",
+        "SUMMARY_LLM_KILL",
+        "LLM_MAX_OUTPUT_TOKENS",
+        "CLASSIFIER_THREADS",
+        "CLASSIFIER_BATCH",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("LLM_PROVIDER", "fake")
 
@@ -32,6 +39,8 @@ def test_defaults() -> None:
     assert settings.llm_timeout_seconds == 30.0
     assert settings.llm_max_output_tokens == 3000
     assert settings.is_summary_llm_killed is False
+    assert settings.classifier_threads == 2 and settings.classifier_batch == 8
+    assert settings.classifier_dir.parts[-3:] == ("app", "models", "comment_classifier")
 
 
 def test_env_overrides_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,3 +60,14 @@ def test_unknown_provider_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(ValidationError):
         load()
+
+
+def test_deepseek_provider_reads_its_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+
+    settings = load()
+
+    assert settings.llm_provider == "deepseek"
+    assert settings.deepseek_api_key.get_secret_value() == "sk-test"
+    assert "sk-test" not in repr(settings)  # SecretStr keeps it out of logs

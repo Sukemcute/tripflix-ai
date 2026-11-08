@@ -43,7 +43,7 @@ _FOLD_LETTERS = str.maketrans(  # applied after lower(): Ð lowers to ð
 
 
 # Filters, safety and injection each normalize the same body: cache the pure functions.
-# 2048 entries x 2 caches x 10k chars max is ~40 MB worst case, ~2 MB for typical comments.
+# 2048 entries x 2 caches x 2k chars max is ~8 MB worst case, ~2 MB for typical comments.
 @lru_cache(maxsize=2048)
 def clean_text(text: str) -> str:
     """NFKC, no format chars, single spaces. Keeps diacritics and emoji for the LLM.

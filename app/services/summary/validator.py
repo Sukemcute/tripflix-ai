@@ -10,6 +10,11 @@ guardrail (RN ai_guardrails_evaluation §1), so every check here is a rule:
 - V3/V8 a point needs 2+ different people (Amazon: several customers must share it).
 - V4 reality gaps merge per claim, then need 2+ first-hand writers.
 - V6 people are counted by code; a sentence with a count, a share, money or PII is dropped.
+When the LLM writes more points than the card holds, every item is checked first and the cap
+is filled by coverage, not by position: one point per aspect, most people first, then the
+next ones (key points chosen for coverage without redundancy, Bar-Haim et al. 2021; MMR,
+Carbonell & Goldstein 1998; aspects ranked by how often they are raised, Hu & Liu 2004).
+Keeping the first five lost whole aspects on a 1,000-comment post (BAO_CAO).
 V7 (season from bookings) is gone: comments are no longer tied to bookings.
 """
 
@@ -31,9 +36,12 @@ from app.services.summary.schemas import (
     MAX_REALITY_GAPS,
     MAX_SAFETY_MENTIONS,
     MAX_TOPICS,
+    SHORT_CHARS,
     Aspect,
     AspectPoint,
+    RealityGap,
     SummaryLlmOutput,
+    Topic,
 )
 from app.services.summary.selection import Selected
 from app.services.summary.vi_text import normalize_text
@@ -43,7 +51,7 @@ MIN_PEOPLE_PER_POINT = 2  # V3/V4/V8; same threshold the read path re-checks (QT
 _SYMBOL_NUMBER = re.compile(r"\d\s*[%$₫€]|[$₫€]\s*\d")
 
 Section = Literal["excluded", "safety_mentions", "pros", "cons", "reality_gaps", "topics"]
-Action = Literal["drop_id", "drop_item", "merge", "trim"]
+Action = Literal["drop_id", "drop_item", "drop_short", "merge", "trim"]
 
 
 class InvalidLlmOutputError(ValueError):
@@ -64,6 +72,7 @@ class SummaryPoint:
     text: str
     comment_ids: tuple[str, ...]  # real ids
     people: int
+    short: str | None = None  # a few words for the summary text; None -> the text is used
 
 
 @dataclass(frozen=True)
@@ -73,6 +82,7 @@ class RealityGapPoint:
     reality: str
     comment_ids: tuple[str, ...]
     people: int  # first-hand writers only
+    short: str | None = None
 
 
 @dataclass(frozen=True)
@@ -99,11 +109,22 @@ def validate_summary(
     raw_output: str, by_code: Mapping[str, Selected], claims: Sequence[Claim]
 ) -> ValidatedSummary:
     """Check the LLM output against what was sent. by_code maps c1..cN to the selection."""
-    data, trims = _trim_overflow(raw_output)
+    data, overflow, trims = _trim_overflow(raw_output)
     try:
         output = SummaryLlmOutput.model_validate(data)
     except ValidationError as e:
         raise InvalidLlmOutputError(str(e)) from e
+    # Overflow items skip the schema's maxItems but each is checked like the others; a broken
+    # extra is dropped, it never fails the run.
+    extras: dict[Section, list[Any]] = {}
+    for section, items in overflow.items():
+        model = _ITEM_MODELS[section]
+        for item in items:
+            try:
+                extras.setdefault(section, []).append(model.model_validate(item))
+            except ValidationError:
+                trims.append(Finding("V1", section, "drop_item", "extra item breaks the schema"))
+    output = output.model_copy(update={k: [*getattr(output, k), *v] for k, v in extras.items()})
     validator = _Validator(by_code, claims)
     validator.report += trims
     return validator.run(output)
@@ -118,29 +139,51 @@ _SECTION_CAPS: dict[Section, int] = {
 }
 
 
-def _trim_overflow(raw_output: str) -> tuple[Any, list[Finding]]:
-    """V1: keep the first N items or ids when the LLM writes too many; anything else wrong
-    (broken JSON, wrong types, unknown aspect, extra field) still fails the run.
+_ITEM_MODELS: dict[Section, type[AspectPoint | RealityGap | Topic]] = {
+    "pros": AspectPoint,
+    "cons": AspectPoint,
+    "reality_gaps": RealityGap,
+    "topics": Topic,
+}
+# Items read past the cap before picking by coverage; a runaway output stops here.
+OVERFLOW_FACTOR = 3
 
-    A JSON mode without a strict schema ignores maxItems: in a real LLM trial, 22 of 47
-    real runs failed only for an extra item or id.
+
+def _trim_overflow(raw_output: str) -> tuple[Any, dict[Section, list[Any]], list[Finding]]:
+    """V1: too many items or ids, or a list section left out, never fail the run; anything
+    else wrong (broken JSON, wrong types, unknown aspect, extra field, no `excluded`) still does.
+
+    Ranked sections keep their overflow (up to OVERFLOW_FACTOR x cap) for _select; safety
+    mentions and ids keep the first N. A JSON mode without a strict schema ignores maxItems
+    and required: in a real LLM trial, 22 of 47 real runs failed only for an extra item or id,
+    and the 1,000-comment post once failed only because `topics` was missing (BAO_CAO).
+    A missing list reads as empty, which the prompt allows; `excluded` stays required since it
+    removes evidence.
     """
     try:
         data: Any = json.loads(raw_output)
     except json.JSONDecodeError as e:
         raise InvalidLlmOutputError(f"not JSON: {e}") from e
     findings: list[Finding] = []
+    overflow: dict[Section, list[Any]] = {}
     if not isinstance(data, dict):
-        return data, findings
+        return data, overflow, findings
     sections = cast(dict[str, Any], data)
     for section, cap in _SECTION_CAPS.items():
+        if section not in sections:
+            findings.append(Finding("V1", section, "trim", "missing, read as empty"))
+            sections[section] = []
         items = sections.get(section)
         if not isinstance(items, list):
             continue
         items = cast(list[Any], items)
+        limit = cap * OVERFLOW_FACTOR if section in _ITEM_MODELS else cap
+        if len(items) > limit:
+            findings.append(Finding("V1", section, "trim", f"{len(items)} items, kept {limit}"))
+            items = items[:limit]
+        sections[section] = items[:cap]
         if len(items) > cap:
-            findings.append(Finding("V1", section, "trim", f"{len(items)} items, kept {cap}"))
-            sections[section] = items = items[:cap]
+            overflow[section] = items[cap:]
         for item in items:
             ids = cast(dict[str, Any], item).get("comment_ids") if isinstance(item, dict) else None
             if isinstance(ids, list) and len(cast(list[Any], ids)) > MAX_EVIDENCE:
@@ -153,7 +196,7 @@ def _trim_overflow(raw_output: str) -> tuple[Any, list[Finding]]:
                     )
                 )
                 cast(dict[str, Any], item)["comment_ids"] = cast(list[Any], ids)[:MAX_EVIDENCE]
-    return data, findings
+    return data, overflow, findings
 
 
 class _Validator:
@@ -173,10 +216,10 @@ class _Validator:
             if c not in self.flagged
         )
         return ValidatedSummary(
-            pros=self._points("pros", output.pros),
-            cons=self._points("cons", output.cons),
-            reality_gaps=self._reality_gaps(output),
-            topics=self._topics(output),
+            pros=self._select("pros", self._points("pros", output.pros), MAX_POINTS),
+            cons=self._select("cons", self._points("cons", output.cons), MAX_POINTS),
+            reality_gaps=self._select("reality_gaps", self._reality_gaps(output), MAX_REALITY_GAPS),
+            topics=self._select("topics", self._topics(output), MAX_TOPICS),
             safety_hints=self._real_ids(dict.fromkeys(hints)),
             report=self.report,
         )
@@ -187,12 +230,26 @@ class _Validator:
             codes = self._evidence(section, item.comment_ids)
             people = self._people(codes)
             if self._is_kept(section, item.text, codes, people, "V3", [item.text]):
-                points.append(SummaryPoint(item.aspect, item.text, self._real_ids(codes), people))
+                short = self._short(section, item.short)
+                points.append(
+                    SummaryPoint(item.aspect, item.text, self._real_ids(codes), people, short)
+                )
         return points
+
+    def _short(self, section: Section, short: str | None) -> str | None:
+        """V6 on the short form too; a bad one only falls back to the full text."""
+        short = (short or "").strip()
+        if not short:
+            return None
+        reason = "too long" if len(short) > SHORT_CHARS else find_banned_reason(short)
+        if reason:
+            self._note("V6", section, "drop_short", f"{reason}: {short}")
+            return None
+        return short
 
     def _reality_gaps(self, output: SummaryLlmOutput) -> list[RealityGapPoint]:
         # V4: merge first, so a claim split into two 1-person items is not lost twice.
-        merged: dict[str, tuple[list[str], str, int]] = {}
+        merged: dict[str, tuple[list[str], str, str | None, int]] = {}
         for gap in output.reality_gaps:
             if gap.claim_id not in self.claims:
                 self._note("V1", "reality_gaps", "drop_item", f"unknown claim {gap.claim_id}")
@@ -200,13 +257,15 @@ class _Validator:
             codes = self._evidence("reality_gaps", gap.comment_ids)
             if gap.claim_id in merged:
                 self._note("V4", "reality_gaps", "merge", gap.claim_id)
-                old_codes, old_text, old_size = merged[gap.claim_id]
-                text = gap.reality if len(codes) > old_size else old_text
-                merged[gap.claim_id] = (old_codes + codes, text, max(len(codes), old_size))
+                old_codes, old_text, old_short, old_size = merged[gap.claim_id]
+                text, short = (
+                    (gap.reality, gap.short) if len(codes) > old_size else (old_text, old_short)
+                )
+                merged[gap.claim_id] = (old_codes + codes, text, short, max(len(codes), old_size))
             else:
-                merged[gap.claim_id] = (codes, gap.reality, len(codes))
+                merged[gap.claim_id] = (codes, gap.reality, gap.short, len(codes))
         gaps: list[RealityGapPoint] = []
-        for claim_id, (codes, reality, _) in merged.items():
+        for claim_id, (codes, reality, short, _) in merged.items():
             first_hand = [c for c in dict.fromkeys(codes) if self.by_code[c].is_first_hand]
             for code in set(codes) - set(first_hand):
                 self._note("V4", "reality_gaps", "drop_id", f"{code} not first-hand")
@@ -219,6 +278,7 @@ class _Validator:
                         reality,
                         self._real_ids(first_hand),
                         people,
+                        self._short("reality_gaps", short),
                     )
                 )
         return gaps
@@ -244,6 +304,28 @@ class _Validator:
             if self._is_kept("topics", label, codes, people, "V8", [label, summary]):
                 topics.append(TopicPoint(label, summary, self._real_ids(codes), people))
         return topics
+
+    def _select[T: (SummaryPoint, RealityGapPoint, TopicPoint)](
+        self, section: Section, items: list[T], cap: int
+    ) -> list[T]:
+        """Fill the cap by coverage: first the best-backed item of each aspect, most people
+        first, then the rest by people; ties keep the LLM's order. Gaps and topics are already
+        merged per claim and label, so each is its own key."""
+        if len(items) <= cap:
+            return items
+        by_people = sorted(range(len(items)), key=lambda i: -items[i].people)
+        seen: set[object] = set()
+        first: list[int] = []
+        rest: list[int] = []
+        for i in by_people:
+            item = items[i]
+            key: object = item.aspect if isinstance(item, SummaryPoint) else i
+            (rest if key in seen else first).append(i)
+            seen.add(key)
+        kept = (first + rest)[:cap]
+        dropped = [_name(items[i]) for i in by_people if i not in kept]
+        self._note("V1", section, "trim", f"{len(items)} items, kept {cap}: dropped {dropped}")
+        return [items[i] for i in kept]
 
     def _evidence(self, section: Section, codes: Iterable[str]) -> list[str]:
         """V1 known ids, V2 not excluded, V5 not safety-flagged; deduplicated, in order."""
@@ -301,6 +383,14 @@ class _Validator:
 
     def _note(self, rule: str, section: Section, action: Action, detail: str) -> None:
         self.report.append(Finding(rule, section, action, detail))
+
+
+def _name(item: SummaryPoint | RealityGapPoint | TopicPoint) -> str:
+    if isinstance(item, SummaryPoint):
+        return f"{item.aspect} ({item.people})"
+    if isinstance(item, RealityGapPoint):
+        return f"{item.claim_id} ({item.people})"
+    return f"{item.label} ({item.people})"
 
 
 def find_banned_reason(text: str) -> str | None:

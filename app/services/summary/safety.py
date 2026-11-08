@@ -36,8 +36,12 @@ class SafetyHit:
     visibility: Literal["public", "pending_review"]
 
 
-def match_safety(body: str) -> SafetyHit | None:
-    """Takes the original body: clause breaks are gone once text is normalized."""
+def match_safety(body: str, is_first_hand: bool | None = None) -> SafetyHit | None:
+    """Takes the original body: clause breaks are gone once text is normalized.
+
+    is_first_hand comes from the comment classifier when it ran; None falls back to the
+    first-hand rules. Hearsay is never first-hand, so it always waits for a moderator.
+    """
     lexicon = load("safety")
     norm_body = normalize_text(body)
     if not lexicon.matches(norm_body):  # negation only removes hits: most comments stop here
@@ -52,7 +56,9 @@ def match_safety(body: str) -> SafetyHit | None:
                 categories.append(group)
     if not categories:
         return None
-    first_hand = detect_first_hand(norm_body).is_first_hand
+    first_hand = (
+        detect_first_hand(norm_body).is_first_hand if is_first_hand is None else is_first_hand
+    )
     return SafetyHit(
         categories=tuple(g for g in lexicon.groups if g in categories),
         visibility="public" if first_hand else "pending_review",

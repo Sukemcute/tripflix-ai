@@ -3,19 +3,23 @@
 from collections.abc import Sequence
 
 from app.clients.core_api import CoreComment, CorePost
-from app.services.summary.schemas import CommentIn, ItineraryItemIn
+from app.services.summary.schemas import MAX_COMMENT_CHARS, CommentIn, ItineraryItemIn
 
 _PLACE_NAME_MAX = 200
 
 
 def convert_comments(comments: Sequence[CoreComment], post_author_id: str) -> list[CommentIn]:
-    """Core only lists live comments (deleted ones are gone), so every one is visible."""
+    """Core only lists live comments (deleted ones are gone), so every one is visible.
+
+    Rows written before core lowered its cap to 2,000 can still be longer (the column is text):
+    cut them so one old comment does not fail the whole post at the schema.
+    """
     return [
         CommentIn(
             comment_id=c.id,
             author_id=c.author_id,
             parent_id=c.parent_comment_id,
-            body=c.body,
+            body=c.body[:MAX_COMMENT_CHARS],
             status="visible",
             like_count=c.like_count,
             created_at=c.created_at,

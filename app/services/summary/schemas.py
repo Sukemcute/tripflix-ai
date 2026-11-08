@@ -3,6 +3,9 @@ from typing import Annotated, Any, Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+# Same cap as core (Comment.MAX_BODY_LENGTH, be PR #58).
+MAX_COMMENT_CHARS = 2_000
+
 
 class CommentIn(BaseModel):
     """One comment as core-api sends it to POST /summarize."""
@@ -12,9 +15,7 @@ class CommentIn(BaseModel):
     comment_id: str = Field(min_length=1)
     author_id: str = Field(min_length=1)
     parent_id: str | None = None
-    # Core caps comments at 2,000 chars (Comment.MAX_BODY_LENGTH, be PR #58); 10k is a defensive
-    # bound so a later raise in core does not fail a whole batch here.
-    body: str = Field(max_length=10_000)
+    body: str = Field(max_length=MAX_COMMENT_CHARS)
     status: Literal["visible", "hidden", "deleted"]
     like_count: int = Field(default=0, ge=0)
     created_at: AwareDatetime
@@ -65,11 +66,18 @@ _STRICT = ConfigDict(extra="forbid", frozen=True)
 # (Anthropic long-context tips: extract the relevant quotes before answering).
 
 
+# short: the point in a few words for the 300-char summary text, so it can hold every point
+# (summary.v3). Not checked here: a missing, too long or banned one only falls back to text in
+# the validator, it never fails the run.
+SHORT_CHARS = 40
+
+
 class AspectPoint(BaseModel):
     model_config = _STRICT
     comment_ids: Evidence
     aspect: Aspect
     text: str = Field(min_length=1, max_length=120)
+    short: str | None = None
 
 
 class SafetyMention(BaseModel):
@@ -83,6 +91,7 @@ class RealityGap(BaseModel):
     claim_id: ClaimCode
     comment_ids: Evidence
     reality: str = Field(min_length=1, max_length=120)
+    short: str | None = None
 
 
 class Topic(BaseModel):

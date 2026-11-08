@@ -30,8 +30,10 @@ from pydantic.alias_generators import to_camel
 
 from app.clients.core_api import CoreApiClient
 from app.clients.llm.base import LlmClient
+from app.clients.llm.deepseek import DeepSeekClient
 from app.clients.llm.fake import FakeLlmClient
 from app.core.config import Settings, get_settings
+from app.services.summary.comment_classifier import CommentClassifier, load_comment_classifier
 from app.services.summary.core_adapter import build_caption, build_itinerary, convert_comments
 from app.services.summary.pipeline import run_summary
 
@@ -134,6 +136,7 @@ class SummaryWorker:
         llm: LlmClient,
         *,
         is_llm_killed: bool = False,
+        classifier: CommentClassifier | None = None,
         consumer_name: str | None = None,
         clock_ms: Callable[[], int] | None = None,
     ) -> None:
@@ -142,6 +145,7 @@ class SummaryWorker:
         self.core = core
         self.llm = llm
         self.is_llm_killed = is_llm_killed
+        self.classifier = classifier
         self.consumer = consumer_name or f"{socket.gethostname()}-{os.getpid()}"
         self.clock_ms = clock_ms or read_clock_ms
 
@@ -212,6 +216,7 @@ class SummaryWorker:
             now=datetime.fromtimestamp(self.clock_ms() / 1000, UTC),
             llm=self.llm,
             is_llm_killed=self.is_llm_killed,
+            classifier=self.classifier,
         )
         if run.request is None:
             logger.info("post %s: same input as last summary, LLM not called", post_id)
@@ -267,7 +272,17 @@ class SummaryWorker:
 def build_llm(settings: Settings) -> LlmClient:
     if settings.llm_provider == "fake":
         return FakeLlmClient()
-    raise NotImplementedError(f"LLM provider {settings.llm_provider!r} is not chosen yet (P9)")
+    if settings.llm_provider == "deepseek":
+        return DeepSeekClient(
+            settings.deepseek_api_key,
+            model=settings.llm_model,
+            base_url=settings.deepseek_base_url,
+            timeout_seconds=settings.llm_timeout_seconds,
+            max_output_tokens=settings.llm_max_output_tokens,
+        )
+    raise NotImplementedError(
+        f"LLM provider {settings.llm_provider!r} has no adapter; use deepseek or fake"
+    )
 
 
 def main() -> None:
@@ -280,6 +295,9 @@ def main() -> None:
         ),
         build_llm(settings),
         is_llm_killed=settings.is_summary_llm_killed,
+        classifier=load_comment_classifier(
+            settings.classifier_dir, settings.classifier_threads, settings.classifier_batch
+        ),
     )
     worker.run_forever()
 

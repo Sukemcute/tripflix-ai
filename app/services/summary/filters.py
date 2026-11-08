@@ -192,6 +192,9 @@ def _rule_for(comment: CommentIn, text: str, norm: str, now: datetime) -> str | 
     is_safety = match_safety(comment.body) is not None
     if count_syllables(norm) < MIN_SYLLABLES and not is_safety:
         return "L5"
+    # Lexicon only, never the classifier's video_reaction label: dropping on it lost real
+    # visits it misread ("cô chủ dễ thương, cho mượn xe đạp free"), point recall 0.90 -> 0.72
+    # on the live eval (BAO_CAO).
     off_topic = load("video_reaction").matches(norm) or MENTION in text  # Meta: tag bait
     if off_topic and not (
         any(load(name).matches(norm) for name in _KEEPS_MIXED)

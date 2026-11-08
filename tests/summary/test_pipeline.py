@@ -1,9 +1,18 @@
 import json
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 from app.clients.llm.fake import FakeLlmClient
-from app.services.summary.pipeline import SummaryRun, run_summary
+from app.services.summary.comment_classifier import CommentLabels
+from app.services.summary.pipeline import (
+    MAX_SUMMARY_CHARS,
+    SummaryRun,
+    _summary_text,  # pyright: ignore[reportPrivateUsage]
+    run_summary,
+)
 from app.services.summary.schemas import CommentIn, ItineraryItemIn
+from app.services.summary.validator import RealityGapPoint, SummaryPoint, ValidatedSummary
 
 NOW = datetime(2026, 11, 5, 12, tzinfo=UTC)
 TEXTS = [
@@ -45,8 +54,36 @@ def _llm(**sections: object) -> FakeLlmClient:
 PROS = [{"comment_ids": ["c1", "c2", "c3"], "aspect": "canh_quan", "text": "View biển đẹp"}]
 
 
+NO_LABEL = CommentLabels(
+    is_experienced=False,
+    is_first_hand=False,
+    is_hearsay=False,
+    is_complaint=False,
+    is_praise=False,
+    is_video_reaction=False,
+)
+FIRST_HAND = replace(NO_LABEL, is_experienced=True, is_first_hand=True)
+HEARSAY = replace(NO_LABEL, is_experienced=True, is_hearsay=True)
+REACTION = replace(NO_LABEL, is_video_reaction=True)
+
+
+@dataclass
+class FakeClassifier:
+    by_text: dict[str, CommentLabels] = field(default_factory=dict)
+    version: str = "fake-v1"
+    seen: list[tuple[str, str]] = field(default_factory=list)
+
+    def classify(self, pairs: Sequence[tuple[str, str]]) -> list[CommentLabels]:
+        self.seen += pairs
+        return [self.by_text.get(text, NO_LABEL) for text, _ in pairs]
+
+
 def _run(
-    comments: list[CommentIn], llm: FakeLlmClient, previous_hash: str | None = None, **kw: bool
+    comments: list[CommentIn],
+    llm: FakeLlmClient,
+    previous_hash: str | None = None,
+    is_llm_killed: bool = False,
+    classifier: FakeClassifier | None = None,
 ) -> SummaryRun:
     return run_summary(
         comments=comments,
@@ -55,7 +92,8 @@ def _run(
         previous_hash=previous_hash,
         now=NOW,
         llm=llm,
-        **kw,
+        is_llm_killed=is_llm_killed,
+        classifier=classifier,
     )
 
 
@@ -90,6 +128,25 @@ def test_ready_summary_uses_real_ids_counted_people_and_a_code_built_text() -> N
     body = request.model_dump(mode="json", by_alias=True)
     assert {"inputHash", "promptVersion", "commentCount", "generatedAt"} <= set(body)
     assert body["content"]["pros"][0]["commentIds"] == point.comment_ids
+
+
+def _point(ids: list[str], text: str) -> dict[str, object]:
+    return {"comment_ids": ids, "aspect": "canh_quan", "text": text}
+
+
+def test_short_text_keeps_both_sides_and_puts_the_most_backed_point_first() -> None:
+    long_tail = "x" * 110
+    pros = [_point(["c1", "c2"], f"Ít người {long_tail}"), _point(["c1", "c2", "c3"], "Phòng đẹp")]
+    pros += [_point(["c1", "c2"], f"Khen {i} {long_tail}") for i in range(3)]
+    cons = [_point(["c4", "c5"], "Bữa sáng ít món")]
+
+    request = _run(_comments(), _llm(pros=pros, cons=cons)).request
+
+    assert request is not None and request.summary is not None and request.content is not None
+    assert len(request.summary) <= MAX_SUMMARY_CHARS
+    assert request.summary.startswith("Khen: Phòng đẹp;")  # 3 people beats 2
+    assert "Chê: Bữa sáng ít món." in request.summary  # not crowded out by long praise
+    assert len(request.content.pros) == 5  # the full list stays in content
 
 
 def test_same_input_hash_skips_the_llm() -> None:
@@ -158,3 +215,128 @@ def test_every_status_sends_generated_at_because_core_rejects_null() -> None:
         assert body["generatedAt"] == NOW.isoformat().replace("+00:00", "Z")
         statuses.append(body["status"])
     assert statuses == ["no_comments", "insufficient_data", "insufficient_data", "failed", "ready"]
+
+
+def test_classifier_decides_who_went_for_safety_warnings() -> None:
+    own = "Mình ở đây tuần trước, ăn buffet xong bị ngộ độc cả nhà"
+    heard = "Nghe nói chỗ này hay bị ngộ độc lắm"
+    comments = [*_comments(), _comment(7, own), _comment(8, heard)]
+    # the opposite of what the rules say, to show the labels win
+    classifier = FakeClassifier({own: HEARSAY, heard: FIRST_HAND})
+
+    run = _run(comments, _llm(pros=PROS), classifier=classifier)
+
+    assert run.request is not None and run.request.safety is not None
+    assert [w.comment_ids for w in run.request.safety.warnings] == [["cmt_8"]]
+
+
+def test_classifier_video_reaction_label_never_drops_a_comment() -> None:
+    """The label misreads real visits ("cô chủ dễ thương, cho mượn xe đạp free", live eval)."""
+    misread = "cô chủ dễ thương, cho mượn xe đạp free"
+    comments = [*_comments(), _comment(6, misread)]
+
+    run = _run(comments, _llm(pros=PROS), classifier=FakeClassifier({misread: REACTION}))
+
+    assert run.request is not None and run.request.content is not None
+    assert run.request.content.counts.sent == 6
+
+
+def test_classifier_reads_each_comment_with_its_visible_parent() -> None:
+    parent = _comment(5, "Có ai ở đây rồi không, phòng có ồn không?")
+    hidden = _comment(9, "Bình luận đã bị ẩn").model_copy(update={"status": "hidden"})
+    reply = _comment(6, "Mình ở rồi, yên tĩnh lắm").model_copy(update={"parent_id": "cmt_5"})
+    orphan = _comment(7, "Ồn lắm nha, tối không ngủ được").model_copy(update={"parent_id": "cmt_9"})
+    classifier = FakeClassifier()
+
+    _run([*_comments(), parent, hidden, reply, orphan], _llm(pros=PROS), classifier=classifier)
+
+    assert (reply.body, parent.body) in classifier.seen
+    assert (orphan.body, "") in classifier.seen
+    assert all(text != hidden.body for text, _ in classifier.seen)  # hidden: not classified
+
+
+def test_classifier_version_is_part_of_the_input_hash() -> None:
+    runs = [
+        _run(_comments(), _llm(pros=PROS), classifier=c)
+        for c in (None, FakeClassifier(), FakeClassifier(version="fake-v2"))
+    ]
+
+    hashes = {r.request.input_hash for r in runs if r.request}
+    assert len(hashes) == 3 and None not in hashes
+
+
+def test_classifier_skips_comments_the_rules_dropped_but_not_safety_hits() -> None:
+    """Labels are read only for candidates and safety hits: skipping the rest saves time."""
+    spam = _comment(6, "Săn voucher giảm 50% tại shopee.vn/sale nha")  # L6 link
+    short_safety = _comment(7, "bị ngộ độc")  # too short for a candidate, still a safety hit
+    hidden = _comment(8, "Mình ở 2 đêm, phòng sạch").model_copy(update={"status": "hidden"})
+    classifier = FakeClassifier()
+
+    _run([*_comments(), spam, short_safety, hidden], _llm(pros=PROS), classifier=classifier)
+
+    seen = {text for text, _ in classifier.seen}
+    assert spam.body not in seen and hidden.body not in seen
+    assert short_safety.body in seen
+    assert {c.body for c in _comments()} <= seen
+
+
+def _summary(
+    pros: list[SummaryPoint], cons: list[SummaryPoint], gaps: list[RealityGapPoint] | None = None
+) -> str:
+    return _summary_text(ValidatedSummary(pros, cons, gaps or [], [], (), []))
+
+
+def _p(
+    aspect: str, people: int, text: str, short: str | None = None, ids: str = ""
+) -> SummaryPoint:
+    comment_ids = tuple(ids.split()) or tuple(f"{aspect}_{i}" for i in range(people))
+    return SummaryPoint(aspect, text, comment_ids, people, short)  # type: ignore[arg-type]
+
+
+def test_short_forms_let_the_text_hold_every_point() -> None:
+    """Large post (BAO_CAO): full sentences fit 4 of 10 points in 300 chars."""
+    long = "câu đầy đủ rất dài để mô tả ý này cho người đọc hiểu rõ hơn nữa"
+    pros = [
+        _p(a, 9 - k, f"{a} {long}", f"{a} tốt")
+        for k, a in enumerate(["canh_quan", "phuc_vu", "phong_o"])
+    ]
+    cons = [
+        _p(a, 8 - k, f"{a} {long}", f"{a} tệ") for k, a in enumerate(["gia_ca", "do_an", "ve_sinh"])
+    ]
+
+    text = _summary(pros, cons)
+
+    assert text == (
+        "Khen: canh_quan tốt; phuc_vu tốt; phong_o tốt. Chê: gia_ca tệ; do_an tệ; ve_sinh tệ."
+    )
+
+
+def test_missing_short_falls_back_to_the_sentence() -> None:
+    assert _summary([_p("canh_quan", 3, "View biển đẹp.")], []) == "Khen: View biển đẹp."
+
+
+def test_a_con_resting_on_the_writers_of_a_video_gap_is_left_to_the_gap() -> None:
+    cable = _p("dong_duc", 5, "Cáp treo đông", "cáp treo đông", ids="a b c d e")
+    price = _p("gia_ca", 3, "Đồ ăn mắc", "đồ ăn mắc", ids="f g h")
+    gap = RealityGapPoint(
+        "clm_1",
+        "Cáp treo không phải chờ",
+        "Phải chờ lâu",
+        ("a", "b", "c"),
+        3,
+        "cáp treo phải chờ lâu",
+    )
+
+    text = _summary([], [cable, price], [gap])
+
+    assert text == "Chê: đồ ăn mắc. Khác video: cáp treo phải chờ lâu."
+
+
+def test_the_side_more_people_back_picks_first_when_space_runs_out() -> None:
+    filler = "x" * 80  # three items fit, not four
+    pros = [_p("canh_quan", 2, f"Khen một {filler}"), _p("phong_o", 2, f"Khen hai {filler}")]
+    cons = [_p("gia_ca", 6, f"Chê một {filler}"), _p("do_an", 5, f"Chê hai {filler}")]
+
+    text = _summary(pros, cons)
+
+    assert "Chê một" in text and "Chê hai" in text and "Khen hai" not in text
