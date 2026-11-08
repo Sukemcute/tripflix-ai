@@ -1,7 +1,8 @@
 name: ghcr-cleanup
 
 # Dọn phiên bản image cũ trên GHCR: kho private chỉ có 500 MB miễn phí, mỗi lần merge lại thêm image mới.
-# Giữ develop, main, tag phát hành, 5 bản mới nhất và các manifest con của chúng (.github/scripts/ghcr-cleanup.py).
+# Giữ develop, main, tag phát hành, tag trong biến repo GHCR_KEEP_TAGS (bản server đang ghim), 5 bản mới nhất
+# và các manifest con của chúng (.github/scripts/ghcr-cleanup.py).
 # Lịch hằng tuần chỉ chạy trên nhánh mặc định (main) và chỉ xoá thật khi biến repo GHCR_CLEANUP_ENABLED=true;
 # chưa bật thì chỉ in danh sách sẽ xoá. Bản đã xoá khôi phục được trong 30 ngày ở Package settings.
 on:
@@ -30,6 +31,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           PACKAGES: "tripflix-ai/ai-service"
+          # Tag server đang ghim (ví dụ "sha-8d2192a sha-8ec93ca"): không bao giờ xoá. Cập nhật khi đổi bản ghim.
+          KEEP_TAGS: ${{ vars.GHCR_KEEP_TAGS }}
           KEEP_RECENT: "5"
           # Chạy tay: theo ô dry_run. Theo lịch: chỉ xoá khi GHCR_CLEANUP_ENABLED=true.
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && (inputs.dry_run && 'true' || 'false') || (vars.GHCR_CLEANUP_ENABLED == 'true' && 'false' || 'true') }}
