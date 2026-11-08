@@ -30,6 +30,7 @@ from pydantic.alias_generators import to_camel
 
 from app.clients.core_api import CoreApiClient
 from app.clients.llm.base import LlmClient
+from app.clients.llm.deepseek import DeepSeekClient
 from app.clients.llm.fake import FakeLlmClient
 from app.core.config import Settings, get_settings
 from app.services.summary.core_adapter import build_caption, build_itinerary, convert_comments
@@ -267,7 +268,17 @@ class SummaryWorker:
 def build_llm(settings: Settings) -> LlmClient:
     if settings.llm_provider == "fake":
         return FakeLlmClient()
-    raise NotImplementedError(f"LLM provider {settings.llm_provider!r} is not chosen yet (P9)")
+    if settings.llm_provider == "deepseek":
+        return DeepSeekClient(
+            settings.deepseek_api_key,
+            model=settings.llm_model,
+            base_url=settings.deepseek_base_url,
+            timeout_seconds=settings.llm_timeout_seconds,
+            max_output_tokens=settings.llm_max_output_tokens,
+        )
+    raise NotImplementedError(
+        f"LLM provider {settings.llm_provider!r} has no adapter; use deepseek or fake"
+    )
 
 
 def main() -> None:

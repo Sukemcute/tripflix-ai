@@ -51,3 +51,14 @@ def test_unknown_provider_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(ValidationError):
         load()
+
+
+def test_deepseek_provider_reads_its_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+
+    settings = load()
+
+    assert settings.llm_provider == "deepseek"
+    assert settings.deepseek_api_key.get_secret_value() == "sk-test"
+    assert "sk-test" not in repr(settings)  # SecretStr keeps it out of logs
