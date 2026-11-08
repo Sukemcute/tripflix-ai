@@ -94,3 +94,32 @@ def test_the_shortened_text_is_what_gets_masked_and_sent() -> None:
     )
 
     assert prompt.text == "… Gọi [đã che] bị ngộ độc."
+
+
+@pytest.mark.parametrize(
+    ("text", "masked"),
+    [
+        ("Cảm ơn bạn Quế ở bộ phận đặt phòng", "Cảm ơn bạn [tên] ở bộ phận đặt phòng"),
+        ("đặc biệt Anh Diệp Trọng Tín rất dễ mến", "đặc biệt Anh [tên] rất dễ mến"),
+        ("lễ tân Hà dễ thương", "lễ tân [tên] dễ thương"),
+        ("a Thương đẹp trai", "a [tên] đẹp trai"),  # teencode cue
+        ("bạn Nguyễn Văn Đình Tuân cười hiền", "bạn [tên] cười hiền"),
+        ("Lê Thị Hiền phụ trách đặt tour", "[tên] phụ trách đặt tour"),
+    ],
+)
+def test_person_names_after_a_cue_or_with_thi_van_are_masked(text: str, masked: str) -> None:
+    assert mask_pii(text) == masked
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Bãi Ông Lang đẹp, đi Cô Tô, về Bà Rịa Vũng Tàu",  # places that start with a kinship word
+        "Mình ở Hồ Tràm, gần Lý Sơn",  # surnames that start places
+        "khách sạn trên đường Nguyễn Văn Linh",  # a street, not a person
+        "cô chủ dễ thương, anh trai mình đi cùng",  # lowercase word after the cue
+        "nhân viên Hành lý nhiệt tình, A Di Đà Phật",
+    ],
+)
+def test_places_streets_and_common_words_keep_their_text(text: str) -> None:
+    assert mask_pii(text) == text
