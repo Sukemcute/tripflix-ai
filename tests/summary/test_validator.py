@@ -102,9 +102,60 @@ def test_v1_too_many_items_or_ids_are_trimmed_not_failed() -> None:
 
     summary = _run(_output(pros=pros))
 
-    assert [p.text for p in summary.pros] == [f"Ý {i}." for i in range(5)]
+    assert [p.text for p in summary.pros] == [f"Ý {i}." for i in range(5)]  # ties keep order
     trims = [f.detail for f in summary.report if f.action == "trim"]
-    assert trims == ["8 items, kept 5"]
+    assert trims == [
+        "62 ids, kept 50",  # the extra item is checked like the others
+        "8 items, kept 5: dropped ['canh_quan (2)', 'canh_quan (2)', 'canh_quan (2)']",
+    ]
+
+
+def test_v1_overflow_keeps_one_point_per_aspect_before_a_second_of_the_same() -> None:
+    """Large post (BAO_CAO): the LLM split scenery into 4 points and the first 5 lost 4 aspects."""
+    by_code = {f"c{i}": _selected(f"u{i}") for i in range(1, 21)}
+
+    def point(aspect: str, people: int, start: int) -> dict[str, Any]:
+        ids = [f"c{i}" for i in range(start, start + people)]
+        return {"comment_ids": ids, "aspect": aspect, "text": f"{aspect} {people}."}
+
+    pros = [point("canh_quan", 9, 1), point("canh_quan", 8, 1), point("canh_quan", 7, 1)]
+    pros += [point("canh_quan", 6, 1), point("phong_o", 3, 10), point("phuc_vu", 5, 13)]
+    pros += [point("gia_ca", 2, 18), point("do_an", 4, 15)]
+
+    summary = _run(_output(pros=pros), by_code)
+
+    assert [(p.aspect, p.people) for p in summary.pros] == [
+        ("canh_quan", 9),
+        ("phuc_vu", 5),
+        ("do_an", 4),
+        ("phong_o", 3),
+        ("gia_ca", 2),
+    ]
+
+
+def test_v1_second_point_of_an_aspect_fills_a_free_slot() -> None:
+    by_code = {f"c{i}": _selected(f"u{i}") for i in range(1, 7)}
+    pros = [
+        {"comment_ids": ["c1", "c2"], "aspect": "canh_quan", "text": "View biển."},
+        {"comment_ids": ["c3", "c4", "c5"], "aspect": "canh_quan", "text": "Hồ bơi đẹp."},
+    ]
+
+    summary = _run(_output(pros=pros), by_code)
+
+    assert [p.text for p in summary.pros] == ["View biển.", "Hồ bơi đẹp."]  # under the cap
+
+
+def test_v1_broken_extra_item_is_dropped_and_runaway_output_is_capped() -> None:
+    pros = [_pro(["c1", "c2"], f"Ý {i}.") for i in range(5)]
+    pros += [{"comment_ids": ["c1", "c2"], "aspect": "khong_co", "text": "x"}]
+    pros += [_pro(["c1", "c2"], f"Thêm {i}.") for i in range(20)]
+
+    summary = _run(_output(pros=pros))
+
+    assert len(summary.pros) == 5
+    details = [f.detail for f in summary.report if f.rule == "V1"]
+    assert details[0] == "26 items, kept 15"
+    assert "extra item breaks the schema" in details
 
 
 def test_v1_too_many_ids_in_one_item_keeps_the_first_fifty() -> None:
@@ -273,3 +324,44 @@ def test_v8_topic_is_dropped_without_two_people_or_with_a_count() -> None:
 
     assert summary.topics == []
     assert {"V6", "V8"} <= _rules(summary)
+
+
+def test_v6_bad_short_form_is_dropped_but_the_point_stays() -> None:
+    pros = [
+        {**_pro(["c1", "c2"], "View biển đẹp."), "short": "view biển đẹp"},
+        {**_pro(["c1", "c2"], "Hồ bơi rộng."), "short": "nhiều người khen hồ bơi"},  # a count
+        {**_pro(["c1", "c2"], "Bãi biển sạch."), "short": "bãi biển " + "rất " * 15 + "sạch"},
+        _pro(["c1", "c2"], "Phòng mới."),  # no short at all (summary.v2 output)
+    ]
+
+    summary = _run(_output(pros=pros))
+
+    assert [p.short for p in summary.pros] == ["view biển đẹp", None, None, None]
+    assert [f.action for f in summary.report] == ["drop_short", "drop_short"]
+
+
+def test_v6_mosquitoes_at_night_is_not_a_count_of_people() -> None:
+    """Seed s15: "muỗi ban đêm" and "mười bạn" are both "muoi ban" without diacritics."""
+    con = {
+        "comment_ids": ["c1", "c2"],
+        "aspect": "ve_sinh",
+        "text": "Có nhiều muỗi, phải bật vợt muỗi ban đêm.",
+    }
+
+    summary = _run(_output(cons=[con]))
+
+    assert [p.aspect for p in summary.cons] == ["ve_sinh"]
+
+
+def test_v1_a_missing_list_section_reads_as_empty_but_excluded_is_required() -> None:
+    """Large post: the LLM once left out `topics` and the whole run failed."""
+    data = json.loads(_output(pros=[_pro(["c1", "c2"])]))
+    del data["topics"]
+
+    summary = _run(json.dumps(data))
+
+    assert [p.text for p in summary.pros] == ["View biển đẹp."] and summary.topics == []
+    assert [f.detail for f in summary.report] == ["missing, read as empty"]
+    del data["excluded"]
+    with pytest.raises(InvalidLlmOutputError):
+        _run(json.dumps(data))

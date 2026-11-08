@@ -66,11 +66,18 @@ _STRICT = ConfigDict(extra="forbid", frozen=True)
 # (Anthropic long-context tips: extract the relevant quotes before answering).
 
 
+# short: the point in a few words for the 300-char summary text, so it can hold every point
+# (summary.v3). Not checked here: a missing, too long or banned one only falls back to text in
+# the validator, it never fails the run.
+SHORT_CHARS = 40
+
+
 class AspectPoint(BaseModel):
     model_config = _STRICT
     comment_ids: Evidence
     aspect: Aspect
     text: str = Field(min_length=1, max_length=120)
+    short: str | None = None
 
 
 class SafetyMention(BaseModel):
@@ -84,6 +91,7 @@ class RealityGap(BaseModel):
     claim_id: ClaimCode
     comment_ids: Evidence
     reality: str = Field(min_length=1, max_length=120)
+    short: str | None = None
 
 
 class Topic(BaseModel):
