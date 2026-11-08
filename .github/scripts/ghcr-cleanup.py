@@ -1,12 +1,13 @@
 """Dọn phiên bản image cũ trên GHCR của repo này (workflow ghcr-cleanup).
 
-Giữ: tag không bắt đầu bằng sha- (develop, main, tag phát hành), KEEP_RECENT bản có tag
-mới nhất, và mọi manifest con mà các bản giữ lại trỏ tới (image thật, attestation của
-buildx), để không làm hỏng image còn giữ.
+Giữ: tag không bắt đầu bằng sha- (develop, main, tag phát hành), tag trong KEEP_TAGS (bản
+server đang ghim), KEEP_RECENT bản có tag mới nhất, và mọi manifest con mà các bản giữ lại
+trỏ tới (image thật, attestation của buildx), để không làm hỏng image còn giữ.
 Mặc định chỉ liệt kê; DRY_RUN=false mới xoá. Bản đã xoá khôi phục được trong 30 ngày.
 
 Biến môi trường: GITHUB_TOKEN, OWNER, PACKAGES (tên cách nhau bởi dấu cách, ví dụ
-"tripflix-be/core-api"), KEEP_RECENT (mặc định 5), DRY_RUN (mặc định true).
+"tripflix-be/core-api"), KEEP_TAGS (tag không bao giờ xoá, cách nhau bởi dấu cách hoặc dấu phẩy),
+KEEP_RECENT (mặc định 5), DRY_RUN (mặc định true).
 """
 
 import base64
@@ -18,6 +19,7 @@ import urllib.request
 TOKEN = os.environ["GITHUB_TOKEN"]
 OWNER = os.environ["OWNER"].lower()
 PACKAGES = os.environ["PACKAGES"].split()
+KEEP_TAGS = set(os.environ.get("KEEP_TAGS", "").replace(",", " ").split())
 KEEP_RECENT = int(os.environ.get("KEEP_RECENT", "5"))
 DRY_RUN = os.environ.get("DRY_RUN", "true") != "false"
 ACCEPT = ", ".join(
@@ -75,7 +77,7 @@ def tags_of(version):
 
 
 def is_protected(version):
-    return any(not tag.startswith("sha-") for tag in tags_of(version))
+    return any(not tag.startswith("sha-") or tag in KEEP_TAGS for tag in tags_of(version))
 
 
 for package in PACKAGES:
