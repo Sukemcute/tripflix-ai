@@ -198,8 +198,10 @@ class SafetyWarning(_CamelModel):
 
 
 class SummarySafety(_CamelModel):
-    # Public warnings only: core's GET ai-summary is public, hearsay must wait for review.
-    warnings: list[SafetyWarning]
+    warnings: list[SafetyWarning]  # first-hand: shown on the public GET
+    # Hearsay held for a moderator: core stores it, its public GET leaves it out, and an
+    # approved one moves to warnings (agreed with Trang, content/moderation, 2026-11-08).
+    pending_warnings: list[SafetyWarning] = []
 
 
 SummaryStatus = Literal["no_comments", "insufficient_data", "ready", "failed"]

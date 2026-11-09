@@ -86,7 +86,7 @@ def run_summary(
         wanted = {i for c in candidates for i in c.comment_ids}
         wanted |= {c.comment_id for c in comments if c.status == "visible" and match_safety(c.body)}
         labels = classify_comments(comments, classifier, only=wanted)
-    safety = _public_safety(comments, labels)
+    safety = _rule_safety(comments, labels)
     if not comments:
         return SummaryRun(SaveSummaryRequest(status="no_comments", safety=safety, generated_at=now))
 
@@ -183,20 +183,20 @@ def classify_comments(
     return {c.comment_id: label for c, label in zip(visible, found, strict=True)}
 
 
-def _public_safety(
+def _rule_safety(
     comments: Sequence[CommentIn], labels: dict[str, CommentLabels] | None
 ) -> SummarySafety:
-    """Rule warnings from writers telling their own visit; hearsay waits for a moderator."""
+    """Rule warnings: public from writers telling their own visit, pending for hearsay."""
     warnings: list[SafetyWarning] = []
+    pending: list[SafetyWarning] = []
     for c in comments:
         label = labels.get(c.comment_id) if labels else None
         first_hand = label.is_first_hand if label else None
         hit = match_safety(c.body, first_hand) if c.status == "visible" else None
-        if hit and hit.visibility == "public":
-            warnings.append(
-                SafetyWarning(categories=list(hit.categories), comment_ids=[c.comment_id])
-            )
-    return SummarySafety(warnings=warnings)
+        if hit:
+            warning = SafetyWarning(categories=list(hit.categories), comment_ids=[c.comment_id])
+            (warnings if hit.visibility == "public" else pending).append(warning)
+    return SummarySafety(warnings=warnings, pending_warnings=pending)
 
 
 def _content(validated: ValidatedSummary, counts: SummaryCounts) -> SummaryContent:

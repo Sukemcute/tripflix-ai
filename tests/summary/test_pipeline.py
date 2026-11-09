@@ -228,6 +228,11 @@ def test_classifier_decides_who_went_for_safety_warnings() -> None:
 
     assert run.request is not None and run.request.safety is not None
     assert [w.comment_ids for w in run.request.safety.warnings] == [["cmt_8"]]
+    # hearsay goes to core for a moderator; core's public GET leaves it out
+    body = run.request.model_dump(mode="json", by_alias=True)
+    assert body["safety"]["pendingWarnings"] == [
+        {"categories": ["ngo_doc"], "commentIds": ["cmt_7"]}
+    ]
 
 
 def test_classifier_video_reaction_label_never_drops_a_comment() -> None:
