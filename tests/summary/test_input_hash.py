@@ -4,6 +4,7 @@ from app.services.summary.claims import Claim
 from app.services.summary.input_hash import compute_input_hash
 from app.services.summary.lexicon import read_versions
 from app.services.summary.pii import PromptComment
+from app.services.summary.schemas import SafetyWarning, SummarySafety
 
 COMMENTS = [
     PromptComment(cid="c1", text="Phòng sạch", is_first_hand=True),
@@ -35,6 +36,17 @@ def test_any_change_that_alters_the_summary_changes_the_hash() -> None:
 def test_versions_lists_every_lexicon_in_use() -> None:
     assert read_versions()["safety"] >= 3
     assert set(read_versions()) >= {"safety", "injection", "first_hand_cues", "complaint"}
+
+
+def test_safety_warnings_change_the_hash_and_none_keeps_the_old_hash() -> None:
+    base = compute_input_hash(COMMENTS, IDS, CLAIMS, VERSIONS)
+    warning = SafetyWarning(categories=["food_poisoning"], comment_ids=["cmt_9"])
+
+    assert compute_input_hash(COMMENTS, IDS, CLAIMS, VERSIONS, SummarySafety(warnings=[])) == base
+    public = compute_input_hash(COMMENTS, IDS, CLAIMS, VERSIONS, SummarySafety(warnings=[warning]))
+    pending = SummarySafety(warnings=[], pending_warnings=[warning])
+    assert public != base
+    assert compute_input_hash(COMMENTS, IDS, CLAIMS, VERSIONS, pending) not in (base, public)
 
 
 def test_reply_context_changes_the_hash() -> None:

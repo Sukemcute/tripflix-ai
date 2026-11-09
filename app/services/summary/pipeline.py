@@ -105,7 +105,7 @@ def run_summary(
     versions: dict[str, str | int] = read_versions() | {"prompt": prompt_version}
     if classifier:  # rules add nothing, so hashes made before the classifier stay valid
         versions["classifier"] = classifier.version
-    fingerprint = compute_input_hash(prompt, codes, claims, versions)
+    fingerprint = compute_input_hash(prompt, codes, claims, versions, safety)
     if fingerprint == previous_hash:
         return SummaryRun(None)
     failed = SaveSummaryRequest(status="failed", prompt_version=prompt_version, **base)
