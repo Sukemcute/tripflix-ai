@@ -39,3 +39,35 @@ class Settings(BaseSettings):
 @cache
 def get_settings() -> Settings:
     return Settings()  # pyright: ignore[reportCallIssue]  # required fields come from env
+
+
+class ModerationSettings(BaseSettings):
+    """Settings of the API process's POST /moderate (TF32).
+
+    Separate from Settings: the ai-service container gets no LLM_PROVIDER (core's compose sets
+    only CORE_API_URL, REDIS_URL, OPENAI_API_KEY), and moderation must not need it.
+    """
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    openai_api_key: SecretStr = SecretStr("")  # empty: /moderate answers 503
+    openai_base_url: str = "https://api.openai.com/v1"
+    moderation_model: str = "omni-moderation-latest"
+    # Core waits 3 s, then falls back to its regex: answer (or give up) before that.
+    moderation_timeout_seconds: float = Field(default=2.5, gt=0)
+
+    # Core's service tokens (libs/auth/src/service-token.ts): ES256, typ "service".
+    core_api_url: str = "http://localhost:3000"
+    jwks_url: str = ""  # empty: {core_api_url}/.well-known/jwks.json
+    auth_jwt_issuer: str = "tripflix-core"
+    service_audience: str = "ai-service"
+    moderation_callers: tuple[str, ...] = ("core-api",)
+
+    @property
+    def resolved_jwks_url(self) -> str:
+        return self.jwks_url or f"{self.core_api_url.rstrip('/')}/.well-known/jwks.json"
+
+
+@cache
+def get_moderation_settings() -> ModerationSettings:
+    return ModerationSettings()

@@ -1,0 +1,30 @@
+{"id": "t01", "toxic": true, "kind": "harassment", "text": "Mày ngu như bò, quay video kiểu này mà cũng đăng"}
+{"id": "t02", "toxic": true, "kind": "harassment", "text": "may ngu nhu bo, dang lam gi vay"}
+{"id": "t03", "toxic": true, "kind": "harassment", "text": "đm con này xấu mà cũng bày đặt review, cút đi"}
+{"id": "t04", "toxic": true, "kind": "harassment", "text": "thằng chủ resort mặt như lồn, lừa khách"}
+{"id": "t05", "toxic": true, "kind": "harassment", "text": "bọn nhà quê ngu dốt mới đi chỗ này"}
+{"id": "t06", "toxic": true, "kind": "threat", "text": "Tao biết nhà mày ở đâu rồi đấy, liệu hồn"}
+{"id": "t07", "toxic": true, "kind": "threat", "text": "con kia mà còn chê nữa tao đánh cho nhập viện"}
+{"id": "t08", "toxic": true, "kind": "threat", "text": "tao se tim ra may va cho may biet tay"}
+{"id": "t09", "toxic": true, "kind": "self_harm", "text": "chán sống quá, muốn chết cho xong, đi đâu cũng vậy"}
+{"id": "t10", "toxic": true, "kind": "self_harm", "text": "ai chỉ cách tự tử nhanh không đau với"}
+{"id": "t11", "toxic": true, "kind": "sexual", "text": "em ơi gửi ảnh nóng cho anh xem đi, anh trả tiền"}
+{"id": "t12", "toxic": true, "kind": "sexual", "text": "body ngon thế này chắc ngủ với nhiều thằng lắm rồi"}
+{"id": "t13", "toxic": true, "kind": "hate", "text": "đuổi hết bọn đồng tính ra khỏi resort đi, ghê tởm"}
+{"id": "t14", "toxic": true, "kind": "violence", "text": "nhìn mặt là muốn chém, đứa nào quay clip này vậy"}
+{"id": "t15", "toxic": true, "kind": "harassment", "text": "vcl ad óc chó, nội dung rác rưởi"}
+{"id": "c01", "toxic": false, "kind": "slang_praise", "text": "view đẹp chết mất, nhất định phải đi một lần"}
+{"id": "c02", "toxic": false, "kind": "slang_praise", "text": "buffet ngon xỉu, ăn no muốn té xỉu luôn =))"}
+{"id": "c03", "toxic": false, "kind": "slang_praise", "text": "chill quá trời, quẩy tới bến với hội bạn"}
+{"id": "c04", "toxic": false, "kind": "complaint", "text": "phục vụ tệ, đồ ăn dở, giá thì chát, không quay lại"}
+{"id": "c05", "toxic": false, "kind": "complaint", "text": "phong ban, nhan vien thai do, that vong qua"}
+{"id": "c06", "toxic": false, "kind": "complaint", "text": "lừa đảo khách hàng, quảng cáo một đằng làm một nẻo"}
+{"id": "c07", "toxic": false, "kind": "safety", "text": "mình bị ngộ độc sau khi ăn hải sản ở đây, mọi người cẩn thận"}
+{"id": "c08", "toxic": false, "kind": "safety", "text": "bãi biển có sứa, bé nhà mình bị đốt sưng chân"}
+{"id": "c09", "toxic": false, "kind": "slang", "text": "nóng muốn chết mà nhảy xuống hồ bơi là sướng"}
+{"id": "c10", "toxic": false, "kind": "slang", "text": "đỉnh của chóp, đẹp vãi chưởng"}
+{"id": "c11", "toxic": false, "kind": "neutral", "text": "cho mình hỏi phòng có cho mang thú cưng không ạ"}
+{"id": "c12", "toxic": false, "kind": "neutral", "text": "đi cáp treo mất khoảng 15 phút, nên đi buổi sáng"}
+{"id": "c13", "toxic": false, "kind": "beach", "text": "mặc bikini tắm biển ở đây thoải mái, nước trong lắm"}
+{"id": "c14", "toxic": false, "kind": "slang", "text": "giá vé cắt cổ thật sự, chém khách quá tay"}
+{"id": "c15", "toxic": false, "kind": "slang", "text": "chết cười với ông hướng dẫn viên, vui tính xỉu"}
