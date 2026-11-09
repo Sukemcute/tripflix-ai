@@ -160,6 +160,23 @@ def test_same_input_hash_skips_the_llm() -> None:
     assert llm.calls == 0
 
 
+def test_hiding_a_safety_comment_the_llm_never_saw_still_resaves() -> None:
+    """Over a year old (L2), so never sent, yet the only safety hit: hiding it must clear it."""
+    old_safety = _comment(7, "Ăn buffet ở đây bị ngộ độc cả nhà").model_copy(
+        update={"created_at": NOW - timedelta(days=400)}
+    )
+    first = _run([*_comments(), old_safety], _llm(pros=PROS))
+    assert first.request is not None and first.request.safety is not None
+    assert first.request.safety.warnings or first.request.safety.pending_warnings
+
+    assert first.request.content is not None and first.request.content.counts.sent == 5
+    hidden = old_safety.model_copy(update={"status": "hidden"})
+    again = _run([*_comments(), hidden], _llm(pros=PROS), previous_hash=first.request.input_hash)
+
+    assert again.request is not None and again.request.safety is not None
+    assert again.request.safety.warnings == again.request.safety.pending_warnings == []
+
+
 def test_output_breaking_the_schema_fails_without_a_hash() -> None:
     run = _run(_comments(), FakeLlmClient('{"pros": "x"}'))
 

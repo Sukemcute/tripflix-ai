@@ -42,7 +42,16 @@ logger = logging.getLogger(__name__)
 STREAM = "stream:core.content"
 DEAD_LETTER_STREAM = "stream:dead-letter"
 GROUP = "ai-summary"
-COMMENT_EVENTS = {"content.comment.created", "content.comment.updated", "content.comment.deleted"}
+COMMENT_EVENTS = {
+    "content.comment.created",
+    "content.comment.updated",
+    "content.comment.deleted",
+    # moderation (Trang, 2026-11-09): one event per comment whose visibility changed
+    "content.comment.hidden",
+    "content.comment.restored",
+}
+# Core holds the summary back while a hidden comment may still show in it (Trang, 2026-11-09).
+HIDDEN_EVENT = "content.comment.hidden"
 
 DEBOUNCE_MS = 60_000  # [HIỆU CHỈNH] QT §3.1
 MAX_WAIT_MS = 300_000  # [HIỆU CHỈNH]
@@ -63,6 +72,10 @@ def _first_key(post_id: str) -> str:
 
 def _last_run_key(post_id: str) -> str:
     return f"ai:summary:last_run:{post_id}"
+
+
+def _hidden_key(post_id: str) -> str:
+    return f"ai:summary:hidden:{post_id}"
 
 
 def read_clock_ms() -> int:
@@ -102,8 +115,16 @@ class SummaryScheduler:
         first = int(cast(str, self.redis.get(_first_key(post_id))) or now_ms)
         last_run = cast(str | None, self.redis.get(_last_run_key(post_id)))
         due = compute_next_due_ms(now_ms, first, int(last_run) if last_run else None)
+        hidden_due = cast(str | None, self.redis.get(_hidden_key(post_id)))
+        if hidden_due:  # later events never push a hide's run back
+            due = min(due, int(hidden_due))
         self.redis.zadd(DUE_KEY, {post_id: due})
         return due
+
+    def schedule_hidden(self, post_id: str, now_ms: int) -> int:
+        """A hide runs within the debounce of the first hide, skipping the min gap."""
+        self.redis.set(_hidden_key(post_id), now_ms + DEBOUNCE_MS, nx=True, px=TIMER_TTL_MS)
+        return self.schedule(post_id, now_ms)
 
     def schedule_backfill(self, post_id: str, due_ms: int) -> bool:
         """Add a run only if the post has none (ZADD NX): a live event's earlier run stays.
@@ -124,6 +145,7 @@ class SummaryScheduler:
                 # Mark the run now: events during it start a new batch after the min gap (A1).
                 self.redis.set(_last_run_key(post_id), now_ms, px=MIN_GAP_MS)
                 self.redis.delete(_first_key(post_id))
+                self.redis.delete(_hidden_key(post_id))
                 claimed.append(post_id)
         return claimed
 
@@ -190,7 +212,9 @@ class SummaryWorker:
         if delivery_count > MAX_DELIVERIES:
             self._dead_letter(message_id, raw, f"delivered more than {MAX_DELIVERIES} times")
             return
-        if post_id:
+        if post_id and event.type == HIDDEN_EVENT:
+            self.scheduler.schedule_hidden(post_id, self.clock_ms())
+        elif post_id:
             self.scheduler.schedule(post_id, self.clock_ms())
         self.redis.xack(STREAM, GROUP, message_id)
 

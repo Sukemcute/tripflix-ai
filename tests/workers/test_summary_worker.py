@@ -102,6 +102,24 @@ def test_events_push_the_run_back_and_only_one_claim_wins() -> None:
     assert scheduler.schedule(POST, 95_000) == 90_000 + MIN_GAP_MS
 
 
+def test_a_hide_skips_the_min_gap_and_later_events_never_push_it_back() -> None:
+    """Core holds the summary back after a hide, so the new one must come within a minute."""
+    redis = FakeRedis()
+    scheduler = SummaryScheduler(cast(Any, redis))
+    scheduler.schedule(POST, 0)
+    assert scheduler.claim_due(DEBOUNCE_MS) == [POST]  # a run just happened
+
+    hide_at = DEBOUNCE_MS + 1_000
+    assert scheduler.schedule_hidden(POST, hide_at) == hide_at + DEBOUNCE_MS  # no 10 min wait
+    assert scheduler.schedule_hidden(POST, hide_at + 30_000) == hide_at + DEBOUNCE_MS  # cascade
+    assert scheduler.schedule(POST, hide_at + 50_000) == hide_at + DEBOUNCE_MS  # a new comment
+    assert scheduler.claim_due(hide_at + DEBOUNCE_MS) == [POST]
+
+    # Once that run is claimed, ordinary comments wait for the min gap again.
+    after = hide_at + DEBOUNCE_MS + 1_000
+    assert scheduler.schedule(POST, after) == hide_at + DEBOUNCE_MS + MIN_GAP_MS
+
+
 class FakeCoreApi:
     def __init__(self, previous: CoreSummary | None = None, comments_fail: bool = False) -> None:
         self.previous = previous
@@ -150,6 +168,21 @@ def test_unreadable_or_redelivered_events_go_to_dead_letter() -> None:
 
     assert [d["messageId"] for d in redis.dead] == ["1-0", "2-0"]
     assert redis.acked == ["1-0", "2-0"] and not redis.zset
+
+
+@pytest.mark.parametrize("event_type", ["content.comment.hidden", "content.comment.restored"])
+def test_moderation_hide_and_restore_reschedule_the_post(event_type: str) -> None:
+    """Payload agreed with Trang and Thành (2026-11-09); a repeat only reschedules the post."""
+    redis = FakeRedis()
+    worker = _worker(redis, FakeCoreApi())
+
+    worker.handle_entry("1-0", _event(event_type, authorId="u-7"), 1)
+    worker.handle_entry("2-0", _event(event_type, authorId="u-7"), 1)  # delivered twice
+
+    assert list(redis.zset) == [POST] and redis.acked == ["1-0", "2-0"]
+    # Only a hide takes the fast lane: a restore waits like any other change.
+    is_fast = f"ai:summary:hidden:{POST}" in redis.kv
+    assert is_fast == (event_type == "content.comment.hidden")
 
 
 def test_other_event_types_are_acked_and_ignored() -> None:
