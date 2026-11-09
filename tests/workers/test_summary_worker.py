@@ -110,8 +110,8 @@ def test_a_hide_skips_the_min_gap_and_later_events_never_push_it_back() -> None:
     assert scheduler.claim_due(DEBOUNCE_MS) == [POST]  # a run just happened
 
     hide_at = DEBOUNCE_MS + 1_000
-    assert scheduler.schedule_hidden(POST, hide_at) == hide_at + DEBOUNCE_MS  # no 10 min wait
-    assert scheduler.schedule_hidden(POST, hide_at + 30_000) == hide_at + DEBOUNCE_MS  # cascade
+    assert scheduler.schedule_held(POST, hide_at) == hide_at + DEBOUNCE_MS  # no 10 min wait
+    assert scheduler.schedule_held(POST, hide_at + 30_000) == hide_at + DEBOUNCE_MS  # cascade
     assert scheduler.schedule(POST, hide_at + 50_000) == hide_at + DEBOUNCE_MS  # a new comment
     assert scheduler.claim_due(hide_at + DEBOUNCE_MS) == [POST]
 
@@ -181,8 +181,31 @@ def test_moderation_hide_and_restore_reschedule_the_post(event_type: str) -> Non
 
     assert list(redis.zset) == [POST] and redis.acked == ["1-0", "2-0"]
     # Only a hide takes the fast lane: a restore waits like any other change.
-    is_fast = f"ai:summary:hidden:{POST}" in redis.kv
+    is_fast = f"ai:summary:held:{POST}" in redis.kv
     assert is_fast == (event_type == "content.comment.hidden")
+
+
+@pytest.mark.parametrize(
+    ("event_type", "is_fast"),
+    [
+        ("content.comment.hidden", True),
+        ("content.comment.deleted", True),  # core holds a summary back for deleted sources too
+        ("content.comment.created", False),
+        ("content.comment.updated", False),
+        ("content.comment.restored", False),
+    ],
+)
+def test_only_events_that_make_core_hold_the_summary_skip_the_min_gap(
+    event_type: str, is_fast: bool
+) -> None:
+    redis = FakeRedis()
+    worker = _worker(redis, FakeCoreApi())
+    redis.kv[f"ai:summary:last_run:{POST}"] = "0"  # a run just happened at t=0
+
+    worker.handle_entry("1-0", _event(event_type), 1)
+
+    expected = 1_000 + DEBOUNCE_MS if is_fast else MIN_GAP_MS
+    assert redis.zset[POST] == expected
 
 
 def test_other_event_types_are_acked_and_ignored() -> None:
