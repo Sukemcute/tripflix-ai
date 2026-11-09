@@ -227,17 +227,23 @@ class SummaryWorker:
             self.scheduler.schedule(post_id, self.clock_ms())
 
     def _summarize(self, post_id: str) -> None:
+        # generatedAt: before any input is read, so a run that read older comments always loses
+        # to a later one in core's write, however long its LLM call takes (Trang, 2026-11-09).
+        started = datetime.fromtimestamp(self.clock_ms() / 1000, UTC)
         post = self.core.fetch_post(post_id)
         if post is None:
             logger.info("post %s is gone or not public, skipped", post_id)
             return
         previous = self.core.fetch_summary(post_id)
+        # A row saved before sourceCommentIds has unknown sources: core cannot tell whether a
+        # hidden comment is in it, so regenerate it once rather than let the same hash skip it.
+        is_known = previous is not None and previous.source_comment_ids is not None
         run = run_summary(
             comments=convert_comments(self.core.fetch_comments(post_id), post.author_id),
             caption=build_caption(post),
             itinerary=build_itinerary(post),
-            previous_hash=previous.input_hash if previous else None,
-            now=datetime.fromtimestamp(self.clock_ms() / 1000, UTC),
+            previous_hash=previous.input_hash if previous and is_known else None,
+            now=started,
             llm=self.llm,
             is_llm_killed=self.is_llm_killed,
             classifier=self.classifier,

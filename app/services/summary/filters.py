@@ -52,6 +52,7 @@ class Candidate:
     # Parent texts of this author's replies, cut to PARENT_CONTEXT_CHARS: context for the
     # LLM, never this author's opinion (CQA: the question frames the answer).
     contexts: tuple[str, ...] = ()
+    context_ids: tuple[str, ...] = ()  # the parents behind contexts: their text reaches the LLM
     # Authors whose reply agrees with one of these comments ("dung roi", "+1"): code counts
     # them for V3 "2+ authors" (agree/disagree labels as in ABCD); no text goes to the LLM.
     supporters: frozenset[str] = frozenset()
@@ -127,6 +128,9 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
             created_at=group[-1][0].created_at,
             is_suspect=bool(group_clusters[author_id] & copied),
             contexts=collect_contexts(group),
+            context_ids=tuple(
+                dict.fromkeys(p.comment_id for c, _, _ in group if (p := find_parent(c)))
+            ),
             supporters=frozenset().union(*(votes.get(c.comment_id, ()) for c, _, _ in group))
             - {author_id},
         )

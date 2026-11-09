@@ -201,6 +201,50 @@ def test_run_saves_the_result_to_core() -> None:
     assert [r.status for r in core.saved] == ["no_comments"]
 
 
+def test_generated_at_is_when_the_run_started_reading() -> None:
+    """A slow run must not look newer than a run that read the comments after it."""
+    clock = {"ms": 1_000}
+
+    class SlowCore(FakeCoreApi):
+        def fetch_comments(self, post_id: str) -> list[Any]:
+            clock["ms"] = 90_000  # reading and the LLM take time
+            return []
+
+    core = SlowCore()
+    worker = SummaryWorker(
+        cast(Any, FakeRedis()),
+        cast(CoreApiClient, core),
+        FakeLlmClient(),
+        consumer_name="test",
+        clock_ms=lambda: clock["ms"],
+    )
+
+    worker.summarize_post(POST)
+
+    assert core.saved[0].generated_at == datetime.fromtimestamp(1, UTC)
+
+
+@pytest.mark.parametrize(
+    ("sources", "previous_hash"),
+    [(None, None), (["c1"], "h")],  # unknown sources: regenerate once despite the same hash
+)
+def test_a_summary_without_sources_is_regenerated_once(
+    monkeypatch: pytest.MonkeyPatch, sources: list[str] | None, previous_hash: str | None
+) -> None:
+    seen: list[str | None] = []
+
+    def fake_run(**kwargs: Any) -> SummaryRun:
+        seen.append(kwargs["previous_hash"])
+        return SummaryRun(None)
+
+    monkeypatch.setattr(summary_worker, "run_summary", fake_run)
+    previous = CoreSummary(status="ready", input_hash="h", source_comment_ids=sources)
+
+    _worker(FakeRedis(), FakeCoreApi(previous=previous)).summarize_post(POST)
+
+    assert seen == [previous_hash]
+
+
 def test_failed_run_keeps_the_previous_ready_summary(monkeypatch: pytest.MonkeyPatch) -> None:
     core = FakeCoreApi(previous=CoreSummary(status="ready", input_hash="h"))
     monkeypatch.setattr(
