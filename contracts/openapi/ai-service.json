@@ -1,6 +1,49 @@
 {
   "components": {
     "schemas": {
+      "ChatRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "conversationId": {
+            "format": "uuid",
+            "title": "Conversationid",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            },
+            "maxItems": 10,
+            "title": "History",
+            "type": "array"
+          },
+          "message": {
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Message",
+            "type": "string"
+          },
+          "searchMode": {
+            "anyOf": [
+              {
+                "const": "reel",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Searchmode"
+          }
+        },
+        "required": [
+          "conversationId",
+          "message"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -122,6 +165,43 @@
         "title": "ModerateResult",
         "type": "object"
       },
+      "Turn": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "default": "answer",
+            "enum": [
+              "answer",
+              "clarify",
+              "refusal",
+              "no_result",
+              "fallback"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "text"
+        ],
+        "title": "Turn",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -176,6 +256,48 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/chat": {
+      "post": {
+        "operationId": "chat_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Chat",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "get_health_health_get",
