@@ -115,7 +115,7 @@ def event(name: str, payload: dict) -> str:
 
 
 async def understand(request: ChatRequest, settings: ChatSettings, usage: dict) -> Understanding:
-    prompt = (Path(__file__).parents[1] / "prompts" / "assistant-understand.v1.md").read_text(
+    prompt = (Path(__file__).parents[1] / "prompts" / "assistant-understand.v2.md").read_text(
         encoding="utf-8"
     )
     async with httpx.AsyncClient(base_url=settings.deepseek_base_url, timeout=5) as llm:
@@ -203,15 +203,29 @@ async def chat(
                     parsed.intent == "refusal"
                     or (request.search_mode is None and parsed.intent in {"small_talk", "clarify"})
                 ):
-                    answers = {
-                        "refusal": "Mình hỗ trợ du lịch an toàn. Bạn muốn khám phá nơi nào?",
-                        "small_talk": "Chào bạn! Bạn muốn khám phá nơi nào?",
-                        "clarify": "Bạn muốn đi đâu và vào ngày nào?",
-                    }
-                    answer = Answer(
-                        kind="clarify" if parsed.intent == "clarify" else "refusal",
-                        text=answers[parsed.intent],
-                    )
+                    if parsed.intent == "refusal":
+                        answer = Answer(
+                            kind="refusal",
+                            text="Mình hỗ trợ du lịch an toàn. Bạn muốn khám phá nơi nào?",
+                        )
+                    elif parsed.intent == "small_talk":
+                        answer = Answer(
+                            kind="answer",
+                            text="Mình là Tripi, trợ lý du lịch của Tripflix. "
+                            "Mình có thể giúp bạn tìm Reel, lộ trình, khách sạn và chuyến bay.",
+                        )
+                    else:
+                        place = parsed.place.strip()
+                        if parsed.missing == "dates":
+                            destination = f" {place}" if place else ""
+                            question = f"Bạn dự định đi{destination} vào ngày nào?"
+                        elif place:
+                            question = f"Bạn muốn tìm lộ trình, chỗ ở hay chuyến bay đến {place}?"
+                        elif parsed.missing == "place":
+                            question = "Bạn muốn đi đâu?"
+                        else:
+                            question = "Bạn muốn mình tìm gì cho chuyến đi này?"
+                        answer = Answer(kind="clarify", text=question)
                 else:
                     yield event("status", {"step": "searching"})
                     query = parsed.query if parsed else mask_pii(request.message)
