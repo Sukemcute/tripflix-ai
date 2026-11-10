@@ -177,6 +177,28 @@ def test_hiding_a_safety_comment_the_llm_never_saw_still_resaves() -> None:
     assert again.request.safety.warnings == again.request.safety.pending_warnings == []
 
 
+def test_sources_are_what_reached_the_llm_reply_parents_included() -> None:
+    """Core holds a summary back when one of these is hidden, so none may be missing."""
+    old_question = _comment(8, "Phòng ở đây có view biển không mọi người ơi").model_copy(
+        update={"created_at": NOW - timedelta(days=400)}  # too old to send (L2), still a parent
+    )
+    reply = _comment(9, "Có nha, mình ở tầng 12 nhìn thẳng ra biển rất đẹp").model_copy(
+        update={"parent_id": "cmt_8"}
+    )
+    run = _run([*_comments(), old_question, reply], _llm(pros=PROS))
+
+    assert run.request is not None and run.request.status == "ready"
+    assert run.request.source_comment_ids == sorted(
+        [f"cmt_{i}" for i in range(5)] + ["cmt_8", "cmt_9"]
+    )
+
+
+def test_no_comment_text_saved_means_empty_sources_not_unknown() -> None:
+    for comments in ([], _comments(3)):
+        run = _run(comments, _llm())
+        assert run.request is not None and run.request.source_comment_ids == []
+
+
 def test_output_breaking_the_schema_fails_without_a_hash() -> None:
     run = _run(_comments(), FakeLlmClient('{"pros": "x"}'))
 

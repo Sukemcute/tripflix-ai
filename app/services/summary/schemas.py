@@ -217,5 +217,10 @@ class SaveSummaryRequest(_CamelModel):
     comment_count: int = 0
     prompt_version: str | None = None
     model_name: str | None = None
+    # Every comment whose text reached the LLM (after the token cut, reply parents included):
+    # core holds the summary back while one of them is hidden or deleted (Trang, 2026-11-09).
+    # [] means no comment text went in; None (an old row) means unknown.
+    source_comment_ids: list[str] | None = None
     # Required: core's Zod rejects null and orders writes by it (saveIfNewer, be PR #58).
+    # Set when the run starts reading its input, so a slow older run never overwrites a newer one.
     generated_at: AwareDatetime

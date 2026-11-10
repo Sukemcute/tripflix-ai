@@ -88,13 +88,21 @@ def run_summary(
         labels = classify_comments(comments, classifier, only=wanted)
     safety = _rule_safety(comments, labels)
     if not comments:
-        return SummaryRun(SaveSummaryRequest(status="no_comments", safety=safety, generated_at=now))
+        empty = SaveSummaryRequest(
+            status="no_comments", safety=safety, source_comment_ids=[], generated_at=now
+        )
+        return SummaryRun(empty)
 
     selection = select_comments(candidates, now, labels=labels)
     counts = SummaryCounts(
         comments=len(comments), people=selection.people, sent=len(selection.items)
     )
-    base = {"comment_count": len(comments), "safety": safety, "generated_at": now}
+    base = {
+        "comment_count": len(comments),
+        "safety": safety,
+        "source_comment_ids": [],  # no comment text is saved until the LLM writes points
+        "generated_at": now,
+    }
     if decide_summary_status(len(comments), selection) == "insufficient_data":
         content = SummaryContent(counts=counts, needed=MIN_PEOPLE - selection.people)
         return SummaryRun(SaveSummaryRequest(status="insufficient_data", content=content, **base))
@@ -136,6 +144,9 @@ def run_summary(
 
     content = _content(validated, counts)
     text = _summary_text(validated)
+    base["source_comment_ids"] = sorted(
+        {i for s in selection.items for i in (*s.candidate.comment_ids, *s.candidate.context_ids)}
+    )
     if not text:
         # Enough people, but no point had 2+ of them: nothing honest to show (proposal).
         # Keep the LLM result: the call was paid for and must be recorded.

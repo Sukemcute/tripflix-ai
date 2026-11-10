@@ -85,6 +85,7 @@ class _CommentPage(_CoreModel):
 class CoreSummary(_CoreModel):
     status: str
     input_hash: str | None = None
+    source_comment_ids: list[str] | None = None  # missing on rows saved before the field
     updated_at: datetime | None = None
 
 

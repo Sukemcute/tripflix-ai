@@ -135,7 +135,9 @@ def test_event_to_saved_summary_then_gap_then_same_hash(client: "redis.Redis") -
     assert client.zscore(sw.DUE_KEY, POST) == run_at + sw.MIN_GAP_MS
     assert 0 < cast(int, client.pttl(f"ai:summary:last_run:{POST}")) <= sw.MIN_GAP_MS
 
-    core.previous = CoreSummary(status="ready", input_hash=saved.input_hash)
+    core.previous = CoreSummary(
+        status="ready", input_hash=saved.input_hash, source_comment_ids=saved.source_comment_ids
+    )
     clock.ms = run_at + sw.MIN_GAP_MS
     worker.poll_once()
     assert len(core.saved) == 1  # same input hash: nothing new saved
