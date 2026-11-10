@@ -66,6 +66,25 @@
 - Phần 2: cùng lệnh, ruff sạch, pyright 0 lỗi, **432 passed**, 5 skipped.
 - Phần 2, Redis thật (container tạm `redis:8.8-alpine`): `REDIS_TEST_URL=redis://localhost:6390/15 uv run pytest tests/workers` cho **30 passed**.
 
+### Kiểm tích hợp với core (phần 2, 2026-11-10)
+
+- **Phía core:** PR [tripflix-be #107](https://github.com/Sukemcute/tripflix-be/pull/107) (chị Trang, merge vào `develop`):
+  - PUT nhận `sourceCommentIds` (mảng UUID, không bắt buộc, bỏ trùng; UUID sai trả 400);
+  - GET trả `null` / `[]` / mảng; khi có nguồn bị ẩn hoặc xoá thì ẩn `summary`/`keyTakeaways` với người xem nhưng vẫn trả nguồn và `inputHash`;
+  - `generatedAt` ghi bằng `saveIfNewer`.
+- **Bảo kiểm ở máy:** core `develop` `5d68ff7` (có #107) chạy bằng stack local; worker chạy từ nhánh `bao/TF33-source-comment-ids`; LLM thật DeepSeek (`deepseek-flash`, prompt `summary.v3`), 4 lượt gọi. Dữ liệu thử: bài Đà Nẵng có 11 bình luận của 9 người; moderator ẩn bình luận bằng API của core.
+
+| Bước | Kết quả |
+|---|---|
+| 1. Tóm tắt lần đầu | `ready`, core lưu 9 nguồn, GET trả đúng `sourceCommentIds` và `inputHash`. `generatedAt` 03:19:33, lúc lưu 03:19:36: giờ lấy lúc bắt đầu đọc |
+| 2. Ẩn một bình luận nguồn (03:20:27) | Core phát `content.comment.hidden`. Ngay sau đó GET trả `summary: null`, vẫn giữ 9 nguồn và `inputHash` |
+| 3. Chạy lại nhanh | Bản mới lúc 03:21:28, **61 giây sau khi ẩn**, dù lượt trước vừa chạy lúc 03:19 (không chờ 10 phút). Còn 8 nguồn, không có bình luận đã ẩn; GET hiện lại tóm tắt |
+| 4. Bản cũ có nguồn `null` | Đặt `source_comment_ids = NULL`, giữ hash. Lượt đầu gọi LLM 1 lần, ghi 8 nguồn; lượt sau "same input", không gọi LLM |
+
+- **Chị Trang kiểm ở máy chị (LLM giả):** 7 nguồn gửi, DB lưu 7, GET trả 7; `insufficient_data` gửi `[]`; ẩn nguồn thì 60 giây sau có bản mới; bản `null` chạy lại thành `[]`; `generatedAt` cũ không đè bản mới; UUID sai trả 400.
+- **Ghi nhận ngoài tích hợp:** lượt chạy sau khi ẩn làm rơi ý chê "cáp treo chờ lâu" dù 2 người viết vẫn còn; lượt sau có lại. LLM cho kết quả khác nhau giữa các lần, để đo trong bộ eval.
+- **Sau khi deploy AI:** chạy `python -m app.workers.backfill --dry-run` rồi `python -m app.workers.backfill` trong container worker, vì worker không tự quét lúc khởi động. Mỗi bài `ready` có nguồn `null` gọi LLM đúng một lần.
+
 ## Cách kiểm lại
 
 1. Chạy lệnh kiểm tra ở trên.
