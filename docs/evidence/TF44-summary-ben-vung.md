@@ -75,6 +75,7 @@ Căn cứ: `docs/research/reports/DeepResearch_AI_Summary_1_trieu_binh_luan.md`.
 ## Kết quả kiểm tra
 
 - `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest`: ruff sạch, pyright 0 lỗi, **483 passed**, 5 skipped. Trước khi sửa: 448 passed.
+- Sau phần 2 (HEAD `6e1cbbe`, chạy ngày 2026-11-11): ruff sạch, pyright 0 lỗi, **507 passed**, 5 skipped. Chạy riêng `5320612` được 485 passed, `5fb6c83` được 486 passed.
 - Redis thật (container tạm `redis:8.8-alpine`, cùng phiên bản staging): `REDIS_TEST_URL=redis://localhost:6390/15 uv run pytest tests/workers` cho **40 passed**. Kiểm thêm: claim, hết hạn thuê, trả bài về hàng đợi; `retry` dùng `ZADD LT` giữ lịch sớm hơn; bộ đếm lần thử có TTL.
 
 ## Khi hỏng: cái gì vẫn chạy, gỡ ra thế nào
