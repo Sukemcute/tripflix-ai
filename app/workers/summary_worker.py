@@ -447,6 +447,7 @@ def build_llm(settings: Settings) -> LlmClient:
             model=settings.llm_model,
             prices=prices,
             base_url=settings.openai_base_url,
+            reasoning_effort=settings.openai_reasoning_effort,
             **limits,
         )
     if settings.llm_provider == "anthropic":

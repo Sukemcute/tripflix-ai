@@ -85,7 +85,8 @@ class DeepSeekClient:
                 continue
             response.raise_for_status()
             data = response.json()
-            if _content(data).strip() or attempt == MAX_ATTEMPTS:
+            # Out of tokens is not blank by chance: the same request ends the same way.
+            if _content(data).strip() or _finish_reason(data) == "length":
                 break
         usage = data.get("usage", {})
         return LlmResult(
@@ -106,6 +107,11 @@ def _with_schema(system: str, schema: dict[str, Any]) -> str:
 
 def _is_retryable(response: httpx.Response) -> bool:
     return response.status_code == httpx.codes.TOO_MANY_REQUESTS or response.status_code >= 500
+
+
+def _finish_reason(data: dict[str, Any]) -> str:
+    choices = data.get("choices") or [{}]
+    return str(choices[0].get("finish_reason") or "")
 
 
 def _content(data: dict[str, Any]) -> str:

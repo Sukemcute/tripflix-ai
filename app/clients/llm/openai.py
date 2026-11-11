@@ -30,15 +30,21 @@ class OpenAILlmClient(DeepSeekClient):
         model: str,
         prices: Mapping[str, float],  # USD per 1M tokens: input, cached_input, output
         base_url: str = "https://api.openai.com/v1",
+        reasoning_effort: str = "minimal",
         **kwargs: Any,
     ) -> None:
         if not model:
             raise ValueError("LLM_MODEL is required for openai")
         super().__init__(api_key, model=model, base_url=base_url, **kwargs)
         self.prices = dict(prices)
+        self.reasoning_effort = reasoning_effort
 
     def _body(self, system: str, user: str, schema: dict[str, Any]) -> dict[str, Any]:
-        return {
+        # Reasoning models count thinking in max_completion_tokens: by default gpt-5-nano spent
+        # all 3,000 on it and returned nothing (live eval 2026-11-11); "minimal" used 0 and
+        # answered in 3 s. Empty means not sent, for models without reasoning (gpt-4o-mini).
+        effort = {"reasoning_effort": self.reasoning_effort} if self.reasoning_effort else {}
+        return effort | {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},

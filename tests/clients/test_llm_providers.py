@@ -63,6 +63,7 @@ def test_openai_sends_a_strict_schema_and_no_deepseek_only_fields() -> None:
         "json_schema": {"name": "summary", "schema": SCHEMA, "strict": True},
     }
     assert body["max_completion_tokens"] == 3000
+    assert body["reasoning_effort"] == "minimal"
     assert {"thinking", "temperature", "max_tokens"}.isdisjoint(body)
     assert result.output == OUTPUT and result.model_name == "gpt-test-2026"
     # 600k fresh x 1.0 + 400k cached x 0.1 + 100k out x 4.0, per 1M
@@ -74,6 +75,34 @@ def test_openai_retries_a_429_like_deepseek() -> None:
 
     assert client.generate("s", "u", SCHEMA).output == OUTPUT
     assert len(sent) == 2
+
+
+def test_openai_omits_reasoning_effort_for_models_without_reasoning() -> None:
+    http = httpx.Client(
+        base_url="https://api.test/v1",
+        transport=httpx.MockTransport(lambda r: _openai_ok()),
+    )
+    client = OpenAILlmClient(
+        SecretStr("sk"), model="gpt-4o-mini", prices=PRICES, reasoning_effort="", http=http
+    )
+
+    assert "reasoning_effort" not in client._body("s", "u", SCHEMA)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_running_out_of_tokens_is_not_retried() -> None:
+    """gpt-5-nano spent its whole cap on reasoning: asking again ends the same way and pays."""
+    out_of_tokens = httpx.Response(
+        200,
+        json={
+            "model": "gpt-test",
+            "choices": [{"message": {"content": ""}, "finish_reason": "length"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 3000},
+        },
+    )
+    client, sent = _openai(out_of_tokens, _openai_ok())
+
+    assert client.generate("s", "u", SCHEMA).output == ""  # the validator turns it into failed
+    assert len(sent) == 1
 
 
 def test_openai_needs_a_model() -> None:

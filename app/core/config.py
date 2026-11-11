@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     openai_api_key: SecretStr = SecretStr("")  # same variable as /moderate uses
     openai_base_url: str = "https://api.openai.com/v1"
+    # Reasoning models (gpt-5 family, o-series) need it or spend the output cap on thinking;
+    # empty for models without reasoning, which reject the field.
+    openai_reasoning_effort: str = "minimal"
     anthropic_api_key: SecretStr = SecretStr("")
     # USD per 1M tokens for LLM_MODEL; required for openai, optional elsewhere (the adapter
     # knows its default model's price). Every LLM call records its cost (RULES §10).
