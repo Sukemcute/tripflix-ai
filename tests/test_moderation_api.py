@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from collections.abc import Iterator, Sequence
 from typing import Any
@@ -9,9 +10,10 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 
 from app.api.auth import ServiceTokenVerifier, get_service_verifier
-from app.api.moderation import get_moderation_client
+from app.api.moderation import get_moderation_client, get_visobert_client
 from app.clients.moderation.base import ModerationResult, ModerationUpstreamError
 from app.clients.moderation.fake import FAKE_MODEL, FakeModerationClient
+from app.clients.moderation.visobert import VisobertModeration
 from app.core.config import ModerationSettings, get_moderation_settings
 from app.main import app
 
@@ -51,6 +53,7 @@ def fake() -> Iterator[FakeModerationClient]:
         lambda _t: KEY.public_key(), issuer=ISSUER, audience=AUDIENCE, callers=("core-api",)
     )
     app.dependency_overrides[get_moderation_client] = lambda: client
+    app.dependency_overrides[get_visobert_client] = lambda: None
     app.dependency_overrides[get_moderation_settings] = lambda: ModerationSettings(
         _env_file=None,  # pyright: ignore[reportCallIssue]
         moderation_timeout_seconds=0.2,
@@ -166,3 +169,62 @@ def test_jwks_url_follows_core_api_url() -> None:
     )
 
     assert settings.resolved_jwks_url == "http://core-api:3000/.well-known/jwks.json"
+
+
+def test_safety_shadow_logs_without_changing_response(
+    fake: FakeModerationClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    app.dependency_overrides[get_moderation_settings] = lambda: ModerationSettings(
+        _env_file=None,  # pyright: ignore[reportCallIssue]
+        is_moderation_safety_shadow_enabled=True,
+    )
+    body = {"items": [{"id": "cmt:2", "text": "Tôi bị ngộ độc thức ăn 0912345678"}]}
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        response = http.post("/moderate", json=body, headers=auth())
+    assert response.status_code == 200
+    assert response.json()["results"][0]["flagged"] is False
+    assert "moderation.shadow" in caplog.text
+    assert '"version": 6' in caplog.text
+    assert "0912345678" not in caplog.text
+
+
+def test_visobert_adds_review_signal_without_overwriting_openai_categories(
+    fake: FakeModerationClient,
+) -> None:
+    from tests.clients.test_visobert_moderation import local
+
+    model = local()
+    app.dependency_overrides[get_visobert_client] = lambda: model
+    try:
+        response = http.post(
+            "/moderate", json={"items": [{"id": "c:1", "text": "test"}]}, headers=auth()
+        )
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["flagged"] is True
+        assert result["categories"]["harassment"] is False
+        assert result["categories"]["visobert/toxic"] is True
+        assert result["scores"]["harassment"] == 0.01
+        assert "+visobert-" in response.json()["model"]
+    finally:
+        model.close()
+
+
+def test_unavailable_visobert_keeps_openai_result(fake: FakeModerationClient) -> None:
+    class Unavailable(VisobertModeration):
+        async def moderate_batch(self, texts: list[str]):
+            return None
+
+    app.dependency_overrides[get_visobert_client] = lambda: Unavailable(
+        None,
+        None,
+        threshold=0.97,
+        pad_id=1,
+        batch_size=4,
+        timeout_seconds=0.1,
+    )
+    response = http.post("/moderate", json=BODY, headers=auth())
+    assert response.status_code == 200
+    assert response.json()["results"][0]["flagged"] is False
+    assert response.json()["results"][1]["flagged"] is True
+    assert response.json()["model"] == FAKE_MODEL

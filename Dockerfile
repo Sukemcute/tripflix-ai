@@ -1,10 +1,21 @@
 # syntax=docker/dockerfile:1
 FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
 
+FROM python:3.12-slim AS visobert-model
+COPY --from=uv /uv /bin/uv
+WORKDIR /build
+RUN uv pip install --system --index-url https://download.pytorch.org/whl/cpu torch==2.5.1
+RUN uv pip install --system transformers==4.51.0 tokenizers==0.21.2 onnx==1.17.0 \
+    'onnxruntime>=1.20,<2' numpy sentencepiece safetensors accelerate==1.6.0
+COPY app ./app
+COPY scripts/export_visobert.py ./scripts/export_visobert.py
+RUN python -m scripts.export_visobert --out /models/visobert_moderation
+
 FROM python:3.13-slim AS base
 COPY --from=uv /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_CACHE_DIR=/tmp/uv-cache PYTHONUNBUFFERED=1
 WORKDIR /app
+COPY --from=visobert-model /models/visobert_moderation ./app/models/visobert_moderation
 
 FROM base AS dependencies
 COPY pyproject.toml uv.lock ./

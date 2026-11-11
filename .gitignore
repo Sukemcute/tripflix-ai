@@ -14,3 +14,4 @@ htmlcov/
 evals/moderation/.eval_cache.json
 # comment classifier bundle: fetched from the GitHub Release (scripts/fetch_classifier.py)
 app/models/comment_classifier/
+app/models/visobert_moderation/

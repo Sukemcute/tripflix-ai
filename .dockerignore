@@ -11,3 +11,4 @@ __pycache__
 # Dữ liệu nghiên cứu (vài trăm MB, có dữ liệu YouTube không được phát tán): image dev COPY . . nên phải loại
 data/
 docs/research/
+app/models/visobert_moderation/
