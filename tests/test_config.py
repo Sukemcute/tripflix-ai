@@ -59,12 +59,17 @@ def test_env_overrides_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.classifier_max_comments == 200
 
 
-# openai and anthropic were accepted with no adapter behind them: startup crashed later.
-@pytest.mark.parametrize("provider", ["gemini", "openai", "anthropic"])
-def test_provider_without_an_adapter_is_rejected(
+@pytest.mark.parametrize("provider", ["fake", "deepseek", "openai", "anthropic"])
+def test_every_provider_with_an_adapter_is_accepted(
     monkeypatch: pytest.MonkeyPatch, provider: str
 ) -> None:
     monkeypatch.setenv("LLM_PROVIDER", provider)
+
+    assert load().llm_provider == provider
+
+
+def test_provider_without_an_adapter_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
 
     with pytest.raises(ValidationError):
         load()

@@ -15,14 +15,22 @@ class Settings(BaseSettings):
 
     # No default: a missing or misspelled LLM_PROVIDER must stop startup, never fall back to fake.
     # Only providers with an adapter: a new one is a new LlmClient class plus its name here.
-    llm_provider: Literal["fake", "deepseek"]
-    llm_model: str = ""
+    llm_provider: Literal["fake", "deepseek", "openai", "anthropic"]
+    llm_model: str = ""  # empty: the adapter's default (openai has none and requires it)
     llm_timeout_seconds: float = 30.0
     llm_max_output_tokens: int = 3000  # 1500 cut big posts mid-JSON (real LLM trial 2026-11-05)
     # env name kept (SUMMARY_LLM_KILL); field named as a question (RULES §4.1)
     is_summary_llm_killed: bool = Field(default=False, validation_alias="SUMMARY_LLM_KILL")
     deepseek_api_key: SecretStr = SecretStr("")
     deepseek_base_url: str = "https://api.deepseek.com"
+    openai_api_key: SecretStr = SecretStr("")  # same variable as /moderate uses
+    openai_base_url: str = "https://api.openai.com/v1"
+    anthropic_api_key: SecretStr = SecretStr("")
+    # USD per 1M tokens for LLM_MODEL; required for openai, optional elsewhere (the adapter
+    # knows its default model's price). Every LLM call records its cost (RULES §10).
+    llm_price_input: float | None = None
+    llm_price_cached_input: float | None = None
+    llm_price_output: float | None = None
 
     # Service client created with core's auth:create-service-client (secret printed once).
     service_client_id: str = "ai-service"

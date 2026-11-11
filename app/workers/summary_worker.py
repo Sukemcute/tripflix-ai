@@ -41,10 +41,12 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from pydantic.alias_generators import to_camel
 
 from app.clients.core_api import CoreApiClient
+from app.clients.llm.anthropic import AnthropicLlmClient
 from app.clients.llm.base import LlmClient
 from app.clients.llm.deepseek import DeepSeekClient
 from app.clients.llm.fake import FakeLlmClient
 from app.clients.llm.guarded import GuardedLlmClient, LlmUnavailableError
+from app.clients.llm.openai import OpenAILlmClient
 from app.core.breaker import CircuitBreaker
 from app.core.config import Settings, get_settings
 from app.services.summary.comment_classifier import (
@@ -419,14 +421,43 @@ def _is_permanent(error: Exception) -> bool:
 
 
 def build_llm(settings: Settings) -> LlmClient:
+    """The one place that knows the providers: everything else sees the LlmClient port."""
+    limits = {
+        "timeout_seconds": settings.llm_timeout_seconds,
+        "max_output_tokens": settings.llm_max_output_tokens,
+    }
+    prices = {
+        name: value
+        for name, value in (
+            ("input", settings.llm_price_input),
+            ("cached_input", settings.llm_price_cached_input),
+            ("output", settings.llm_price_output),
+        )
+        if value is not None
+    }
     if settings.llm_provider == "fake":
         return FakeLlmClient()
+    if settings.llm_provider == "openai":
+        if len(prices) < 3:
+            raise ValueError(
+                "openai needs LLM_PRICE_INPUT, LLM_PRICE_CACHED_INPUT, LLM_PRICE_OUTPUT"
+            )
+        return OpenAILlmClient(
+            settings.openai_api_key,
+            model=settings.llm_model,
+            prices=prices,
+            base_url=settings.openai_base_url,
+            **limits,
+        )
+    if settings.llm_provider == "anthropic":
+        return AnthropicLlmClient(
+            settings.anthropic_api_key, model=settings.llm_model, prices=prices, **limits
+        )
     return DeepSeekClient(
         settings.deepseek_api_key,
         model=settings.llm_model,
         base_url=settings.deepseek_base_url,
-        timeout_seconds=settings.llm_timeout_seconds,
-        max_output_tokens=settings.llm_max_output_tokens,
+        **limits,
     )
 
 
