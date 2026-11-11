@@ -35,6 +35,28 @@
 - Tên model nằm trong hash, nên sau khi đổi provider, mỗi bài tóm tắt lại 1 lần.
 - Chưa chạy live với OpenAI và Anthropic, vì chưa có key. Cần chạy `evals/run_evals.py --llm live` trên 15 bài seed trước khi dùng thật (tốn tiền).
 
+### Phần 2: chịu được bài rất lớn (2026-11-11)
+
+Căn cứ: `docs/research/reports/DeepResearch_AI_Summary_1_trieu_binh_luan.md`. Mã B trong bảng là mã badcase trong báo cáo đó.
+
+| # | Vấn đề | Sửa | Đo |
+|---|---|---|---|
+| B10 | Bài làm worker hết RAM: process chết không có exception, bộ đếm lần thử không tăng, bài chạy lại và làm chết worker mãi | Đếm lần thử **lúc bắt đầu chạy**; lần bắt đầu thứ 6 thì đưa vào hàng lỗi. Cầu dao LLM mở thì trả lại lượt đã đếm | test |
+| B8 | Đọc sự kiện và chạy job dùng chung vòng lặp; trong lúc chạy một lượt dài, sự kiện bị core cắt khỏi stream (`MAXLEN ~100k`) | 2 thread: vòng sự kiện và vòng job | test: vòng job không đụng tới stream |
+| B14 | Bộ phân loại hỏng thì chuyển sang luật **im lặng** | `content.labeler = model / rules / mixed`, kèm trong log mỗi lần lưu | test |
+| B5 | Lọc gần trùng O(n²) | MinHash LSH (8 băng × 4 hàng, `crc32`, seed cố định), Jaccard vẫn quyết định | 16.000 bình luận: **36 s xuống 2,1 s**; 64.000: 11 s. Kết quả **giống hệt** bản so từng cặp (test đối chiếu 900 câu; số ứng viên trùng khớp ở mọi cỡ) |
+| B2 | Vượt trần thì lấy "N bình luận mới nhất" | Mẫu phân tầng (gốc hay phản hồi, theo tuần), chia slot theo tỉ lệ, weighted reservoir A-Res theo like; bình luận an toàn đi trước; ổn định giữa các lần chạy | test: tuần cũ và phản hồi giữ đúng phần của mình |
+| B1, B7 | Mỗi lượt phân loại lại từ đầu | Port `LabelStore` + adapter Redis (Bảo chọn: Redis trước, core sau). Process mới `app.workers.label_worker` (nhóm `ai-labels`) gắn nhãn bình luận gốc lúc ghi; cascade: luật lọc đã bỏ thì không chạy model, trừ câu an toàn. Lượt tóm tắt dùng lại nhãn còn đúng (cùng version, cùng hash nội dung) và lưu nhãn mới | Bài 1.000 bình luận: lượt đầu 7,8 s, **chạy lại 0,29 s**; input hash giữ nguyên (test) |
+| B4 | Đếm người trên khoảng 200 bình luận gửi LLM | `content.population` (đếm trên toàn bài, HyperLogLog) và `estimate` cho từng ý: tỉ lệ trong mẫu nhân tổng số người, khoảng Wilson 95%. Chỉ có khi bài lớn hơn phần đã đọc | test: 30/200 trên bài 30.000 người thành khoảng 4.500 |
+
+- **Đường lui:**
+  - kho nhãn lỗi thì lượt chạy tự gắn nhãn như trước;
+  - worker gắn nhãn lỗi thì ack sự kiện rồi để lượt tóm tắt gắn nhãn;
+  - không có bộ đếm thì chỉ ghi số đếm chính xác trên mẫu.
+- **Eval live** (DeepSeek, có bộ phân loại): 15/15 cổng; token vào 33.925, **giống hệt trước khi sửa**, nghĩa là bài nhỏ không đổi input; tỉ lệ bắt khác biệt video 1,0; chi phí 0,0049 USD.
+- **Redis thật** (container tạm 8.8): `RedisLabelStore` đếm đúng 999/333/700; gửi lặp không đếm 2 lần; có hạn giờ; 50/50 test worker pass.
+- **Chưa làm, cần core (Thành):** API lấy mẫu và API bộ đếm phía core (để không phải đọc 10.000 bình luận mỗi lượt), nơi lưu nhãn lâu dài, đối soát các bài đang bị giữ lại. Process `label_worker` cần thêm service trong compose (anh Phong).
+
 ## Đối chiếu tiêu chí
 
 | Tiêu chí | Đạt | Bằng chứng |
