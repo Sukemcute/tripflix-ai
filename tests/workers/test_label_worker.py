@@ -1,8 +1,11 @@
 import json
+import os
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
+
+import pytest
 
 from app.services.summary.comment_classifier import CommentLabels
 from app.services.summary.label_store import (
@@ -192,3 +195,36 @@ def test_an_unreadable_event_goes_to_dead_letter_and_is_acked() -> None:
     )
 
     assert redis.dead[0]["group"] == "ai-labels" and redis.acked == ["9-0"]
+
+
+@pytest.mark.parametrize("name", ["server-1", ""])
+def test_both_workers_take_their_consumer_name_from_settings(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """A fixed name stops every container rebuild from adding a dead consumer (Phong)."""
+    from app.core.config import get_settings
+    from app.workers import label_worker, summary_worker
+
+    for key, value in {
+        "LLM_PROVIDER": "fake",
+        "CLASSIFIER_ENABLED": "false",
+        "SUMMARY_WORKER_CONSUMER_NAME": name,
+        "LABEL_WORKER_CONSUMER_NAME": name,
+    }.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    names: list[str] = []
+    monkeypatch.setattr(
+        summary_worker.SummaryWorker, "run_forever", lambda s: names.append(s.consumer)
+    )
+    monkeypatch.setattr(label_worker.LabelWorker, "run_forever", lambda s: names.append(s.consumer))
+    try:
+        summary_worker.main()
+        label_worker.main()
+    finally:
+        get_settings.cache_clear()
+
+    if name:
+        assert names == ["server-1", "server-1"]
+    else:  # hostname-PID as before
+        assert names[0].endswith(f"-{os.getpid()}") and names[1].endswith(f"-{os.getpid()}-labels")

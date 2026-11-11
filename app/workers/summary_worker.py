@@ -641,6 +641,7 @@ def main() -> None:
         classifier=build_classifier(settings),
         classifier_max_comments=settings.classifier_max_comments,
         label_store=RedisLabelStore(client),
+        consumer_name=settings.summary_worker_consumer_name or None,
     )
     worker.run_forever()
 

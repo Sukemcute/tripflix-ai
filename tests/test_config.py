@@ -21,6 +21,8 @@ def no_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "LLM_MAX_OUTPUT_TOKENS",
         "CLASSIFIER_THREADS",
         "CLASSIFIER_BATCH",
+        "SUMMARY_WORKER_CONSUMER_NAME",
+        "LABEL_WORKER_CONSUMER_NAME",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("LLM_PROVIDER", "fake")
@@ -84,3 +86,14 @@ def test_deepseek_provider_reads_its_key(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.llm_provider == "deepseek"
     assert settings.deepseek_api_key.get_secret_value() == "sk-test"
     assert "sk-test" not in repr(settings)  # SecretStr keeps it out of logs
+
+
+def test_worker_consumer_names_are_empty_unless_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert (load().summary_worker_consumer_name, load().label_worker_consumer_name) == ("", "")
+
+    monkeypatch.setenv("SUMMARY_WORKER_CONSUMER_NAME", "server-1")
+    monkeypatch.setenv("LABEL_WORKER_CONSUMER_NAME", "server-1")
+
+    settings = load()
+    assert settings.summary_worker_consumer_name == "server-1"
+    assert settings.label_worker_consumer_name == "server-1"
