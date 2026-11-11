@@ -30,6 +30,9 @@ Input and recovery (Thành, PR be #128, 2026-11-11):
 - a run reads core's seeded random sample (SAMPLE_SIZE) with whole-post counts, one request
   instead of up to 50 pages of the newest comments; an older core without the route means
   the newest pages again, without whole-post counts;
+- every RECONCILE_EVERY_MS one replica asks core which posts it holds back for a hidden
+  source and schedules them like backfill, so a hide event core trimmed from the stream
+  (MAXLEN ~100k) is not lost for good.
 """
 
 import logging
@@ -120,6 +123,10 @@ PERMANENT_STATUSES = {400, 413, 422}  # core rejects the request itself: retryin
 # Cochran: about 2,400 writers give a share within +-2% at 95%, whatever the post size;
 # 3,000 comments use ~30 MB in the worker. [HIỆU CHỈNH]
 SAMPLE_SIZE = 3_000
+RECONCILE_EVERY_MS = 6 * 3_600_000  # [HIỆU CHỈNH] Thành suggested 6 h or once a day
+RECONCILE_RETRY_MS = 600_000
+RECONCILE_CHECK_MS = 60_000  # how often a job loop looks at the lock
+RECONCILE_KEY = "ai:summary:reconcile"  # set NX with a TTL: lock and timer in one key
 DUE_KEY = "ai:summary:due"
 INFLIGHT_KEY = "ai:summary:inflight"
 
@@ -291,6 +298,7 @@ class SummaryWorker:
         self.label_store = label_store
         self.consumer = consumer_name or f"{socket.gethostname()}-{os.getpid()}"
         self.clock_ms = clock_ms or read_clock_ms
+        self._next_reconcile_check_ms = 0
 
     def ensure_group(self) -> None:
         """Read from the start of the stream so events sent while the worker was down count."""
@@ -312,11 +320,35 @@ class SummaryWorker:
 
     def run_jobs_once(self) -> bool:
         """Run at most one due post; False when none was due."""
+        self.maybe_reconcile()
         self.scheduler.reclaim_expired(self.clock_ms())
         claimed = self.scheduler.claim_due(self.clock_ms(), limit=1)
         for post_id in claimed:
             self.summarize_post(post_id)
         return bool(claimed)
+
+    def maybe_reconcile(self) -> int:
+        """Schedule the posts core holds back, at most once per RECONCILE_EVERY_MS across all
+        replicas (whoever sets the key runs it). Returns how many posts were scheduled."""
+        now = self.clock_ms()
+        if now < self._next_reconcile_check_ms:
+            return 0
+        self._next_reconcile_check_ms = now + RECONCILE_CHECK_MS
+        if not self.redis.set(RECONCILE_KEY, now, nx=True, px=RECONCILE_EVERY_MS):
+            return 0
+        scheduled = 0
+        try:
+            for post_id in self.core.iter_held_summaries():
+                scheduled += self.scheduler.schedule_backfill(post_id, now)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != httpx.codes.NOT_FOUND:
+                raise
+            logger.warning("core has no reconciliation route yet, next try in 6 h")
+        except Exception:
+            self.redis.set(RECONCILE_KEY, now, px=RECONCILE_RETRY_MS)  # try again soon
+            raise
+        logger.info("reconciliation scheduled %s held posts", scheduled)
+        return scheduled
 
     def run_forever(self) -> None:
         """Events and runs on two threads: a 30 s run no longer stops the stream from being

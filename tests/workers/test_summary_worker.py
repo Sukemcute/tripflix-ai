@@ -584,6 +584,12 @@ class _CoreWithSample(FakeCoreApi):
         stats = {"visibleCommentCount": 9_000, "uniqueAuthorCount": 4_000}
         return CoreCommentSample.model_validate({"stats": stats, "items": [item]})
 
+    def iter_held_summaries(self) -> list[str]:
+        self.held_calls += 1
+        if self.held_error:
+            raise self.held_error
+        return self.held
+
 
 def test_a_run_reads_cores_sample_with_its_counts(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[dict[str, Any]] = []
@@ -613,3 +619,34 @@ def test_an_older_core_falls_back_to_the_newest_pages(monkeypatch: pytest.Monkey
 
     assert [c.comment_id for c in seen[0]["comments"]] == ["c1"]
     assert seen[0]["post_stats"] is None  # no whole-post counts: exact counts only
+
+
+def test_reconciliation_runs_on_one_replica_and_schedules_held_posts_like_backfill() -> None:
+    redis = FakeRedis()
+    core = _CoreWithSample(held=[POST, "p-2"])
+    first, second = _worker(redis, core), _worker(redis, core)
+
+    assert first.maybe_reconcile() == 2
+    assert second.maybe_reconcile() == 0  # the key is taken for 6 h
+    assert core.held_calls == 1
+    assert {POST, "p-2"} <= set(redis.zset)
+
+
+def test_a_failed_reconciliation_is_tried_again_soon() -> None:
+    redis = FakeRedis()
+    core = _CoreWithSample(held_error=httpx.ConnectError("core down"))
+
+    with pytest.raises(httpx.ConnectError):
+        _worker(redis, core).maybe_reconcile()
+
+    assert redis.kv[summary_worker.RECONCILE_KEY] == "1000"
+    assert redis.ttl[summary_worker.RECONCILE_KEY] == summary_worker.RECONCILE_RETRY_MS
+
+
+def test_an_older_core_without_reconciliation_only_waits() -> None:
+    response = httpx.Response(404, request=httpx.Request("GET", "http://core"))
+    error = httpx.HTTPStatusError("404", request=response.request, response=response)
+    redis = FakeRedis()
+
+    assert _worker(redis, _CoreWithSample(held_error=error)).maybe_reconcile() == 0
+    assert summary_worker.RECONCILE_KEY in redis.kv
