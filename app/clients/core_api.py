@@ -23,7 +23,7 @@ from app.services.summary.schemas import SaveSummaryRequest
 PAGE_SIZE = 200  # flat mode cap in core
 POST_PAGE_SIZE = 50  # public post list cap in core
 # shortcut: newest 50 pages (10k comments) per run; comments older than a year are filtered
-# out anyway (L3). Raise if a post ever has more fresh comments than that.
+# out anyway (L2). Raise if a post ever has more fresh comments than that.
 MAX_PAGES = 50
 TOKEN_MARGIN_SECONDS = 30
 TIMEOUT_SECONDS = 10.0
