@@ -2,9 +2,10 @@ import json
 from datetime import UTC, datetime
 
 import httpx
+import pytest
 from pydantic import SecretStr
 
-from app.clients.core_api import CoreApiClient
+from app.clients.core_api import CoreApiClient, SampleUnavailableError
 from app.services.summary.schemas import SaveSummaryRequest
 
 NOW = datetime(2026, 11, 5, tzinfo=UTC)
@@ -26,9 +27,10 @@ def _comment(i: int) -> dict[str, object]:
 
 
 class FakeCore:
-    def __init__(self) -> None:
+    def __init__(self, has_sample_route: bool = True) -> None:
         self.requests: list[httpx.Request] = []
         self.now = 0.0
+        self.has_sample_route = has_sample_route
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -36,6 +38,24 @@ class FakeCore:
         if path == "/api/auth/service-token":
             return httpx.Response(
                 200, json={"accessToken": "tok", "tokenType": "Bearer", "expiresIn": 300}
+            )
+        if path.endswith("/comments/sample"):
+            if not self.has_sample_route:
+                return httpx.Response(404, json={"message": "Cannot GET"})
+            # the shape of PR be #128 (SampleCommentsResponseDto)
+            item = _comment(1) | {
+                "parentCommentId": "c-0",
+                "parentCommentBody": "Có ai ở đây chưa?",
+                "editedAt": None,
+            }
+            stats = {"visibleCommentCount": 125_000, "uniqueAuthorCount": 48_200}
+            return httpx.Response(200, json={"stats": stats, "items": [item]})
+        if path == "/api/v1/internal/ai-summary/reconciliation":
+            first_page = "cursor" not in request.url.params
+            ids = ["p1", "p2"] if first_page else ["p3"]
+            return httpx.Response(
+                200,
+                json={"postIds": ids, "nextCursor": "p2" if first_page else None, "total": 2},
             )
         if path.endswith("/comments"):
             first_page = "cursor" not in request.url.params
@@ -128,3 +148,32 @@ def test_public_posts_are_listed_page_by_page() -> None:
     assert [(p.id, p.comment_count) for p in posts] == [("p1", 6), ("p2", 0)]
     assert core.requests[0].url.params["limit"] == "50"
     assert core.requests[1].url.params["cursor"] == "n1"
+
+
+def test_the_sample_is_asked_with_a_service_token_size_and_seed() -> None:
+    core = FakeCore()
+
+    sample = core.client().fetch_comment_sample(POST_ID, 3_000, seed=POST_ID)
+
+    request = next(r for r in core.requests if r.url.path.endswith("/sample"))
+    assert request.headers["Authorization"] == "Bearer tok"
+    assert request.url.params["size"] == "3000" and request.url.params["seed"] == POST_ID
+    assert sample.stats.visible_comment_count == 125_000
+    assert sample.stats.unique_author_count == 48_200
+    [item] = sample.items
+    assert item.parent_comment_body == "Có ai ở đây chưa?" and item.edited_at is None
+
+
+def test_an_older_core_without_the_sample_route_says_so() -> None:
+    with pytest.raises(SampleUnavailableError):
+        FakeCore(has_sample_route=False).client().fetch_comment_sample(POST_ID, 3_000, "s")
+
+
+def test_held_summaries_are_read_until_the_cursor_ends() -> None:
+    core = FakeCore()
+
+    assert list(core.client().iter_held_summaries()) == ["p1", "p2", "p3"]
+    pages = [r for r in core.requests if "reconciliation" in r.url.path]
+    assert [r.url.params.get("cursor") for r in pages] == [None, "p2"]
+    assert pages[0].url.params["limit"] == "200"
+    assert all(r.headers["Authorization"] == "Bearer tok" for r in pages)
