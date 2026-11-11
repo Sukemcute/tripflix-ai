@@ -183,7 +183,12 @@ def main() -> None:
     classifier = build_classifier(settings)
     if classifier is None:
         logger.warning("no classifier: only removals are applied, summary runs label as before")
-    LabelWorker(client, RedisLabelStore(client), classifier).run_forever()
+    LabelWorker(
+        client,
+        RedisLabelStore(client),
+        classifier,
+        consumer_name=settings.label_worker_consumer_name or None,
+    ).run_forever()
 
 
 if __name__ == "__main__":

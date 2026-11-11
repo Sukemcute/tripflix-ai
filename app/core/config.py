@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     service_client_id: str = "ai-service"
     service_client_secret: SecretStr = SecretStr("")
     redis_url: str = "redis://localhost:6379/0"
+    # Fixed consumer names, like video-worker's VIDEO_WORKER_CONSUMER_NAME (Phong, 2026-11-11):
+    # hostname-PID adds a dead consumer to the group on every container rebuild. Empty means
+    # hostname-PID. Two replicas of one worker need different names: one name shares one
+    # pending list, so a dead replica's events would not be handed over.
+    summary_worker_consumer_name: str = ""
+    label_worker_consumer_name: str = ""
 
     # Comment classifier bundle, baked into the image (scripts/fetch_classifier.py); missing
     # means rules. Threads set explicitly: onnxruntime defaults to the host's physical cores,
