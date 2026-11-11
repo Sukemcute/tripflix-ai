@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.clients.moderation.base import ModerationClient, ModerationResult, ModerationTimeoutError
+from app.clients.moderation.visobert import VisobertModeration
 from app.services.summary.pii import mask_pii
 
 logger = logging.getLogger(__name__)
@@ -25,14 +26,36 @@ class ModerationItem:
 
 
 async def moderate_items(
-    items: Sequence[ModerationItem], client: ModerationClient, timeout_seconds: float
+    items: Sequence[ModerationItem],
+    client: ModerationClient,
+    timeout_seconds: float,
+    *,
+    visobert: VisobertModeration | None = None,
 ) -> list[tuple[str, ModerationResult]]:
     """One provider call per item, all at once, within one deadline."""
     try:
         async with asyncio.timeout(timeout_seconds):
-            results = await asyncio.gather(
-                *(client.moderate(mask_pii(i.text), i.image_urls) for i in items)
+            texts = [mask_pii(i.text) for i in items]
+            provider = asyncio.gather(
+                *(
+                    client.moderate(text, item.image_urls)
+                    for item, text in zip(items, texts, strict=True)
+                )
             )
+            if visobert is None:
+                results = await provider
+            else:
+                results, local = await asyncio.gather(provider, visobert.moderate_batch(texts))
+                if local is not None:
+                    results = [
+                        ModerationResult(
+                            upstream.flagged or extra.flagged,
+                            upstream.categories | extra.categories,
+                            upstream.scores | extra.scores,
+                            upstream.model + "+" + visobert.model,
+                        )
+                        for upstream, extra in zip(results, local, strict=True)
+                    ]
     except TimeoutError as e:
         raise ModerationTimeoutError("moderation took longer than the deadline") from e
     # shortcut: structured log until the ai.usage.recorded stream exists (as in the summary).

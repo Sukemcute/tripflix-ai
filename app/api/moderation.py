@@ -8,7 +8,7 @@ falls back to its regex step on any error, so errors are whole-request: 502 prov
 from functools import cache
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
@@ -19,8 +19,10 @@ from app.clients.moderation.base import (
     ModerationUpstreamError,
 )
 from app.clients.moderation.openai import OpenAIModerationClient
+from app.clients.moderation.visobert import VisobertModeration, load_visobert
 from app.core.config import ModerationSettings, get_moderation_settings
 from app.services.moderation import ModerationItem, moderate_items
+from app.services.moderation_shadow import log_safety_shadow
 
 MAX_ITEMS = 20
 MAX_TEXT_CHARS = 10_000  # core caps comments at 2,000; posts are longer
@@ -77,22 +79,49 @@ def get_moderation_client() -> ModerationClient | None:
     )
 
 
+@cache
+def get_visobert_client() -> VisobertModeration | None:
+    settings = get_moderation_settings()
+    if not settings.is_visobert_enabled or not settings.openai_api_key.get_secret_value():
+        return None
+    try:
+        return load_visobert(
+            settings.visobert_dir,
+            threshold=settings.visobert_threshold,
+            threads=settings.visobert_threads,
+            batch_size=settings.visobert_batch_size,
+            timeout_seconds=min(
+                settings.visobert_timeout_seconds, settings.moderation_timeout_seconds * 0.8
+            ),
+        )
+    except (OSError, ValueError) as error:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "ViSoBERT bundle is unavailable"
+        ) from error
+
+
 @router.post("/moderate", response_model=ModerateResponse)
 async def moderate(
     body: ModerateRequest,
+    background_tasks: BackgroundTasks,
     _caller: Annotated[str, Depends(require_core_caller)],  # first: no 503 hint before auth
     client: Annotated[ModerationClient | None, Depends(get_moderation_client)],
     settings: Annotated[ModerationSettings, Depends(get_moderation_settings)],
+    visobert: Annotated[VisobertModeration | None, Depends(get_visobert_client)],
 ) -> ModerateResponse:
     if client is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "moderation is not configured")
     items = [ModerationItem(i.id, i.text, tuple(i.image_urls)) for i in body.items]
     try:
-        pairs = await moderate_items(items, client, settings.moderation_timeout_seconds)
+        pairs = await moderate_items(
+            items, client, settings.moderation_timeout_seconds, visobert=visobert
+        )
     except ModerationTimeoutError as e:
         raise HTTPException(status.HTTP_504_GATEWAY_TIMEOUT, "moderation timed out") from e
     except ModerationUpstreamError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "moderation provider failed") from e
+    if settings.is_moderation_safety_shadow_enabled:
+        background_tasks.add_task(log_safety_shadow, items, pairs)
     return ModerateResponse(
         results=[
             ModerateResult(id=item_id, flagged=r.flagged, categories=r.categories, scores=r.scores)
