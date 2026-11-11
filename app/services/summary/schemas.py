@@ -156,11 +156,21 @@ class _CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
 
 
+class PeopleEstimate(_CamelModel):
+    """How many writers of the whole post likely hold a point, when only a sample was read:
+    share in the sample times all writers, Wilson 95% interval. Code-made, never the LLM."""
+
+    people: int
+    low: int
+    high: int
+
+
 class SummaryPointOut(_CamelModel):
     aspect: Aspect
     text: str
     comment_ids: list[str]
     people: int  # counted by code (V6)
+    estimate: PeopleEstimate | None = None  # only when the post has more writers than were read
 
 
 class RealityGapOut(_CamelModel):
@@ -175,6 +185,23 @@ class TopicOut(_CamelModel):
     summary: str
     comment_ids: list[str]
     people: int
+    estimate: PeopleEstimate | None = None
+
+
+Labeler = Literal["model", "rules", "mixed"]
+
+
+class PostPopulation(_CamelModel):
+    """Counts over every labelled comment of the post (label store), next to the summary
+    that read a sample. Writers are HyperLogLog estimates (~0.8% error)."""
+
+    labelled_comments: int
+    writers: int
+    first_hand_writers: int
+    first_hand_comments: int
+    complaint_comments: int
+    praise_comments: int
+    is_estimate: bool = True
 
 
 class SummaryCounts(_CamelModel):
@@ -190,6 +217,10 @@ class SummaryContent(_CamelModel):
     topics: list[TopicOut] = []
     counts: SummaryCounts
     needed: int | None = None  # more people needed before a summary (insufficient_data)
+    # Who labelled the comments: model, rules (classifier off or failed) or mixed (a cap or a
+    # partial failure). A silent fall to rules halves video-gap recall, so it must show.
+    labeler: Labeler = "rules"
+    population: PostPopulation | None = None
 
 
 class SafetyWarning(_CamelModel):

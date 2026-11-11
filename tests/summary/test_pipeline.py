@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 from app.clients.llm.fake import FakeLlmClient
-from app.services.summary.comment_classifier import CommentLabels
+from app.services.summary.comment_classifier import CommentClassifier, CommentLabels
 from app.services.summary.pipeline import (
     MAX_SUMMARY_CHARS,
     SummaryRun,
@@ -83,7 +83,7 @@ def _run(
     llm: FakeLlmClient,
     previous_hash: str | None = None,
     is_llm_killed: bool = False,
-    classifier: FakeClassifier | None = None,
+    classifier: CommentClassifier | None = None,
 ) -> SummaryRun:
     return run_summary(
         comments=comments,
@@ -307,6 +307,86 @@ def test_classifier_version_is_part_of_the_input_hash() -> None:
 
     hashes = {r.request.input_hash for r in runs if r.request}
     assert len(hashes) == 3 and None not in hashes
+
+
+class BrokenClassifier:
+    version = "fake-v1"
+
+    def classify(self, pairs: Sequence[tuple[str, str]]) -> list[CommentLabels]:
+        raise RuntimeError("onnxruntime failed")
+
+
+def test_a_classifier_failing_mid_run_falls_back_to_rules() -> None:
+    """The summary still comes out, with the rules' hash, so a healthy classifier redoes it."""
+    broken = _run(_comments(), _llm(pros=PROS), classifier=BrokenClassifier())
+    rules = _run(_comments(), _llm(pros=PROS))
+    healthy = _run(_comments(), _llm(pros=PROS), classifier=FakeClassifier())
+
+    assert broken.request is not None and broken.request.status == "ready"
+    assert rules.request is not None and healthy.request is not None
+    assert broken.request.input_hash == rules.request.input_hash != healthy.request.input_hash
+
+
+def test_the_summary_says_who_labelled_the_comments() -> None:
+    """A silent fall to rules halves video-gap recall: the saved content must say so."""
+
+    def labeler(run: SummaryRun) -> str:
+        assert run.request is not None and run.request.content is not None
+        return run.request.content.labeler
+
+    capped = run_summary(
+        comments=_comments(),
+        caption="Phòng view biển",
+        itinerary=ITINERARY,
+        previous_hash=None,
+        now=NOW,
+        llm=_llm(pros=PROS),
+        classifier=FakeClassifier(),
+        classifier_max_comments=2,  # 5 comments want labels, 2 get them
+    )
+
+    assert labeler(_run(_comments(), _llm(pros=PROS))) == "rules"
+    assert labeler(_run(_comments(), _llm(pros=PROS), classifier=FakeClassifier())) == "model"
+    assert labeler(_run(_comments(), _llm(pros=PROS), classifier=BrokenClassifier())) == "rules"
+    assert labeler(capped) == "mixed"
+    assert labeler(_run(_comments(3), _llm(), classifier=FakeClassifier())) == "model"
+
+
+def test_stored_labels_are_reused_and_only_new_ones_come_back() -> None:
+    """With labels kept from the label worker, a rerun of a big post classifies only what
+    is new, and gets the same hash as labelling everything again."""
+    full = FakeClassifier()
+    all_labelled = _run(_comments(), _llm(pros=PROS), classifier=full)
+    partial = FakeClassifier()
+    known = {f"cmt_{i}": NO_LABEL for i in range(3)}
+
+    run = run_summary(
+        comments=_comments(),
+        caption="Phòng view biển",
+        itinerary=ITINERARY,
+        previous_hash=None,
+        now=NOW,
+        llm=_llm(pros=PROS),
+        classifier=partial,
+        known_labels=known,
+    )
+
+    assert [text for text, _ in partial.seen] == [TEXTS[3], TEXTS[4]]
+    assert set(run.new_labels) == {"cmt_3", "cmt_4"}
+    assert run.request is not None and all_labelled.request is not None
+    assert run.request.input_hash == all_labelled.request.input_hash
+
+
+def test_the_model_is_part_of_the_input_hash() -> None:
+    """Switching models must re-summarize: same input, other model, other hash."""
+    other = _llm(pros=PROS)
+    other.model = "other-model"
+
+    first = _run(_comments(), _llm(pros=PROS)).request
+    second = _run(_comments(), other).request
+
+    assert first is not None and second is not None
+    assert first.input_hash != second.input_hash
 
 
 def test_classifier_skips_comments_the_rules_dropped_but_not_safety_hits() -> None:

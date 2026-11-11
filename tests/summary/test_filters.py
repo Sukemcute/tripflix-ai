@@ -4,7 +4,11 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.services.summary.filters import filter_comments
+from app.services.summary.filters import (
+    _is_near_copy,  # pyright: ignore[reportPrivateUsage]
+    _near_duplicate_clusters,  # pyright: ignore[reportPrivateUsage]
+    filter_comments,
+)
 from app.services.summary.schemas import CommentIn
 
 NOW = datetime(2026, 11, 4, tzinfo=UTC)
@@ -247,3 +251,38 @@ def test_used_it_is_not_agreement() -> None:
     by_author = {c.author_id: c for c in filter_comments([parent, reply], NOW).candidates}
 
     assert by_author["u1"].supporters == frozenset()
+
+
+def _pairwise_clusters(norms: list[str]) -> list[int]:
+    """The O(n * clusters) loop the LSH version replaced: the reference it must match."""
+    heads: list[frozenset[tuple[str, ...]]] = []
+    exact: dict[str, int] = {}
+    out: list[int] = []
+    for norm in norms:
+        if norm not in exact:
+            tokens = norm.split()
+            grams = frozenset(zip(tokens, tokens[1:], strict=False)) or frozenset({tuple(tokens)})
+            exact[norm] = next(
+                (cid for cid, head in enumerate(heads) if _is_near_copy(head, grams)), len(heads)
+            )
+            if exact[norm] == len(heads):
+                heads.append(grams)
+        out.append(exact[norm])
+    return out
+
+
+def test_lsh_near_duplicates_match_the_pairwise_reference() -> None:
+    import random
+
+    rng = random.Random(11)
+    vocab = (
+        "bien phong do an nhan vien ho boi gia ve view dep sach ban dong vang buffet cap treo"
+    ).split()
+    bases = [" ".join(rng.choice(vocab) for _ in range(rng.randint(12, 30))) for _ in range(300)]
+    norms = []
+    for base in bases:
+        norms += [base, base + " nha", " ".join(rng.choice(vocab) for _ in range(15))]
+    rng.shuffle(norms)
+
+    assert _near_duplicate_clusters(norms) == _pairwise_clusters(norms)
+    assert len(set(_near_duplicate_clusters(norms))) < len(norms)  # copies were found

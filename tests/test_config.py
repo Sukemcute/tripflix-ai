@@ -44,18 +44,31 @@ def test_defaults() -> None:
 
 
 def test_env_overrides_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
     monkeypatch.setenv("SUMMARY_LLM_KILL", "true")
     monkeypatch.setenv("LLM_MAX_OUTPUT_TOKENS", "2000")
+    monkeypatch.setenv("CLASSIFIER_ENABLED", "false")
+    monkeypatch.setenv("CLASSIFIER_MAX_COMMENTS", "200")
 
     settings = load()
 
-    assert settings.llm_provider == "openai"
+    assert settings.llm_provider == "deepseek"
     assert settings.is_summary_llm_killed is True
     assert settings.llm_max_output_tokens == 2000
+    assert settings.is_classifier_enabled is False
+    assert settings.classifier_max_comments == 200
 
 
-def test_unknown_provider_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("provider", ["fake", "deepseek", "openai", "anthropic"])
+def test_every_provider_with_an_adapter_is_accepted(
+    monkeypatch: pytest.MonkeyPatch, provider: str
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", provider)
+
+    assert load().llm_provider == provider
+
+
+def test_provider_without_an_adapter_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "gemini")
 
     with pytest.raises(ValidationError):

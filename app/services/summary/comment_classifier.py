@@ -9,7 +9,12 @@ the tokenizers library, no torch: about 19 comments/s on 2 threads (int8, batch 
 The bundle (model.int8.onnx, tokenizer.json, thresholds.json, manifest.json) is baked into the
 image and never committed (DeepResearch_Luu_tru_model_phan_loai_khi_deploy.md). When it is
 missing or broken the loader returns None and the pipeline keeps its rules, so summaries
-still run (PRD: an AI failure must not stop the rest).
+still run (PRD: an AI failure must not stop the rest). At run time GuardedClassifier adds a
+circuit breaker and the pipeline falls back to rules when classify fails.
+
+Swapping the model: any bundle with the same contract (ONNX taking input_ids and
+attention_mask, logits for LABELS, tokenizer.json, thresholds.json, manifest.json with a new
+version) needs no code change. Another runtime is another class with the same Protocol.
 """
 
 import hashlib
@@ -21,6 +26,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
+
+from app.core.breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +60,31 @@ class CommentClassifier(Protocol):
     def classify(self, pairs: Sequence[tuple[str, str]]) -> list[CommentLabels]:
         """One label set per (comment, parent comment) pair, in input order."""
         ...
+
+
+class ClassifierUnavailableError(Exception):
+    pass
+
+
+class GuardedClassifier:
+    """Same Protocol, plus a breaker: a classifier that keeps failing is skipped for a while
+    and the pipeline uses rules, instead of every run paying for the same error."""
+
+    def __init__(self, inner: CommentClassifier, breaker: CircuitBreaker) -> None:
+        self.inner = inner
+        self.breaker = breaker
+        self.version = inner.version
+
+    def classify(self, pairs: Sequence[tuple[str, str]]) -> list[CommentLabels]:
+        if self.breaker.is_open():
+            raise ClassifierUnavailableError(f"breaker open {self.breaker.seconds_left():.0f} s")
+        try:
+            labels = self.inner.classify(pairs)
+        except Exception:
+            self.breaker.record_failure()
+            raise
+        self.breaker.record_success()
+        return labels
 
 
 def decide_labels(probs: Mapping[str, float], thresholds: Mapping[str, float]) -> CommentLabels:
