@@ -18,6 +18,8 @@ EMPTY_OUTPUT = json.dumps(
 
 
 class FakeLlmClient:
+    model = "fake"
+
     def __init__(self, output: str = EMPTY_OUTPUT) -> None:
         self.output = output
         self.calls = 0

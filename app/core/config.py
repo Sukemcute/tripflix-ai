@@ -14,19 +14,37 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # No default: a missing or misspelled LLM_PROVIDER must stop startup, never fall back to fake.
+    # Only providers with an adapter: a new one is a new LlmClient class plus its name here.
     llm_provider: Literal["fake", "deepseek", "openai", "anthropic"]
-    llm_model: str = ""
+    llm_model: str = ""  # empty: the adapter's default (openai has none and requires it)
     llm_timeout_seconds: float = 30.0
     llm_max_output_tokens: int = 3000  # 1500 cut big posts mid-JSON (real LLM trial 2026-11-05)
     # env name kept (SUMMARY_LLM_KILL); field named as a question (RULES §4.1)
     is_summary_llm_killed: bool = Field(default=False, validation_alias="SUMMARY_LLM_KILL")
     deepseek_api_key: SecretStr = SecretStr("")
     deepseek_base_url: str = "https://api.deepseek.com"
+    openai_api_key: SecretStr = SecretStr("")  # same variable as /moderate uses
+    openai_base_url: str = "https://api.openai.com/v1"
+    # Reasoning models (gpt-5 family, o-series) need it or spend the output cap on thinking;
+    # empty for models without reasoning, which reject the field.
+    openai_reasoning_effort: str = "minimal"
+    anthropic_api_key: SecretStr = SecretStr("")
+    # USD per 1M tokens for LLM_MODEL; required for openai, optional elsewhere (the adapter
+    # knows its default model's price). Every LLM call records its cost (RULES §10).
+    llm_price_input: float | None = None
+    llm_price_cached_input: float | None = None
+    llm_price_output: float | None = None
 
     # Service client created with core's auth:create-service-client (secret printed once).
     service_client_id: str = "ai-service"
     service_client_secret: SecretStr = SecretStr("")
     redis_url: str = "redis://localhost:6379/0"
+    # Fixed consumer names, like video-worker's VIDEO_WORKER_CONSUMER_NAME (Phong, 2026-11-11):
+    # hostname-PID adds a dead consumer to the group on every container rebuild. Empty means
+    # hostname-PID. Two replicas of one worker need different names: one name shares one
+    # pending list, so a dead replica's events would not be handed over.
+    summary_worker_consumer_name: str = ""
+    label_worker_consumer_name: str = ""
 
     # Comment classifier bundle, baked into the image (scripts/fetch_classifier.py); missing
     # means rules. Threads set explicitly: onnxruntime defaults to the host's physical cores,
@@ -34,6 +52,10 @@ class Settings(BaseSettings):
     classifier_dir: Path = Path(__file__).resolve().parents[1] / "models" / "comment_classifier"
     classifier_threads: int = Field(default=2, ge=1)
     classifier_batch: int = Field(default=8, ge=1)
+    # Unplug the classifier without a rebuild: false means rules only.
+    is_classifier_enabled: bool = Field(default=True, validation_alias="CLASSIFIER_ENABLED")
+    # ~25 s at ~19 comments/s, so one big post cannot hold the worker; the rest use rules.
+    classifier_max_comments: int = Field(default=500, ge=1)  # [HIỆU CHỈNH]
 
 
 @cache

@@ -7,9 +7,12 @@ validator (P10) stay.
 """
 
 import re
+import zlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
+import numpy as np
 
 from app.services.summary import complaint_model
 from app.services.summary.injection import match_injection
@@ -23,6 +26,14 @@ MIN_SYLLABLES = 4  # QT L5, [HIỆU CHỈNH]
 # Jindal & Liu (2007): Broder shingles, similarity > 0.9 marks a near-duplicate review;
 # WSDM 2008 used word 2-gram Jaccard. Tuned on long Amazon reviews: [HIỆU CHỈNH] for comments.
 NEAR_DUP_JACCARD = 0.9
+# MinHash LSH (Broder et al. 1997) finds the candidate heads, Jaccard still decides. 8 bands of
+# 4 rows: a pair at Jaccard 0.9 shares a band with p = 1 - (1 - 0.9^4)^8 = 0.9998. crc32 and a
+# fixed seed keep the result the same on every run, so the input hash does not move.
+_LSH_BANDS, _LSH_ROWS = 8, 4
+_LSH_PRIME = np.uint64(4_294_967_291)  # largest prime below 2^32: a*x+b fits in 64 bits
+_LSH_RNG = np.random.default_rng(20261111)
+_LSH_A = _LSH_RNG.integers(1, 4_294_967_291, size=_LSH_BANDS * _LSH_ROWS, dtype=np.uint64)
+_LSH_B = _LSH_RNG.integers(0, 4_294_967_291, size=_LSH_BANDS * _LSH_ROWS, dtype=np.uint64)
 PARENT_CONTEXT_CHARS = 128  # Henderson et al. (2019) cut each ancestor to 128 characters
 _NO_PARENT_CONTEXT = {"L1", "L13"}  # hidden/deleted or an injection never travels as context
 _NOT_A_VOTE = {"L1", "L2", "L3", "L13"}  # hidden, stale, the creator, or an attack
@@ -113,9 +124,18 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
         if parent and dropped.get(c.comment_id) not in _NOT_A_VOTE and _agrees(c.body):
             votes.setdefault(parent.comment_id, set()).add(c.author_id)
 
+    def find_context(c: CommentIn) -> tuple[str, str] | None:
+        """(parent id, parent text). A parent outside a sample travels as parent_body: context
+        only, it casts no vote. shortcut: its author is unknown, so a self-reply keeps it."""
+        if parent := find_parent(c):
+            return parent.comment_id, parent.body
+        if c.parent_id and c.parent_id not in by_id and c.parent_body:
+            return c.parent_id, c.parent_body
+        return None
+
     def collect_contexts(group: list[tuple[CommentIn, str, str]]) -> tuple[str, ...]:
-        parents = (find_parent(c) for c, _, _ in group)
-        texts = (clean_text(p.body)[:PARENT_CONTEXT_CHARS] for p in parents if p)
+        found = (find_context(c) for c, _, _ in group)
+        texts = (clean_text(body)[:PARENT_CONTEXT_CHARS] for _, body in filter(None, found))
         return tuple(dict.fromkeys(texts))  # dedupe, keep order
 
     candidates = [
@@ -129,7 +149,7 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
             is_suspect=bool(group_clusters[author_id] & copied),
             contexts=collect_contexts(group),
             context_ids=tuple(
-                dict.fromkeys(p.comment_id for c, _, _ in group if (p := find_parent(c)))
+                dict.fromkeys(ctx[0] for c, _, _ in group if (ctx := find_context(c)))
             ),
             supporters=frozenset().union(*(votes.get(c.comment_id, ()) for c, _, _ in group))
             - {author_id},
@@ -148,12 +168,15 @@ def _agrees(body: str) -> bool:
 
 
 def _near_duplicate_clusters(norms: Sequence[str]) -> list[int]:
-    """Cluster id per text: the first earlier text with word 2-gram Jaccard > NEAR_DUP_JACCARD.
+    """Cluster id per text: the first earlier cluster head with word 2-gram Jaccard above
+    NEAR_DUP_JACCARD.
 
-    shortcut: compares each text with every earlier cluster head, O(n * clusters); fine for
-    the ~1,000 comments of one post, switch to MinHash (Jindal & Liu 2014) when posts get larger.
+    Only heads sharing an LSH band are compared, so the cost grows with n, not n * clusters
+    (16,000 comments took 36 s with the pairwise loop). shortcut: a true near-copy is missed
+    with p ~ 0.0002 (it then counts as one more voice); fine for a rule filter.
     """
-    heads: list[tuple[frozenset[tuple[str, ...]], int]] = []
+    heads: dict[int, frozenset[tuple[str, ...]]] = {}
+    buckets: list[dict[bytes, list[int]]] = [{} for _ in range(_LSH_BANDS)]
     exact: dict[str, int] = {}
     clusters: list[int] = []
     for norm in norms:
@@ -162,22 +185,32 @@ def _near_duplicate_clusters(norms: Sequence[str]) -> list[int]:
             continue
         tokens = norm.split()
         grams = frozenset(zip(tokens, tokens[1:], strict=False)) or frozenset({tuple(tokens)})
-        cluster = next(
-            (
-                cid
-                for head, cid in heads
-                # Jaccard > t needs the smaller set to hold > t of the larger: skip early
-                if min(len(head), len(grams)) > NEAR_DUP_JACCARD * max(len(head), len(grams))
-                and len(head & grams) > NEAR_DUP_JACCARD * len(head | grams)
-            ),
-            None,
-        )
+        keys = _band_keys(grams)
+        candidates = sorted({cid for b, key in enumerate(keys) for cid in buckets[b].get(key, ())})
+        cluster = next((cid for cid in candidates if _is_near_copy(heads[cid], grams)), None)
         if cluster is None:
             cluster = len(heads)
-            heads.append((grams, cluster))
+            heads[cluster] = grams
+            for b, key in enumerate(keys):
+                buckets[b].setdefault(key, []).append(cluster)
         exact[norm] = cluster
         clusters.append(cluster)
     return clusters
+
+
+def _band_keys(grams: frozenset[tuple[str, ...]]) -> list[bytes]:
+    hashed = np.fromiter(
+        (zlib.crc32(" ".join(g).encode()) for g in grams), dtype=np.uint64, count=len(grams)
+    )
+    signature = ((_LSH_A[:, None] * hashed[None, :] + _LSH_B[:, None]) % _LSH_PRIME).min(axis=1)
+    return [signature[b * _LSH_ROWS : (b + 1) * _LSH_ROWS].tobytes() for b in range(_LSH_BANDS)]
+
+
+def _is_near_copy(head: frozenset[tuple[str, ...]], grams: frozenset[tuple[str, ...]]) -> bool:
+    # Jaccard > t needs the smaller set to hold > t of the larger: skip early
+    return min(len(head), len(grams)) > NEAR_DUP_JACCARD * max(len(head), len(grams)) and len(
+        head & grams
+    ) > NEAR_DUP_JACCARD * len(head | grams)
 
 
 def _rule_for(comment: CommentIn, text: str, norm: str, now: datetime) -> str | None:

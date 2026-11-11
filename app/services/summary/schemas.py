@@ -15,6 +15,9 @@ class CommentIn(BaseModel):
     comment_id: str = Field(min_length=1)
     author_id: str = Field(min_length=1)
     parent_id: str | None = None
+    # The parent's text when the parent itself is not in the list (a sample); null when it
+    # is hidden or deleted. Used only as reply context, never as a comment.
+    parent_body: str | None = Field(default=None, max_length=MAX_COMMENT_CHARS)
     body: str = Field(max_length=MAX_COMMENT_CHARS)
     status: Literal["visible", "hidden", "deleted"]
     like_count: int = Field(default=0, ge=0)
@@ -156,11 +159,22 @@ class _CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
 
 
+class PeopleEstimate(_CamelModel):
+    """How many writers of the whole post likely hold a point, when only part was read:
+    weighted share of the sample times all writers, Wilson 95% interval (estimates.py).
+    Code-made, never the LLM. Not shown in the app until calibrated (Thành, 2026-11-11)."""
+
+    people: int
+    low: int
+    high: int
+
+
 class SummaryPointOut(_CamelModel):
     aspect: Aspect
     text: str
     comment_ids: list[str]
     people: int  # counted by code (V6)
+    estimate: PeopleEstimate | None = None  # only when the post has more writers than were read
 
 
 class RealityGapOut(_CamelModel):
@@ -175,6 +189,19 @@ class TopicOut(_CamelModel):
     summary: str
     comment_ids: list[str]
     people: int
+    estimate: PeopleEstimate | None = None
+
+
+Labeler = Literal["model", "rules", "mixed"]
+
+
+class PostPopulation(_CamelModel):
+    """Whole-post counts from core next to what the run read (core's random sample)."""
+
+    comments: int  # visible comments of the post, the post author's included
+    writers: int  # distinct writers of those comments
+    sampled_comments: int
+    sampled_writers: int  # the post author left out
 
 
 class SummaryCounts(_CamelModel):
@@ -190,6 +217,10 @@ class SummaryContent(_CamelModel):
     topics: list[TopicOut] = []
     counts: SummaryCounts
     needed: int | None = None  # more people needed before a summary (insufficient_data)
+    # Who labelled the comments: model, rules (classifier off or failed) or mixed (a cap or a
+    # partial failure). A silent fall to rules halves video-gap recall, so it must show.
+    labeler: Labeler = "rules"
+    population: PostPopulation | None = None
 
 
 class SafetyWarning(_CamelModel):

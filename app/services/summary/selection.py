@@ -29,7 +29,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, cast
 
 from app.services.summary import complaint_model
 from app.services.summary.comment_classifier import CommentLabels
@@ -85,6 +85,7 @@ class Selection:
     tokens: int
     skipped: int  # candidates left out by the budget or the cap
     people: int  # distinct writers that count (L8 suspects do not)
+    tier_writers: tuple[int, int, int] = (0, 0, 0)  # candidates per tier 1-3, sent or not
 
 
 def estimate_tokens(text: str) -> int:
@@ -153,7 +154,14 @@ def select_comments(
             used += cost
             picked[k] += 1
     people = len({s.candidate.author_id for s in items if not s.candidate.is_suspect})
-    return Selection(items=items, tokens=used, skipped=len(ranked) - len(items), people=people)
+    tiers = tuple(sum(1 for r in ranked if r[1] == t) for t in (1, 2, 3))
+    return Selection(
+        items=items,
+        tokens=used,
+        skipped=len(ranked) - len(items),
+        people=people,
+        tier_writers=cast(tuple[int, int, int], tiers),
+    )
 
 
 def decide_summary_status(

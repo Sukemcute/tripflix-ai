@@ -4,7 +4,9 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 from app.clients.llm.fake import FakeLlmClient
-from app.services.summary.comment_classifier import CommentLabels
+from app.services.summary.comment_classifier import CommentClassifier, CommentLabels
+from app.services.summary.estimates import PostStats
+from app.services.summary.label_store import StoredSafety
 from app.services.summary.pipeline import (
     MAX_SUMMARY_CHARS,
     SummaryRun,
@@ -83,7 +85,7 @@ def _run(
     llm: FakeLlmClient,
     previous_hash: str | None = None,
     is_llm_killed: bool = False,
-    classifier: FakeClassifier | None = None,
+    classifier: CommentClassifier | None = None,
 ) -> SummaryRun:
     return run_summary(
         comments=comments,
@@ -309,6 +311,86 @@ def test_classifier_version_is_part_of_the_input_hash() -> None:
     assert len(hashes) == 3 and None not in hashes
 
 
+class BrokenClassifier:
+    version = "fake-v1"
+
+    def classify(self, pairs: Sequence[tuple[str, str]]) -> list[CommentLabels]:
+        raise RuntimeError("onnxruntime failed")
+
+
+def test_a_classifier_failing_mid_run_falls_back_to_rules() -> None:
+    """The summary still comes out, with the rules' hash, so a healthy classifier redoes it."""
+    broken = _run(_comments(), _llm(pros=PROS), classifier=BrokenClassifier())
+    rules = _run(_comments(), _llm(pros=PROS))
+    healthy = _run(_comments(), _llm(pros=PROS), classifier=FakeClassifier())
+
+    assert broken.request is not None and broken.request.status == "ready"
+    assert rules.request is not None and healthy.request is not None
+    assert broken.request.input_hash == rules.request.input_hash != healthy.request.input_hash
+
+
+def test_the_summary_says_who_labelled_the_comments() -> None:
+    """A silent fall to rules halves video-gap recall: the saved content must say so."""
+
+    def labeler(run: SummaryRun) -> str:
+        assert run.request is not None and run.request.content is not None
+        return run.request.content.labeler
+
+    capped = run_summary(
+        comments=_comments(),
+        caption="Phòng view biển",
+        itinerary=ITINERARY,
+        previous_hash=None,
+        now=NOW,
+        llm=_llm(pros=PROS),
+        classifier=FakeClassifier(),
+        classifier_max_comments=2,  # 5 comments want labels, 2 get them
+    )
+
+    assert labeler(_run(_comments(), _llm(pros=PROS))) == "rules"
+    assert labeler(_run(_comments(), _llm(pros=PROS), classifier=FakeClassifier())) == "model"
+    assert labeler(_run(_comments(), _llm(pros=PROS), classifier=BrokenClassifier())) == "rules"
+    assert labeler(capped) == "mixed"
+    assert labeler(_run(_comments(3), _llm(), classifier=FakeClassifier())) == "model"
+
+
+def test_stored_labels_are_reused_and_only_new_ones_come_back() -> None:
+    """With labels kept from the label worker, a rerun of a big post classifies only what
+    is new, and gets the same hash as labelling everything again."""
+    full = FakeClassifier()
+    all_labelled = _run(_comments(), _llm(pros=PROS), classifier=full)
+    partial = FakeClassifier()
+    known = {f"cmt_{i}": NO_LABEL for i in range(3)}
+
+    run = run_summary(
+        comments=_comments(),
+        caption="Phòng view biển",
+        itinerary=ITINERARY,
+        previous_hash=None,
+        now=NOW,
+        llm=_llm(pros=PROS),
+        classifier=partial,
+        known_labels=known,
+    )
+
+    assert [text for text, _ in partial.seen] == [TEXTS[3], TEXTS[4]]
+    assert set(run.new_labels) == {"cmt_3", "cmt_4"}
+    assert run.request is not None and all_labelled.request is not None
+    assert run.request.input_hash == all_labelled.request.input_hash
+
+
+def test_the_model_is_part_of_the_input_hash() -> None:
+    """Switching models must re-summarize: same input, other model, other hash."""
+    other = _llm(pros=PROS)
+    other.model = "other-model"
+
+    first = _run(_comments(), _llm(pros=PROS)).request
+    second = _run(_comments(), other).request
+
+    assert first is not None and second is not None
+    assert first.input_hash != second.input_hash
+
+
 def test_classifier_skips_comments_the_rules_dropped_but_not_safety_hits() -> None:
     """Labels are read only for candidates and safety hits: skipping the rest saves time."""
     spam = _comment(6, "Săn voucher giảm 50% tại shopee.vn/sale nha")  # L6 link
@@ -384,3 +466,63 @@ def test_the_side_more_people_back_picks_first_when_space_runs_out() -> None:
     text = _summary(pros, cons)
 
     assert "Chê một" in text and "Chê hai" in text and "Khen hai" not in text
+
+
+def test_a_reply_whose_parent_is_outside_the_sample_keeps_it_as_context() -> None:
+    """Core's sample brings the parent's text along (PR be #128); its id is a source too."""
+    reply = _comment(6, "Mình ở rồi, yên tĩnh lắm, phòng rộng").model_copy(
+        update={"parent_id": "cmt_out", "parent_body": "Phòng có ồn không mọi người?"}
+    )
+    classifier = FakeClassifier()
+
+    run = _run([*_comments(), reply], _llm(pros=PROS), classifier=classifier)
+
+    assert (reply.body, "Phòng có ồn không mọi người?") in classifier.seen
+    assert run.request is not None and "cmt_out" in (run.request.source_comment_ids or [])
+
+
+def test_kept_safety_results_outside_the_sample_reach_the_summary() -> None:
+    inside = _comment(5, "Mình ăn hải sản ở đây xong bị ngộ độc cả nhà")
+    kept = [
+        StoredSafety("cmt_far", ("ngo_doc",), "public"),
+        StoredSafety("cmt_hearsay", ("tai_nan",), "pending_review"),
+        StoredSafety("cmt_5", ("ngo_doc",), "public"),  # read this run: its own result wins
+    ]
+
+    run = run_summary(
+        comments=[*_comments(), inside],
+        caption="",
+        itinerary=[],
+        previous_hash=None,
+        now=NOW,
+        llm=_llm(pros=PROS),
+        known_safety=kept,
+    )
+
+    assert run.request is not None and run.request.safety is not None
+    warnings = [w.comment_ids for w in run.request.safety.warnings]
+    pending = [w.comment_ids for w in run.request.safety.pending_warnings]
+    assert ["cmt_far"] in warnings and ["cmt_hearsay"] in pending
+    assert sum(ids == ["cmt_5"] for ids in warnings + pending) == 1
+
+
+def test_core_counts_add_the_population_and_an_estimate_when_the_post_is_bigger() -> None:
+    def run(stats: PostStats) -> SummaryRun:
+        return run_summary(
+            comments=_comments(),
+            caption="",
+            itinerary=[],
+            previous_hash=None,
+            now=NOW,
+            llm=_llm(pros=PROS),
+            post_stats=stats,
+        )
+
+    whole = run(PostStats(comments=5, writers=5)).request
+    big = run(PostStats(comments=5_000, writers=4_000)).request
+
+    assert whole is not None and whole.content is not None
+    assert whole.content.population is not None and whole.content.pros[0].estimate is None
+    assert big is not None and big.content is not None
+    estimate = big.content.pros[0].estimate
+    assert estimate is not None and estimate.people == 2_400  # 3 of 5 writers of 4,000

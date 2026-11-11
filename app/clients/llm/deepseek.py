@@ -31,6 +31,11 @@ PRICE_PER_MILLION = {"cache_hit": 0.006, "cache_miss": 0.3, "output": 1.2}
 
 
 class DeepSeekClient:
+    """Also the base of OpenAILlmClient: same /chat/completions wire format and retry loop;
+    a subclass changes the request body, the price table and the default model."""
+
+    KEY_NAME = "DEEPSEEK_API_KEY"
+
     def __init__(
         self,
         api_key: SecretStr,
@@ -43,15 +48,15 @@ class DeepSeekClient:
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if not api_key.get_secret_value():
-            raise ValueError("DEEPSEEK_API_KEY is empty")
+            raise ValueError(f"{self.KEY_NAME} is empty")
         self.api_key = api_key
         self.model = model or DEFAULT_MODEL
         self.max_output_tokens = max_output_tokens
         self.http = http or httpx.Client(base_url=base_url, timeout=timeout_seconds)
         self.sleep = sleep
 
-    def generate(self, system: str, user: str, schema: dict[str, Any]) -> LlmResult:
-        body = {
+    def _body(self, system: str, user: str, schema: dict[str, Any]) -> dict[str, Any]:
+        return {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": _with_schema(system, schema)},
@@ -62,6 +67,12 @@ class DeepSeekClient:
             "temperature": 0,
             "max_tokens": self.max_output_tokens,
         }
+
+    def _cost(self, usage: dict[str, Any]) -> float:
+        return _cost(usage)
+
+    def generate(self, system: str, user: str, schema: dict[str, Any]) -> LlmResult:
+        body = self._body(system, user, schema)
         data: dict[str, Any] = {}
         for attempt in range(1, MAX_ATTEMPTS + 1):
             response = self.http.post(
@@ -74,7 +85,8 @@ class DeepSeekClient:
                 continue
             response.raise_for_status()
             data = response.json()
-            if _content(data).strip() or attempt == MAX_ATTEMPTS:
+            # Out of tokens is not blank by chance: the same request ends the same way.
+            if _content(data).strip() or _finish_reason(data) == "length":
                 break
         usage = data.get("usage", {})
         return LlmResult(
@@ -82,7 +94,7 @@ class DeepSeekClient:
             model_name=str(data.get("model", self.model)),
             input_tokens=int(usage.get("prompt_tokens", 0)),
             output_tokens=int(usage.get("completion_tokens", 0)),
-            cost_usd=_cost(usage),
+            cost_usd=self._cost(usage),
         )
 
 
@@ -95,6 +107,11 @@ def _with_schema(system: str, schema: dict[str, Any]) -> str:
 
 def _is_retryable(response: httpx.Response) -> bool:
     return response.status_code == httpx.codes.TOO_MANY_REQUESTS or response.status_code >= 500
+
+
+def _finish_reason(data: dict[str, Any]) -> str:
+    choices = data.get("choices") or [{}]
+    return str(choices[0].get("finish_reason") or "")
 
 
 def _content(data: dict[str, Any]) -> str:

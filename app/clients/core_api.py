@@ -6,6 +6,11 @@ Endpoints agreed with content (Thành, PR be #49 and #54):
 - GET  /api/v1/posts/:id/comments?flat=true       every level, cursor paging, max 200 per page
 - GET  /api/v1/posts/:id/ai-summary               last summary with inputHash, 404 if none
 - PUT  /api/v1/posts/:id/ai-summary               service token, @ServiceOnly('ai-service')
+- GET  /api/v1/posts/:id/comments/sample          service token; seeded sample of visible
+                                                  comments, max 5,000, with whole-post stats
+- GET  /api/v1/internal/ai-summary/reconciliation service token; posts whose summary core holds
+                                                  back for a hidden source, cursor, max 200
+(sample and reconciliation: Thành, PR be #128, 2026-11-11)
 Service token: POST /api/auth/service-token, lives 300 s; reused until 30 s before expiry,
 as in the access module README. Responses are validated here, at the trust boundary.
 """
@@ -22,8 +27,9 @@ from app.services.summary.schemas import SaveSummaryRequest
 
 PAGE_SIZE = 200  # flat mode cap in core
 POST_PAGE_SIZE = 50  # public post list cap in core
+HELD_PAGE_SIZE = 200  # reconciliation cap in core
 # shortcut: newest 50 pages (10k comments) per run; comments older than a year are filtered
-# out anyway (L3). Raise if a post ever has more fresh comments than that.
+# out anyway (L2). Raise if a post ever has more fresh comments than that.
 MAX_PAGES = 50
 TOKEN_MARGIN_SECONDS = 30
 TIMEOUT_SECONDS = 10.0
@@ -80,6 +86,36 @@ class CoreComment(_CoreModel):
 class _CommentPage(_CoreModel):
     items: list[CoreComment]
     next_cursor: str | None = None
+
+
+class CoreSampleComment(_CoreModel):
+    id: str
+    author_id: str
+    parent_comment_id: str | None = None
+    parent_comment_body: str | None = None  # null when the parent is hidden or deleted
+    body: str
+    like_count: int = 0
+    created_at: AwareDatetime
+    edited_at: AwareDatetime | None = None
+
+
+class CoreCommentStats(_CoreModel):
+    visible_comment_count: int  # every visible comment, the post author's included
+    unique_author_count: int
+
+
+class CoreCommentSample(_CoreModel):
+    stats: CoreCommentStats
+    items: list[CoreSampleComment]
+
+
+class _HeldPage(_CoreModel):
+    post_ids: list[str]
+    next_cursor: str | None = None
+
+
+class SampleUnavailableError(Exception):
+    """Core has no sample route (older core): read the newest pages instead."""
 
 
 class CoreSummary(_CoreModel):
@@ -144,6 +180,36 @@ class CoreApiClient:
                 break
         return comments
 
+    def fetch_comment_sample(self, post_id: str, size: int, seed: str) -> CoreCommentSample:
+        """Same seed and same comments give the same sample (core orders by hashtext(id||seed)).
+        Called after fetch_post found the post, so a 404 here means the route is missing."""
+        response = self.http.get(
+            f"/api/v1/posts/{post_id}/comments/sample",
+            params={"size": size, "seed": seed},
+            headers=self._auth(),
+        )
+        if response.status_code in (httpx.codes.NOT_FOUND, httpx.codes.METHOD_NOT_ALLOWED):
+            raise SampleUnavailableError(f"core answered {response.status_code}")
+        response.raise_for_status()
+        return CoreCommentSample.model_validate(response.json())
+
+    def iter_held_summaries(self) -> Iterator[str]:
+        """Posts whose summary core holds back because a source comment is hidden or gone."""
+        cursor: str | None = None
+        while True:
+            params: dict[str, str | int] = {"limit": HELD_PAGE_SIZE}
+            if cursor:
+                params["cursor"] = cursor
+            response = self.http.get(
+                "/api/v1/internal/ai-summary/reconciliation", params=params, headers=self._auth()
+            )
+            response.raise_for_status()
+            page = _HeldPage.model_validate(response.json())
+            yield from page.post_ids
+            cursor = page.next_cursor
+            if not cursor:
+                return
+
     def fetch_summary(self, post_id: str) -> CoreSummary | None:
         response = self.http.get(f"/api/v1/posts/{post_id}/ai-summary")
         if response.status_code == httpx.codes.NOT_FOUND:
@@ -155,9 +221,12 @@ class CoreApiClient:
         response = self.http.put(
             f"/api/v1/posts/{post_id}/ai-summary",
             json=request.model_dump(mode="json", by_alias=True),
-            headers={"Authorization": f"Bearer {self._service_token()}"},
+            headers=self._auth(),
         )
         response.raise_for_status()
+
+    def _auth(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._service_token()}"}
 
     def _service_token(self) -> str:
         if self._token and self.clock() < self._token_expires_at - TOKEN_MARGIN_SECONDS:
