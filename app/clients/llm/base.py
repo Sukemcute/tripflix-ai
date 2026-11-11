@@ -17,4 +17,6 @@ class LlmResult:
 
 
 class LlmClient(Protocol):
+    model: str  # the configured model; joins the input hash so a model change re-summarizes
+
     def generate(self, system: str, user: str, schema: dict[str, Any]) -> LlmResult: ...
