@@ -124,9 +124,18 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
         if parent and dropped.get(c.comment_id) not in _NOT_A_VOTE and _agrees(c.body):
             votes.setdefault(parent.comment_id, set()).add(c.author_id)
 
+    def find_context(c: CommentIn) -> tuple[str, str] | None:
+        """(parent id, parent text). A parent outside a sample travels as parent_body: context
+        only, it casts no vote. shortcut: its author is unknown, so a self-reply keeps it."""
+        if parent := find_parent(c):
+            return parent.comment_id, parent.body
+        if c.parent_id and c.parent_id not in by_id and c.parent_body:
+            return c.parent_id, c.parent_body
+        return None
+
     def collect_contexts(group: list[tuple[CommentIn, str, str]]) -> tuple[str, ...]:
-        parents = (find_parent(c) for c, _, _ in group)
-        texts = (clean_text(p.body)[:PARENT_CONTEXT_CHARS] for p in parents if p)
+        found = (find_context(c) for c, _, _ in group)
+        texts = (clean_text(body)[:PARENT_CONTEXT_CHARS] for _, body in filter(None, found))
         return tuple(dict.fromkeys(texts))  # dedupe, keep order
 
     candidates = [
@@ -140,7 +149,7 @@ def filter_comments(comments: Sequence[CommentIn], now: datetime) -> FilterResul
             is_suspect=bool(group_clusters[author_id] & copied),
             contexts=collect_contexts(group),
             context_ids=tuple(
-                dict.fromkeys(p.comment_id for c, _, _ in group if (p := find_parent(c)))
+                dict.fromkeys(ctx[0] for c, _, _ in group if (ctx := find_context(c)))
             ),
             supporters=frozenset().union(*(votes.get(c.comment_id, ()) for c, _, _ in group))
             - {author_id},

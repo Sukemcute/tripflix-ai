@@ -1,20 +1,21 @@
-"""Comment labels kept between runs, and per-post counts over every labelled comment.
+"""Comment labels and safety results kept between runs.
 
 Labelling a comment once, when it is written, makes a summary run cost the same for 1,000 or
-1,000,000 comments (DeepResearch_AI_Summary_1_trieu_binh_luan.md §4.1). The store is a port:
-RedisLabelStore is the first adapter (Bảo, 2026-11-11: Redis first, core later); a core-backed
-adapter with the same methods replaces it once Thành agrees where labels live.
+1,000,000 comments (DeepResearch_AI_Summary_1_trieu_binh_luan.md §4.1). The store is a port;
+RedisLabelStore is its adapter. Core does not keep AI labels (Thành, 2026-11-11: they are
+tied to our model version and would bloat its comments table), so Redis with a TTL stays.
 
 A label is used only while it is still true: same model version and same text (sha256 of the
-body). Labels are derived data with a TTL, never the comment text, so losing Redis only means
-labelling again.
+body). Safety results are kept so a warning outside core's sample is not lost. Both are
+derived data with a TTL, never the comment text, so losing Redis only means labelling again.
+Whole-post counts come from core (PR be #128), not from here.
 """
 
 import hashlib
 import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 from app.services.summary.comment_classifier import CommentLabels
 
@@ -34,15 +35,12 @@ class StoredLabel:
 
 
 @dataclass(frozen=True)
-class PostStats:
-    """Counts over every labelled comment of the post, not only the ones sent to the LLM."""
+class StoredSafety:
+    """A safety hit decided at write time: the categories, and public or held for review."""
 
-    labelled_comments: int
-    first_hand_comments: int
-    complaint_comments: int
-    praise_comments: int
-    writers: int  # HyperLogLog estimates: ~0.81% standard error (Redis docs)
-    first_hand_writers: int
+    comment_id: str
+    categories: tuple[str, ...]
+    visibility: Literal["public", "pending_review"]
 
 
 class LabelStore(Protocol):
@@ -52,7 +50,9 @@ class LabelStore(Protocol):
 
     def remove(self, post_id: str, comment_id: str) -> None: ...
 
-    def stats(self, post_id: str) -> PostStats: ...
+    def put_safety(self, post_id: str, hit: StoredSafety) -> None: ...
+
+    def get_safety(self, post_id: str) -> list[StoredSafety]: ...
 
 
 def fresh_labels(
@@ -67,11 +67,6 @@ def fresh_labels(
 
 
 class RedisLabelStore:
-    """shortcut: put/remove read then write in two steps, so two label workers changing the
-    same comment at once can skew a counter by one; run one label worker, or move the update
-    into a Lua script before scaling it out. HyperLogLog cannot forget a writer, so writers
-    stays an upper bound after deletions."""
-
     def __init__(self, client: Any) -> None:
         self.redis = client
 
@@ -83,60 +78,33 @@ class RedisLabelStore:
         return {cid: _decode(raw) for cid, raw in zip(ids, rows, strict=True) if raw}
 
     def put(self, post_id: str, comment_id: str, author_id: str, label: StoredLabel) -> None:
-        key = _labels_key(post_id)
-        old_raw = cast(str | None, self.redis.hget(key, comment_id))
-        old = _decode(old_raw) if old_raw else None
-        if old == label:
-            return  # a redelivered event: counted already
-        self.redis.hset(key, comment_id, _encode(label))
-        self._count(post_id, old.labels if old else None, label.labels)
-        self.redis.pfadd(_writers_key(post_id), author_id)
-        if label.labels.is_first_hand:
-            self.redis.pfadd(_writers_key(post_id, "first_hand"), author_id)
-        keys = (key, _stats_key(post_id), _writers_key(post_id))
-        for k in (*keys, _writers_key(post_id, "first_hand")):
-            self.redis.expire(k, TTL_SECONDS)
+        self.redis.hset(_labels_key(post_id), comment_id, _encode(label))
+        self.redis.expire(_labels_key(post_id), TTL_SECONDS)
 
     def remove(self, post_id: str, comment_id: str) -> None:
-        old_raw = cast(str | None, self.redis.hget(_labels_key(post_id), comment_id))
-        if old_raw:
-            self.redis.hdel(_labels_key(post_id), comment_id)
-            self._count(post_id, _decode(old_raw).labels, None)
+        self.redis.hdel(_labels_key(post_id), comment_id)
+        self.redis.hdel(_safety_key(post_id), comment_id)
 
-    def stats(self, post_id: str) -> PostStats:
-        raw = cast(dict[str, str], self.redis.hgetall(_stats_key(post_id)))
-        n = {k: max(0, int(v)) for k, v in raw.items()}
-        return PostStats(
-            labelled_comments=n.get("labelled", 0),
-            first_hand_comments=n.get("is_first_hand", 0),
-            complaint_comments=n.get("is_complaint", 0),
-            praise_comments=n.get("is_praise", 0),
-            writers=int(cast(int, self.redis.pfcount(_writers_key(post_id)))),
-            first_hand_writers=int(
-                cast(int, self.redis.pfcount(_writers_key(post_id, "first_hand")))
-            ),
-        )
+    def put_safety(self, post_id: str, hit: StoredSafety) -> None:
+        value = json.dumps({"c": list(hit.categories), "v": hit.visibility})
+        self.redis.hset(_safety_key(post_id), hit.comment_id, value)
+        self.redis.expire(_safety_key(post_id), TTL_SECONDS)
 
-    def _count(self, post_id: str, old: CommentLabels | None, new: CommentLabels | None) -> None:
-        key = _stats_key(post_id)
-        if (old is None) != (new is None):
-            self.redis.hincrby(key, "labelled", 1 if new else -1)
-        for flag in FLAGS:
-            delta = int(bool(new and getattr(new, flag))) - int(bool(old and getattr(old, flag)))
-            if delta:
-                self.redis.hincrby(key, flag, delta)
+    def get_safety(self, post_id: str) -> list[StoredSafety]:
+        rows = cast(dict[str, str], self.redis.hgetall(_safety_key(post_id)))
+        hits: list[StoredSafety] = []
+        for cid, raw in rows.items():
+            data = json.loads(raw)
+            hits.append(StoredSafety(cid, tuple(data["c"]), data["v"]))
+        return hits
 
 
 def _labels_key(post_id: str) -> str:
     return f"ai:labels:{post_id}"
 
 
-def _stats_key(post_id: str) -> str:
-    return f"ai:labelstats:{post_id}"
-
-
-def _writers_key(post_id: str, kind: str = "all") -> str:
-    return f"ai:writers:{kind}:{post_id}"
+def _safety_key(post_id: str) -> str:
+    return f"ai:safety:{post_id}"
 
 
 def _encode(label: StoredLabel) -> str:

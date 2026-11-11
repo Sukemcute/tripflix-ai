@@ -25,6 +25,11 @@ When something breaks (research note 04 §3):
 - the LLM and the classifier sit behind circuit breakers: an open LLM breaker puts the post
   back for when it closes without spending an attempt; a failing classifier means rules;
 - one post per loop, so events (a hide's 60 s run) are read between two runs.
+
+Input and recovery (Thành, PR be #128, 2026-11-11):
+- a run reads core's seeded random sample (SAMPLE_SIZE) with whole-post counts, one request
+  instead of up to 50 pages of the newest comments; an older core without the route means
+  the newest pages again, without whole-post counts;
 """
 
 import logging
@@ -42,7 +47,7 @@ import redis
 from pydantic import BaseModel, ConfigDict, ValidationError
 from pydantic.alias_generators import to_camel
 
-from app.clients.core_api import CoreApiClient
+from app.clients.core_api import CoreApiClient, SampleUnavailableError
 from app.clients.llm.anthropic import AnthropicLlmClient
 from app.clients.llm.base import LlmClient
 from app.clients.llm.deepseek import DeepSeekClient
@@ -57,12 +62,18 @@ from app.services.summary.comment_classifier import (
     GuardedClassifier,
     load_comment_classifier,
 )
-from app.services.summary.core_adapter import build_caption, build_itinerary, convert_comments
+from app.services.summary.core_adapter import (
+    build_caption,
+    build_itinerary,
+    convert_comments,
+    convert_sample,
+)
+from app.services.summary.estimates import PostStats
 from app.services.summary.label_store import (
     LabelStore,
-    PostStats,
     RedisLabelStore,
     StoredLabel,
+    StoredSafety,
     content_hash,
     fresh_labels,
 )
@@ -106,6 +117,9 @@ RETRY_JITTER_MS = 10_000
 ATTEMPTS_TTL_MS = 86_400_000
 PERMANENT_STATUSES = {400, 413, 422}  # core rejects the request itself: retrying cannot help
 
+# Cochran: about 2,400 writers give a share within +-2% at 95%, whatever the post size;
+# 3,000 comments use ~30 MB in the worker. [HIỆU CHỈNH]
+SAMPLE_SIZE = 3_000
 DUE_KEY = "ai:summary:due"
 INFLIGHT_KEY = "ai:summary:inflight"
 
@@ -395,7 +409,7 @@ class SummaryWorker:
         # A row saved before sourceCommentIds has unknown sources: core cannot tell whether a
         # hidden comment is in it, so regenerate it once rather than let the same hash skip it.
         is_known = previous is not None and previous.source_comment_ids is not None
-        comments = convert_comments(self.core.fetch_comments(post_id), post.author_id)
+        comments, stats = self._read_comments(post_id, post.author_id)
         run = run_summary(
             comments=comments,
             caption=build_caption(post),
@@ -407,7 +421,8 @@ class SummaryWorker:
             classifier=self.classifier,
             classifier_max_comments=self.classifier_max_comments,
             known_labels=self._stored_labels(post_id, comments),
-            population=self._post_stats(post_id),
+            post_stats=stats,
+            known_safety=self._kept_safety(post_id),
         )
         self._keep_labels(post_id, comments, run.new_labels)
         if run.request is None:
@@ -444,15 +459,27 @@ class SummaryWorker:
             return {}
         return fresh_labels(stored, bodies, self.classifier.version)
 
-    def _post_stats(self, post_id: str) -> PostStats | None:
-        """Counts over the whole post from the label store; None means exact counts only."""
-        if self.label_store is None:
-            return None
+    def _read_comments(
+        self, post_id: str, post_author_id: str
+    ) -> tuple[list[CommentIn], PostStats | None]:
+        """Core's random sample and its whole-post counts; the newest pages on an older core."""
         try:
-            return self.label_store.stats(post_id)
+            sample = self.core.fetch_comment_sample(post_id, SAMPLE_SIZE, seed=post_id)
+        except SampleUnavailableError as e:
+            logger.warning("post %s: no sample route (%s), reading the newest pages", post_id, e)
+            return convert_comments(self.core.fetch_comments(post_id), post_author_id), None
+        stats = PostStats(sample.stats.visible_comment_count, sample.stats.unique_author_count)
+        return convert_sample(sample.items, post_author_id), stats
+
+    def _kept_safety(self, post_id: str) -> list[StoredSafety]:
+        """Safety results the label worker kept; unreadable means the sample's own only."""
+        if self.label_store is None:
+            return []
+        try:
+            return self.label_store.get_safety(post_id)
         except Exception:
-            logger.exception("post %s: label stats unreadable, no estimates this run", post_id)
-            return None
+            logger.exception("post %s: kept safety results unreadable", post_id)
+            return []
 
     def _keep_labels(
         self, post_id: str, comments: list[CommentIn], labels: Mapping[str, CommentLabels]

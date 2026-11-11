@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 
 from app.clients.llm.fake import FakeLlmClient
 from app.services.summary.comment_classifier import CommentClassifier, CommentLabels
+from app.services.summary.estimates import PostStats
+from app.services.summary.label_store import StoredSafety
 from app.services.summary.pipeline import (
     MAX_SUMMARY_CHARS,
     SummaryRun,
@@ -464,3 +466,63 @@ def test_the_side_more_people_back_picks_first_when_space_runs_out() -> None:
     text = _summary(pros, cons)
 
     assert "Chê một" in text and "Chê hai" in text and "Khen hai" not in text
+
+
+def test_a_reply_whose_parent_is_outside_the_sample_keeps_it_as_context() -> None:
+    """Core's sample brings the parent's text along (PR be #128); its id is a source too."""
+    reply = _comment(6, "Mình ở rồi, yên tĩnh lắm, phòng rộng").model_copy(
+        update={"parent_id": "cmt_out", "parent_body": "Phòng có ồn không mọi người?"}
+    )
+    classifier = FakeClassifier()
+
+    run = _run([*_comments(), reply], _llm(pros=PROS), classifier=classifier)
+
+    assert (reply.body, "Phòng có ồn không mọi người?") in classifier.seen
+    assert run.request is not None and "cmt_out" in (run.request.source_comment_ids or [])
+
+
+def test_kept_safety_results_outside_the_sample_reach_the_summary() -> None:
+    inside = _comment(5, "Mình ăn hải sản ở đây xong bị ngộ độc cả nhà")
+    kept = [
+        StoredSafety("cmt_far", ("ngo_doc",), "public"),
+        StoredSafety("cmt_hearsay", ("tai_nan",), "pending_review"),
+        StoredSafety("cmt_5", ("ngo_doc",), "public"),  # read this run: its own result wins
+    ]
+
+    run = run_summary(
+        comments=[*_comments(), inside],
+        caption="",
+        itinerary=[],
+        previous_hash=None,
+        now=NOW,
+        llm=_llm(pros=PROS),
+        known_safety=kept,
+    )
+
+    assert run.request is not None and run.request.safety is not None
+    warnings = [w.comment_ids for w in run.request.safety.warnings]
+    pending = [w.comment_ids for w in run.request.safety.pending_warnings]
+    assert ["cmt_far"] in warnings and ["cmt_hearsay"] in pending
+    assert sum(ids == ["cmt_5"] for ids in warnings + pending) == 1
+
+
+def test_core_counts_add_the_population_and_an_estimate_when_the_post_is_bigger() -> None:
+    def run(stats: PostStats) -> SummaryRun:
+        return run_summary(
+            comments=_comments(),
+            caption="",
+            itinerary=[],
+            previous_hash=None,
+            now=NOW,
+            llm=_llm(pros=PROS),
+            post_stats=stats,
+        )
+
+    whole = run(PostStats(comments=5, writers=5)).request
+    big = run(PostStats(comments=5_000, writers=4_000)).request
+
+    assert whole is not None and whole.content is not None
+    assert whole.content.population is not None and whole.content.pros[0].estimate is None
+    assert big is not None and big.content is not None
+    estimate = big.content.pros[0].estimate
+    assert estimate is not None and estimate.people == 2_400  # 3 of 5 writers of 4,000

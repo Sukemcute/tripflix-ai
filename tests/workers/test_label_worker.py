@@ -8,6 +8,7 @@ from app.services.summary.comment_classifier import CommentLabels
 from app.services.summary.label_store import (
     RedisLabelStore,
     StoredLabel,
+    StoredSafety,
     content_hash,
     fresh_labels,
 )
@@ -21,11 +22,10 @@ COMPLAINT = replace(FIRST_HAND, is_complaint=True)
 
 
 class FakeRedis:
-    """Hashes, HyperLogLog (as exact sets) and the stream calls the label worker makes."""
+    """Hashes and the stream calls the label worker makes."""
 
     def __init__(self) -> None:
         self.hashes: dict[str, dict[str, str]] = {}
-        self.hll: dict[str, set[str]] = {}
         self.acked: list[str] = []
         self.dead: list[dict[str, str]] = []
 
@@ -42,20 +42,8 @@ class FakeRedis:
     def hdel(self, key: str, field: str) -> int:
         return int(self.hashes.get(key, {}).pop(field, None) is not None)
 
-    def hincrby(self, key: str, field: str, by: int) -> int:
-        h = self.hashes.setdefault(key, {})
-        h[field] = str(int(h.get(field, "0")) + by)
-        return int(h[field])
-
     def hgetall(self, key: str) -> dict[str, str]:
         return dict(self.hashes.get(key, {}))
-
-    def pfadd(self, key: str, value: str) -> int:
-        self.hll.setdefault(key, set()).add(value)
-        return 1
-
-    def pfcount(self, key: str) -> int:
-        return len(self.hll.get(key, set()))
 
     def expire(self, key: str, seconds: int) -> bool:
         return True
@@ -97,26 +85,16 @@ def _event(kind: str, cid: str, body: str = "", **extra: Any) -> tuple[str, dict
     return f"{cid}-0", {"event": json.dumps(envelope)}
 
 
-def test_store_counts_once_per_comment_and_follows_edits_and_deletes() -> None:
+def test_store_keeps_labels_and_safety_until_the_comment_goes() -> None:
     store = RedisLabelStore(FakeRedis())
-    label = StoredLabel(FIRST_HAND, "v1", content_hash("a"))
+    store.put(POST, "c1", "u1", StoredLabel(FIRST_HAND, "v1", content_hash("a")))
+    store.put_safety(POST, StoredSafety("c1", ("ngo_doc",), "public"))
 
-    store.put(POST, "c1", "u1", label)
-    store.put(POST, "c1", "u1", label)  # redelivered: counted once
-    store.put(POST, "c2", "u2", StoredLabel(COMPLAINT, "v1", content_hash("b")))
-    store.put(POST, "c2", "u2", StoredLabel(NONE, "v1", content_hash("b, sửa")))  # edited
-    stats = store.stats(POST)
-    assert (stats.labelled_comments, stats.first_hand_comments, stats.complaint_comments) == (
-        2,
-        1,
-        0,
-    )
-    assert stats.writers == 2
+    assert set(store.get_many(POST, ["c1", "c2"])) == {"c1"}
+    assert store.get_safety(POST) == [StoredSafety("c1", ("ngo_doc",), "public")]
 
     store.remove(POST, "c1")
-    assert store.stats(POST).first_hand_comments == 0
-    assert store.stats(POST).labelled_comments == 1
-    assert set(store.get_many(POST, ["c1", "c2"])) == {"c2"}
+    assert store.get_many(POST, ["c1"]) == {} and store.get_safety(POST) == []
 
 
 def test_only_labels_of_the_same_text_and_model_are_reused() -> None:
@@ -152,14 +130,47 @@ def test_worker_labels_root_comments_and_skips_what_rules_already_drop() -> None
     assert redis.acked == ["c1-0", "c2-0", "c3-0", "c4-0"]
 
 
-def test_hidden_or_deleted_comments_leave_the_counts() -> None:
+def test_hidden_or_deleted_comments_lose_their_label_and_safety_result() -> None:
     redis = FakeRedis()
     store = RedisLabelStore(redis)
     store.put(POST, "c1", "u1", StoredLabel(FIRST_HAND, "v1", content_hash("x")))
+    store.put_safety(POST, StoredSafety("c1", ("ngo_doc",), "public"))
 
     LabelWorker(redis, store, StubClassifier()).handle_batch([_event("hidden", "c1")])
 
-    assert store.stats(POST).labelled_comments == 0
+    assert store.get_many(POST, ["c1"]) == {} and store.get_safety(POST) == []
+
+
+def test_safety_hits_are_kept_for_roots_and_replies_without_the_text() -> None:
+    """A warning outside core's sample must still reach the summary (PR be #128)."""
+    redis = FakeRedis()
+    store = RedisLabelStore(redis)
+    worker = LabelWorker(redis, store, StubClassifier(FIRST_HAND), clock=lambda: NOW)
+
+    worker.handle_batch(
+        [
+            _event("created", "c1", "Mình ăn hải sản ở đây xong bị ngộ độc cả nhà"),
+            _event("created", "c2", "nghe nói ở đây hay bị ngộ độc", parentCommentId="c1"),
+            _event("created", "c3", "phòng sạch, view biển đẹp, nhân viên dễ thương"),
+        ]
+    )
+
+    kept = {k.comment_id: k for k in store.get_safety(POST)}
+    assert set(kept) == {"c1", "c2"}
+    assert kept["c1"].visibility == "public"  # the model says first-hand
+    assert kept["c2"].visibility == "pending_review"  # a reply: rules, and it is hearsay
+    assert all("hải sản" not in raw for raw in redis.hashes["ai:safety:" + POST].values())
+
+
+def test_an_edit_that_removes_the_safety_words_removes_the_kept_result() -> None:
+    redis = FakeRedis()
+    store = RedisLabelStore(redis)
+    worker = LabelWorker(redis, store, StubClassifier(), clock=lambda: NOW)
+
+    worker.handle_batch([_event("created", "c1", "Mình ăn ở đây xong bị ngộ độc")])
+    worker.handle_batch([_event("updated", "c1", "Mình ăn ở đây, đồ ăn hơi mặn")])
+
+    assert store.get_safety(POST) == []
 
 
 def test_a_failing_classifier_acks_and_leaves_labelling_to_summary_runs() -> None:

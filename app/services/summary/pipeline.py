@@ -13,6 +13,7 @@ with a healthy classifier re-summarizes.
 """
 
 import logging
+from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -20,10 +21,10 @@ from datetime import datetime
 from app.clients.llm.base import LlmClient, LlmResult
 from app.services.summary.claims import build_claims
 from app.services.summary.comment_classifier import CommentClassifier, CommentLabels
-from app.services.summary.estimates import add_estimates
+from app.services.summary.estimates import PostStats, SampleShape, add_estimates
 from app.services.summary.filters import filter_comments
 from app.services.summary.input_hash import compute_input_hash
-from app.services.summary.label_store import PostStats
+from app.services.summary.label_store import StoredSafety
 from app.services.summary.lexicon import read_versions
 from app.services.summary.pii import pseudonymize
 from app.services.summary.prompt import build_user_message, load_system_prompt
@@ -43,7 +44,12 @@ from app.services.summary.schemas import (
     TopicOut,
     build_llm_json_schema,
 )
-from app.services.summary.selection import MIN_PEOPLE, decide_summary_status, select_comments
+from app.services.summary.selection import (
+    MIN_PEOPLE,
+    Selection,
+    decide_summary_status,
+    select_comments,
+)
 from app.services.summary.validator import (
     InvalidLlmOutputError,
     SummaryPoint,
@@ -87,10 +93,13 @@ def run_summary(
     classifier: CommentClassifier | None = None,
     classifier_max_comments: int = CLASSIFIER_MAX_COMMENTS,
     known_labels: Mapping[str, CommentLabels] | None = None,
-    population: PostStats | None = None,
+    post_stats: PostStats | None = None,
+    known_safety: Sequence[StoredSafety] = (),
 ) -> SummaryRun:
     """known_labels: still-true labels of this classifier version from the label store; only
-    the comments without one are classified, so a rerun of a big post is cheap."""
+    the comments without one are classified, so a rerun of a big post is cheap.
+    post_stats: core's whole-post counts when `comments` is its random sample.
+    known_safety: safety results the label worker kept for comments outside the sample."""
     candidates = filter_comments(comments, now).candidates
     labels: dict[str, CommentLabels] | None = None
     new: dict[str, CommentLabels] = {}
@@ -117,7 +126,7 @@ def run_summary(
         labels = (known | new) or None
         if labels is not None:
             labeler = "model" if wanted <= labels.keys() else "mixed"
-    safety = _rule_safety(comments, labels)
+    safety = _rule_safety(comments, labels, known_safety)
     if not comments:
         empty = SaveSummaryRequest(
             status="no_comments", safety=safety, source_comment_ids=[], generated_at=now
@@ -138,7 +147,7 @@ def run_summary(
         content = SummaryContent(
             counts=counts, needed=MIN_PEOPLE - selection.people, labeler=labeler
         )
-        content = add_estimates(content, population, len(selection.items))
+        content = add_estimates(content, post_stats, _sample_shape(comments, selection, post_stats))
         return SummaryRun(
             SaveSummaryRequest(status="insufficient_data", content=content, **base), new_labels=new
         )
@@ -182,7 +191,7 @@ def run_summary(
         )
 
     content = _content(validated, counts).model_copy(update={"labeler": labeler})
-    content = add_estimates(content, population, len(selection.items))
+    content = add_estimates(content, post_stats, _sample_shape(comments, selection, post_stats))
     text = _summary_text(validated)
     base["source_comment_ids"] = sorted(
         {i for s in selection.items for i in (*s.candidate.comment_ids, *s.candidate.context_ids)}
@@ -230,17 +239,23 @@ def classify_comments(
         visible = pick_for_labels(visible, max_comments, first=first)
 
     def parent_text(c: CommentIn) -> str:
-        parent = by_id.get(c.parent_id) if c.parent_id else None
-        return parent.body if parent and parent.status == "visible" else ""
+        if not c.parent_id:
+            return ""
+        if (parent := by_id.get(c.parent_id)) is None:
+            return c.parent_body or ""  # parent outside the sample
+        return parent.body if parent.status == "visible" else ""
 
     found = classifier.classify([(c.body, parent_text(c)) for c in visible])
     return {c.comment_id: label for c, label in zip(visible, found, strict=True)}
 
 
 def _rule_safety(
-    comments: Sequence[CommentIn], labels: dict[str, CommentLabels] | None
+    comments: Sequence[CommentIn],
+    labels: dict[str, CommentLabels] | None,
+    known: Sequence[StoredSafety] = (),
 ) -> SummarySafety:
-    """Rule warnings: public from writers telling their own visit, pending for hearsay."""
+    """Rule warnings: public from writers telling their own visit, pending for hearsay.
+    Kept results of comments outside the sample come after, in id order (a stable hash)."""
     warnings: list[SafetyWarning] = []
     pending: list[SafetyWarning] = []
     for c in comments:
@@ -250,7 +265,32 @@ def _rule_safety(
         if hit:
             warning = SafetyWarning(categories=list(hit.categories), comment_ids=[c.comment_id])
             (warnings if hit.visibility == "public" else pending).append(warning)
+    read = {c.comment_id for c in comments}
+    for k in sorted((k for k in known if k.comment_id not in read), key=lambda k: k.comment_id):
+        warning = SafetyWarning(categories=list(k.categories), comment_ids=[k.comment_id])
+        (warnings if k.visibility == "public" else pending).append(warning)
     return SummarySafety(warnings=warnings, pending_warnings=pending)
+
+
+def _sample_shape(
+    comments: Sequence[CommentIn], selection: Selection, stats: PostStats | None
+) -> SampleShape:
+    """Weights for estimates.py: a sent writer of tier t stands for N_t / n_t writers."""
+    sent_per_tier = Counter(s.tier for s in selection.items)
+    return SampleShape(
+        comments=len(comments),
+        writers=len({c.author_id for c in comments if not c.is_post_author}),
+        has_post_author=any(c.is_post_author for c in comments),
+        is_whole=stats is not None and len(comments) >= stats.comments and selection.skipped == 0,
+        weights={
+            s.candidate.author_id: selection.tier_writers[s.tier - 1] / sent_per_tier[s.tier]
+            for s in selection.items
+        },
+        author_of={
+            i: s.candidate.author_id for s in selection.items for i in s.candidate.comment_ids
+        },
+        sent_writers=len(selection.items),
+    )
 
 
 def _content(validated: ValidatedSummary, counts: SummaryCounts) -> SummaryContent:
