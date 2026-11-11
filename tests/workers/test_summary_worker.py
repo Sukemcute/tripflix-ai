@@ -62,6 +62,10 @@ class FakeRedis:
         self.kv[key] = str(int(self.kv.get(key, "0")) + 1)
         return int(self.kv[key])
 
+    def decr(self, key: str) -> int:
+        self.kv[key] = str(int(self.kv.get(key, "0")) - 1)
+        return int(self.kv[key])
+
     def pexpire(self, key: str, ms: int) -> bool:
         return key in self.kv
 
@@ -437,4 +441,112 @@ def test_an_open_llm_breaker_waits_without_spending_an_attempt() -> None:
     _worker(redis, FailingCore(LlmUnavailableError(breaker.seconds_left()))).summarize_post(POST)
 
     assert redis.zset[POST] == 1_000 + 120_000
-    assert f"ai:summary:attempts:{POST}" not in redis.kv and redis.dead == []
+    assert redis.kv.get(f"ai:summary:attempts:{POST}", "0") == "0" and redis.dead == []
+
+
+def test_the_job_loop_never_touches_the_stream() -> None:
+    """Runs and events live on separate threads: FakeRedis has no stream commands, so a job
+    loop that read events would fail here."""
+    redis = FakeRedis()
+    core = FakeCoreApi()
+    worker = _worker(redis, core)
+    redis.zset[POST] = 0
+
+    assert worker.run_jobs_once() is True
+    assert worker.run_jobs_once() is False  # nothing due any more
+    assert [r.status for r in core.saved] == ["no_comments"]
+
+
+def test_a_post_that_keeps_killing_the_worker_goes_to_dead_letter() -> None:
+    """Out of memory raises nothing: each run started but never finished. The 6th start
+    gives up instead of loading the post again."""
+    redis = FakeRedis()
+    core = FakeCoreApi()
+    redis.kv[f"ai:summary:attempts:{POST}"] = str(MAX_RUN_ATTEMPTS)  # 5 starts that died
+
+    _worker(redis, core).summarize_post(POST)
+
+    assert core.saved == [] and "started 5 times" in redis.dead[-1]["reason"]
+    assert redis.inflight == {} and f"ai:summary:attempts:{POST}" not in redis.kv
+
+
+class _Classifier:
+    version = "v1"
+
+    def classify(self, pairs: Any) -> list[Any]:
+        return []
+
+
+class _Store:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.kept: list[str] = []
+
+    def get_many(self, post_id: str, comment_ids: Any) -> dict[str, Any]:
+        if self.error:
+            raise self.error
+        from app.services.summary.label_store import StoredLabel, content_hash
+
+        return {"c1": StoredLabel(_LABEL, "v1", content_hash("Phòng sạch"))}
+
+    def put(self, post_id: str, comment_id: str, author_id: str, label: Any) -> None:
+        self.kept.append(comment_id)
+
+    def remove(self, post_id: str, comment_id: str) -> None:
+        pass
+
+    def stats(self, post_id: str) -> Any:
+        from app.services.summary.label_store import PostStats
+
+        return PostStats(0, 0, 0, 0, 0, 0)
+
+
+from app.services.summary.comment_classifier import CommentLabels  # noqa: E402
+
+_LABEL = CommentLabels(True, True, False, False, True, False)
+
+
+class _CoreWithComment(FakeCoreApi):
+    def fetch_comments(self, post_id: str) -> list[Any]:
+        from app.clients.core_api import CoreComment
+
+        when = "2026-11-10T00:00:00Z"
+        return [
+            CoreComment.model_validate(
+                {
+                    "id": "c1",
+                    "authorId": "u1",
+                    "body": "Phòng sạch",
+                    "createdAt": when,
+                    "updatedAt": when,
+                }
+            )
+        ]
+
+
+@pytest.mark.parametrize("store_error", [None, RuntimeError("redis down")])
+def test_stored_labels_feed_the_run_and_a_broken_store_only_costs_time(
+    monkeypatch: pytest.MonkeyPatch, store_error: Exception | None
+) -> None:
+    seen: list[Any] = []
+
+    def fake_run(**kwargs: Any) -> SummaryRun:
+        seen.append(kwargs["known_labels"])
+        return SummaryRun(None, new_labels={"c1": _LABEL})
+
+    monkeypatch.setattr(summary_worker, "run_summary", fake_run)
+    store = _Store(store_error)
+    worker = SummaryWorker(
+        cast(Any, FakeRedis()),
+        cast(CoreApiClient, _CoreWithComment()),
+        FakeLlmClient(),
+        classifier=_Classifier(),
+        label_store=store,
+        consumer_name="test",
+        clock_ms=lambda: 1_000,
+    )
+
+    worker.summarize_post(POST)
+
+    assert seen == [{} if store_error else {"c1": _LABEL}]
+    assert store.kept == ["c1"]  # only reading failed: new labels are still kept

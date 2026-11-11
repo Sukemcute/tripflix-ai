@@ -30,8 +30,10 @@ When something breaks (research note 04 §3):
 import logging
 import os
 import socket
+import threading
+import time
 import zlib
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -51,11 +53,21 @@ from app.core.breaker import CircuitBreaker
 from app.core.config import Settings, get_settings
 from app.services.summary.comment_classifier import (
     CommentClassifier,
+    CommentLabels,
     GuardedClassifier,
     load_comment_classifier,
 )
 from app.services.summary.core_adapter import build_caption, build_itinerary, convert_comments
+from app.services.summary.label_store import (
+    LabelStore,
+    PostStats,
+    RedisLabelStore,
+    StoredLabel,
+    content_hash,
+    fresh_labels,
+)
 from app.services.summary.pipeline import CLASSIFIER_MAX_COMMENTS, run_summary
+from app.services.summary.schemas import CommentIn
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +93,7 @@ TIMER_TTL_MS = MAX_WAIT_MS + MIN_GAP_MS  # timers expire on their own once usele
 
 BATCH_SIZE = 20
 BLOCK_MS = 1_000
+IDLE_SECONDS = 0.5  # job loop pause when nothing is due
 CLAIM_IDLE_MS = 60_000
 MAX_DELIVERIES = 5
 
@@ -216,10 +229,15 @@ class SummaryScheduler:
             self.redis.zadd(DUE_KEY, {post_id: now_ms}, lt=True)
         return back
 
-    def retry(self, post_id: str, now_ms: int) -> int | None:
-        """Due time of the next attempt, or None when the post is out of attempts."""
+    def start_attempt(self, post_id: str) -> int:
+        """Count the attempt when the run starts, not when it fails: a run that kills the
+        process (out of memory) raises nothing, so counting on failure looped it forever."""
         attempt = int(cast(int, self.redis.incr(_attempts_key(post_id))))
         self.redis.pexpire(_attempts_key(post_id), ATTEMPTS_TTL_MS)
+        return attempt
+
+    def retry(self, post_id: str, now_ms: int, attempt: int) -> int | None:
+        """Due time of the next attempt, or None when the post is out of attempts."""
         if attempt >= MAX_RUN_ATTEMPTS:
             return None
         due = now_ms + compute_retry_delay_ms(attempt, post_id)
@@ -228,6 +246,7 @@ class SummaryScheduler:
 
     def defer(self, post_id: str, due_ms: int) -> None:
         """Run later without spending an attempt (the LLM breaker is open)."""
+        self.redis.decr(_attempts_key(post_id))
         self.redis.zadd(DUE_KEY, {post_id: due_ms}, lt=True)
 
     def clear_attempts(self, post_id: str) -> None:
@@ -244,6 +263,7 @@ class SummaryWorker:
         is_llm_killed: bool = False,
         classifier: CommentClassifier | None = None,
         classifier_max_comments: int = CLASSIFIER_MAX_COMMENTS,
+        label_store: LabelStore | None = None,
         consumer_name: str | None = None,
         clock_ms: Callable[[], int] | None = None,
     ) -> None:
@@ -254,6 +274,7 @@ class SummaryWorker:
         self.is_llm_killed = is_llm_killed
         self.classifier = classifier
         self.classifier_max_comments = classifier_max_comments
+        self.label_store = label_store
         self.consumer = consumer_name or f"{socket.gethostname()}-{os.getpid()}"
         self.clock_ms = clock_ms or read_clock_ms
 
@@ -266,24 +287,45 @@ class SummaryWorker:
                 raise
 
     def poll_once(self) -> None:
-        self.scheduler.reclaim_expired(self.clock_ms())
+        self.poll_events_once()
+        self.run_jobs_once()
+
+    def poll_events_once(self) -> None:
         for message_id, fields in self._claim_stale():
             self.handle_entry(message_id, fields, self._delivery_count(message_id))
         for message_id, fields in self._read_new():
             self.handle_entry(message_id, fields, 1)
-        # One post per loop: a long run must not keep new events (a hide) waiting behind 19 more.
-        for post_id in self.scheduler.claim_due(self.clock_ms(), limit=1):
+
+    def run_jobs_once(self) -> bool:
+        """Run at most one due post; False when none was due."""
+        self.scheduler.reclaim_expired(self.clock_ms())
+        claimed = self.scheduler.claim_due(self.clock_ms(), limit=1)
+        for post_id in claimed:
             self.summarize_post(post_id)
+        return bool(claimed)
 
     def run_forever(self) -> None:
+        """Events and runs on two threads: a 30 s run no longer stops the stream from being
+        read, so events are scheduled (and acked) before core trims them (MAXLEN ~100k)."""
         self.ensure_group()
         logger.info("summary worker %s listening on %s", self.consumer, STREAM)
+        threading.Thread(
+            target=self._loop, args=(self.poll_events_once,), name="events", daemon=True
+        ).start()
+        self._loop(lambda: self.run_jobs_once() or time.sleep(IDLE_SECONDS))
+
+    def _loop(self, step: Callable[[], object]) -> None:
         while True:
             try:
-                self.poll_once()
+                step()
             except redis.ConnectionError:
                 logger.exception("redis unavailable, retrying")
                 self.redis.connection_pool.disconnect()
+                time.sleep(IDLE_SECONDS)
+            except Exception:
+                # A bug in one loop must not kill the other one (or the process) silently.
+                logger.exception("worker loop error, continuing")
+                time.sleep(IDLE_SECONDS)
 
     def handle_entry(self, message_id: str, fields: dict[str, str], delivery_count: int) -> None:
         raw = fields.get("event", "")
@@ -307,6 +349,13 @@ class SummaryWorker:
         self.redis.xack(STREAM, GROUP, message_id)
 
     def summarize_post(self, post_id: str) -> None:
+        attempt = self.scheduler.start_attempt(post_id)
+        if attempt > MAX_RUN_ATTEMPTS:
+            # Earlier runs died without an error (a poison post): stop before it kills us again.
+            logger.error("post %s started %s times without finishing", post_id, attempt - 1)
+            self._give_up(post_id, f"started {attempt - 1} times without finishing")
+            self.scheduler.finish(post_id)
+            return
         try:
             self._summarize(post_id)
         except LlmUnavailableError as e:
@@ -316,7 +365,7 @@ class SummaryWorker:
             if _is_permanent(e):
                 logger.exception("summary run for post %s cannot succeed", post_id)
                 self._give_up(post_id, f"permanent error: {type(e).__name__} {e}")
-            elif (due := self.scheduler.retry(post_id, self.clock_ms())) is None:
+            elif (due := self.scheduler.retry(post_id, self.clock_ms(), attempt)) is None:
                 logger.exception("summary run for post %s failed for the last time", post_id)
                 self._give_up(post_id, f"failed {MAX_RUN_ATTEMPTS} times: {type(e).__name__} {e}")
             else:
@@ -346,8 +395,9 @@ class SummaryWorker:
         # A row saved before sourceCommentIds has unknown sources: core cannot tell whether a
         # hidden comment is in it, so regenerate it once rather than let the same hash skip it.
         is_known = previous is not None and previous.source_comment_ids is not None
+        comments = convert_comments(self.core.fetch_comments(post_id), post.author_id)
         run = run_summary(
-            comments=convert_comments(self.core.fetch_comments(post_id), post.author_id),
+            comments=comments,
             caption=build_caption(post),
             itinerary=build_itinerary(post),
             previous_hash=previous.input_hash if previous and is_known else None,
@@ -356,7 +406,10 @@ class SummaryWorker:
             is_llm_killed=self.is_llm_killed,
             classifier=self.classifier,
             classifier_max_comments=self.classifier_max_comments,
+            known_labels=self._stored_labels(post_id, comments),
+            population=self._post_stats(post_id),
         )
+        self._keep_labels(post_id, comments, run.new_labels)
         if run.request is None:
             logger.info("post %s: same input as last summary, LLM not called", post_id)
             return
@@ -366,11 +419,54 @@ class SummaryWorker:
             logger.warning("post %s: run failed, previous summary kept", post_id)
         else:
             self.core.save_summary(post_id, run.request)
-            logger.info("post %s: summary saved with status %s", post_id, run.request.status)
+            labeler = run.request.content.labeler if run.request.content else "none"
+            logger.info(
+                "post %s: summary saved with status %s, labeler %s",
+                post_id,
+                run.request.status,
+                labeler,
+            )
         # Retry, or a post whose source was hidden stays held back until its next event.
         # The kill switch is on purpose: run backfill once it is off.
         if is_failed and not self.is_llm_killed:
             raise RunFailedError(f"post {post_id}: LLM output could not be trusted")
+
+    def _stored_labels(self, post_id: str, comments: list[CommentIn]) -> dict[str, CommentLabels]:
+        """Labels made earlier (label worker or past runs) that still match text and model.
+        The store failing costs only time: the run labels everything itself, as before."""
+        if self.label_store is None or self.classifier is None:
+            return {}
+        bodies = {c.comment_id: c.body for c in comments if c.status == "visible"}
+        try:
+            stored = self.label_store.get_many(post_id, bodies)
+        except Exception:
+            logger.exception("post %s: label store unreadable, labelling from scratch", post_id)
+            return {}
+        return fresh_labels(stored, bodies, self.classifier.version)
+
+    def _post_stats(self, post_id: str) -> PostStats | None:
+        """Counts over the whole post from the label store; None means exact counts only."""
+        if self.label_store is None:
+            return None
+        try:
+            return self.label_store.stats(post_id)
+        except Exception:
+            logger.exception("post %s: label stats unreadable, no estimates this run", post_id)
+            return None
+
+    def _keep_labels(
+        self, post_id: str, comments: list[CommentIn], labels: Mapping[str, CommentLabels]
+    ) -> None:
+        if self.label_store is None or self.classifier is None or not labels:
+            return
+        by_id = {c.comment_id: c for c in comments}
+        try:
+            for cid, label in labels.items():
+                c = by_id[cid]
+                stored = StoredLabel(label, self.classifier.version, content_hash(c.body))
+                self.label_store.put(post_id, cid, c.author_id, stored)
+        except Exception:
+            logger.exception("post %s: labels not kept, the next run labels them again", post_id)
 
     def _claim_stale(self) -> list[tuple[str, dict[str, str]]]:
         result = cast(
@@ -475,8 +571,9 @@ def build_classifier(settings: Settings) -> CommentClassifier | None:
 def main() -> None:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
+    client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
     worker = SummaryWorker(
-        redis.Redis.from_url(settings.redis_url, decode_responses=True),
+        client,
         CoreApiClient(
             settings.core_api_url, settings.service_client_id, settings.service_client_secret
         ),
@@ -484,6 +581,7 @@ def main() -> None:
         is_llm_killed=settings.is_summary_llm_killed,
         classifier=build_classifier(settings),
         classifier_max_comments=settings.classifier_max_comments,
+        label_store=RedisLabelStore(client),
     )
     worker.run_forever()
 
