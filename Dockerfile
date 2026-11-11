@@ -6,7 +6,7 @@ COPY --from=uv /uv /bin/uv
 WORKDIR /build
 RUN uv pip install --system --index-url https://download.pytorch.org/whl/cpu torch==2.5.1
 RUN uv pip install --system transformers==4.51.0 tokenizers==0.21.2 onnx==1.17.0 \
-    'onnxruntime>=1.20,<2' numpy sentencepiece safetensors accelerate==1.6.0
+    onnxruntime==1.31.1 numpy sentencepiece safetensors accelerate==1.6.0 ml-dtypes==0.6.0
 COPY app ./app
 COPY scripts/export_visobert.py ./scripts/export_visobert.py
 RUN python -m scripts.export_visobert --out /models/visobert_moderation

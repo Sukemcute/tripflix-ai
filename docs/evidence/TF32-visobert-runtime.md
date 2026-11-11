@@ -1,5 +1,16 @@
 # TF32 — Tích hợp ViSoBERT vào API kiểm duyệt
 
+## Cập nhật INT8 ngày 12/11/2026
+
+Bản Docker hiện xuất ONNX FP32 để đối chiếu với PyTorch, rồi lượng tử hóa động QInt8 theo kênh cho MatMul, Gemm và Gather. Bước build kiểm tra dung lượng và hai quyết định mẫu trước khi đóng gói riêng bản INT8. Runtime dùng một CPU thread và mặc định tắt ViSoBERT. Đặt `IS_VISOBERT_ENABLED=true` trong môi trường của container để thử.
+
+- Model giảm từ 390.535.756 byte xuống khoảng 99 MB. Model INT8 do Docker xuất có SHA256 `b272ff140981d893c4223eb83c9f1630ab15ecaca9fe519f18e103dd7575adb1`.
+- Với 0,5 CPU và 384 MiB, FP32 bị OOM lúc nạp. Image INT8 nạp được, `/health` và `/moderate` trả HTTP 200 với OpenAI và xác thực giả lập. Một batch 20 câu ngắn mất khoảng 0,32 giây. Batch 20 văn bản dài chạm timeout, trả fallback sau khoảng 1,62 giây rồi phục hồi ở request tiếp theo. Đỉnh RAM của container trong thử nghiệm API khoảng 289 MiB.
+- Trên 300 câu hồi quy, có 3 quyết định ViSoBERT đổi ở ngưỡng 0,97. Với OpenAI và Core snapshot trong test pack, TP tăng 125 → 126, FP giữ 21 và số harassment/hate bắt đúng giữ 49/50. Đây là phép đo tác động của quantization trên dữ liệu đã xem.
+- Lint, format và Pyright đạt. Test local đạt 549 passed, 6 skipped. Chưa có phép đo lưu lượng staging hoặc production.
+
+Các số liệu FP32 bên dưới ghi nhận kết quả của bản tích hợp ban đầu.
+
 Ngày 11/11/2026. Nhánh trang/TF32-visobert-runtime. Phần AI thuộc Bảo, thực hiện theo yêu cầu tích hợp model đã eval vào hệ thống. Nhánh đã merge origin/develop tại 51449ea và giữ các thay đổi summary mới của Bảo.
 
 ## Hành vi runtime

@@ -78,10 +78,10 @@ class ModerationSettings(BaseSettings):
     # Core waits 3 s, then falls back to its regex: answer (or give up) before that.
     moderation_timeout_seconds: float = Field(default=2.5, gt=0)
     is_moderation_safety_shadow_enabled: bool = False
-    is_visobert_enabled: bool = True
+    is_visobert_enabled: bool = False
     visobert_dir: Path = Path(__file__).resolve().parents[1] / "models" / "visobert_moderation"
     visobert_threshold: float = Field(default=0.97, ge=0, le=1)
-    visobert_threads: int = Field(default=2, ge=1)
+    visobert_threads: int = Field(default=1, ge=1)
     visobert_batch_size: int = Field(default=4, ge=1, le=20)
     visobert_timeout_seconds: float = Field(default=1.5, gt=0)
 

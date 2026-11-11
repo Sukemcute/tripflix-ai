@@ -13,6 +13,7 @@ from app.clients.moderation.visobert import FILES, LABELS, MODEL_ID, REVISION, v
 def export(out: Path) -> None:
     import onnxruntime as ort
     import torch
+    from onnxruntime.quantization import QuantType, quantize_dynamic
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
     if out.exists():
@@ -44,11 +45,12 @@ def export(out: Path) -> None:
         examples, padding=True, truncation=True, max_length=256, return_tensors="pt"
     )
     out.mkdir(parents=True)
+    fp32_path = out / "model.fp32.onnx"
     with torch.inference_mode():
         torch.onnx.export(
             Logits().eval(),
             (encoded["input_ids"], encoded["attention_mask"]),
-            str(out / "model.onnx"),
+            str(fp32_path),
             input_names=["input_ids", "attention_mask"],
             output_names=["logits"],
             dynamic_axes={
@@ -63,9 +65,7 @@ def export(out: Path) -> None:
     model.eval()
     options = ort.SessionOptions()
     options.intra_op_num_threads = 2
-    session = ort.InferenceSession(
-        str(out / "model.onnx"), options, providers=["CPUExecutionProvider"]
-    )
+    session = ort.InferenceSession(str(fp32_path), options, providers=["CPUExecutionProvider"])
     for texts in (examples, ["Cảnh ngoài ban công đẹp vcl, mình thích buổi sáng ở đây"]):
         batch = tokenizer(texts, padding=True, truncation=True, max_length=256, return_tensors="pt")
         with torch.inference_mode():
@@ -74,6 +74,25 @@ def export(out: Path) -> None:
             ["logits"], {k: batch[k].numpy() for k in ("input_ids", "attention_mask")}
         )
         np.testing.assert_allclose(actual, expected, atol=1e-4, rtol=1e-4)
+    del session
+    int8_path = out / "model.onnx"
+    quantize_dynamic(
+        fp32_path,
+        int8_path,
+        weight_type=QuantType.QInt8,
+        per_channel=True,
+        op_types_to_quantize=["MatMul", "Gemm", "Gather"],
+    )
+    if int8_path.stat().st_size >= fp32_path.stat().st_size * 0.3:
+        raise ValueError("INT8 bundle did not shrink as expected")
+    session = ort.InferenceSession(str(int8_path), options, providers=["CPUExecutionProvider"])
+    (logits,) = session.run(
+        ["logits"], {k: encoded[k].numpy() for k in ("input_ids", "attention_mask")}
+    )
+    probabilities = np.exp(logits - logits.max(axis=-1, keepdims=True))
+    toxic = probabilities[:, 1:].sum(axis=-1) / probabilities.sum(axis=-1)
+    np.testing.assert_array_equal(toxic >= 0.97, [False, True])
+    fp32_path.unlink()
     files = {}
     for name in FILES:
         with (out / name).open("rb") as stream:
@@ -84,7 +103,7 @@ def export(out: Path) -> None:
         "labels": LABELS,
         "max_length": 256,
         "pad_id": model.config.pad_token_id,
-        "precision": "fp32",
+        "precision": "dynamic-int8",
         "files": files,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2), "utf-8")
