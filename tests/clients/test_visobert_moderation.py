@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 import threading
 from pathlib import Path
 
@@ -7,7 +9,13 @@ import pytest
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 
-from app.clients.moderation.visobert import VisobertModeration, verify_bundle
+from app.clients.moderation.visobert import (
+    LABELS,
+    MODEL_ID,
+    REVISION,
+    VisobertModeration,
+    verify_bundle,
+)
 
 
 class Session:
@@ -78,3 +86,52 @@ def test_timed_out_inference_remains_bounded_until_worker_exits() -> None:
 def test_missing_bundle_is_explicit_configuration_error(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         verify_bundle(tmp_path)
+
+
+def test_bundle_hash_check_rejects_modified_model(tmp_path: Path) -> None:
+    manifest = {
+        "model": MODEL_ID,
+        "revision": REVISION,
+        "labels": LABELS,
+        "max_length": 256,
+        "pad_id": 1,
+        "files": {},
+    }
+    for name in ("model.onnx", "tokenizer.json"):
+        (tmp_path / name).write_bytes(b"fixture")
+        manifest["files"][name] = hashlib.sha256(b"fixture").hexdigest()
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), "utf-8")
+    assert verify_bundle(tmp_path)["revision"] == REVISION
+    (tmp_path / "model.onnx").write_bytes(b"changed")
+    with pytest.raises(ValueError, match="sha256"):
+        verify_bundle(tmp_path)
+
+
+def test_timeout_sets_onnx_termination_flag() -> None:
+    class Control:
+        terminate = False
+
+    release = threading.Event()
+    control = Control()
+
+    class Cancellable(Session):
+        def run(self, outputs, feed, options=None):
+            release.wait(5)
+            return super().run(outputs, feed)
+
+    tokenizer = Tokenizer(WordLevel({"[UNK]": 0}, unk_token="[UNK]"))
+    client = VisobertModeration(
+        Cancellable(),
+        tokenizer,
+        threshold=0.97,
+        pad_id=1,
+        batch_size=2,
+        timeout_seconds=0.1,
+        run_options_factory=lambda: control,
+    )
+    try:
+        assert asyncio.run(client.moderate_batch(["text"])) is None
+        assert control.terminate is True
+    finally:
+        release.set()
+        client.close()
