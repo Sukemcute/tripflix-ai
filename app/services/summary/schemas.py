@@ -15,6 +15,9 @@ class CommentIn(BaseModel):
     comment_id: str = Field(min_length=1)
     author_id: str = Field(min_length=1)
     parent_id: str | None = None
+    # The parent's text when the parent itself is not in the list (a sample); null when it
+    # is hidden or deleted. Used only as reply context, never as a comment.
+    parent_body: str | None = Field(default=None, max_length=MAX_COMMENT_CHARS)
     body: str = Field(max_length=MAX_COMMENT_CHARS)
     status: Literal["visible", "hidden", "deleted"]
     like_count: int = Field(default=0, ge=0)
@@ -157,8 +160,9 @@ class _CamelModel(BaseModel):
 
 
 class PeopleEstimate(_CamelModel):
-    """How many writers of the whole post likely hold a point, when only a sample was read:
-    share in the sample times all writers, Wilson 95% interval. Code-made, never the LLM."""
+    """How many writers of the whole post likely hold a point, when only part was read:
+    weighted share of the sample times all writers, Wilson 95% interval (estimates.py).
+    Code-made, never the LLM. Not shown in the app until calibrated (Thành, 2026-11-11)."""
 
     people: int
     low: int
@@ -192,16 +196,12 @@ Labeler = Literal["model", "rules", "mixed"]
 
 
 class PostPopulation(_CamelModel):
-    """Counts over every labelled comment of the post (label store), next to the summary
-    that read a sample. Writers are HyperLogLog estimates (~0.8% error)."""
+    """Whole-post counts from core next to what the run read (core's random sample)."""
 
-    labelled_comments: int
-    writers: int
-    first_hand_writers: int
-    first_hand_comments: int
-    complaint_comments: int
-    praise_comments: int
-    is_estimate: bool = True
+    comments: int  # visible comments of the post, the post author's included
+    writers: int  # distinct writers of those comments
+    sampled_comments: int
+    sampled_writers: int  # the post author left out
 
 
 class SummaryCounts(_CamelModel):

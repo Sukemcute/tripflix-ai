@@ -1,67 +1,95 @@
-"""Scale point counts from the sample the LLM read to the whole post.
+"""Scale point counts from the writers the LLM read to the whole post.
 
-A point's people are counted among the writers sent to the LLM (about 200 at most). On a post
-with 30,000 writers, "3 people" is right for the sample and wrong for the post. The share in the
-sample is an estimate of the share in the post (Cochran: the sample size, not the post size,
-sets the error); the Wilson score interval keeps the range inside 0..1 for small counts.
+A point's people are counted among the writers sent to the LLM (about 200). Those are no
+random draw: the selection takes experienced writers first, then complaints (selection.py),
+so their share of the sent writers overstates their share of the post. Two steps fix it:
+1. core's sample is random over the post (Thành, PR be #128: hashtext(id || seed)), and
+2. post-stratification (Holt and Smith 1979): a sent writer of tier t stands for N_t / n_t
+   writers of the sample (N_t candidates of that tier, n_t of them sent).
+The weighted share times the post's writers is the estimate. The Wilson score interval uses
+n = writers sent, the ones actually read, so it stays honest about how little was read.
 """
 
 import math
+from collections.abc import Mapping
+from dataclasses import dataclass
 
-from app.services.summary.label_store import PostStats
-from app.services.summary.schemas import PeopleEstimate, PostPopulation, SummaryContent
+from app.services.summary.schemas import (
+    PeopleEstimate,
+    PostPopulation,
+    SummaryContent,
+    SummaryPointOut,
+    TopicOut,
+)
 
 Z_95 = 1.96
 
 
-def wilson(k: int, n: int, z: float = Z_95) -> tuple[float, float, float]:
-    """Share k/n and its Wilson interval (low, share, high)."""
+@dataclass(frozen=True)
+class PostStats:
+    """Whole-post counts from core: visible comments only, the post author's included."""
+
+    comments: int
+    writers: int
+
+
+@dataclass(frozen=True)
+class SampleShape:
+    """What one run read, to scale from it."""
+
+    comments: int  # comments read
+    writers: int  # distinct writers read, the post author left out
+    has_post_author: bool  # the post author commented: core's writers count them
+    is_whole: bool  # every comment of the post read and every candidate sent: counts are exact
+    weights: Mapping[str, float]  # sent writer -> writers of the sample they stand for
+    author_of: Mapping[str, str]  # sent comment id -> its writer
+    sent_writers: int
+
+
+def wilson(share: float, n: int, z: float = Z_95) -> tuple[float, float]:
+    """Wilson score interval (low, high) of a share measured on n."""
     if n <= 0:
-        return 0.0, 0.0, 0.0
-    p = min(k, n) / n
+        return 0.0, 0.0
+    p = min(max(share, 0.0), 1.0)
     denom = 1 + z * z / n
     centre = (p + z * z / (2 * n)) / denom
     half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
-    return max(0.0, centre - half), p, min(1.0, centre + half)
-
-
-def to_population(stats: PostStats) -> PostPopulation:
-    return PostPopulation(
-        labelled_comments=stats.labelled_comments,
-        writers=stats.writers,
-        first_hand_writers=stats.first_hand_writers,
-        first_hand_comments=stats.first_hand_comments,
-        complaint_comments=stats.complaint_comments,
-        praise_comments=stats.praise_comments,
-    )
+    return max(0.0, centre - half), min(1.0, centre + half)
 
 
 def add_estimates(
-    content: SummaryContent, stats: PostStats | None, sampled_writers: int
+    content: SummaryContent, stats: PostStats | None, shape: SampleShape
 ) -> SummaryContent:
-    """Population counts on the content, and per-point estimates when the post has more writers
-    than the run read. shortcut: video gaps keep exact first-hand counts; scale them by
-    first-hand writers once the sample records how many first-hand writers it holds."""
-    if stats is None or stats.labelled_comments == 0:
+    """Whole-post counts on the content, and a per-point estimate unless the run read it all."""
+    if stats is None:
         return content
-    population = to_population(stats)
-    if population.writers <= sampled_writers or sampled_writers <= 0:
+    population = PostPopulation(
+        comments=stats.comments,
+        writers=stats.writers,
+        sampled_comments=shape.comments,
+        sampled_writers=shape.writers,
+    )
+    if shape.is_whole or shape.writers <= 0:
         return content.model_copy(update={"population": population})
+    post_writers = max(stats.writers - shape.has_post_author, shape.writers)
 
-    def estimate(people: int) -> PeopleEstimate:
-        low, share, high = wilson(people, sampled_writers)
-        w = population.writers
+    def estimate(point: SummaryPointOut | TopicOut) -> PeopleEstimate:
+        cited = {shape.author_of[i] for i in point.comment_ids if i in shape.author_of}
+        # agreeing replies (people beyond the cited writers) are votes: weight 1
+        weighted = sum(shape.weights.get(a, 1.0) for a in cited) + max(0, point.people - len(cited))
+        share = min(weighted / shape.writers, 1.0)
+        low, high = wilson(share, shape.sent_writers)
         return PeopleEstimate(
-            people=round(share * w), low=math.floor(low * w), high=math.ceil(high * w)
+            people=round(share * post_writers),
+            low=math.floor(low * post_writers),
+            high=math.ceil(high * post_writers),
         )
 
     return content.model_copy(
         update={
             "population": population,
-            "pros": [p.model_copy(update={"estimate": estimate(p.people)}) for p in content.pros],
-            "cons": [p.model_copy(update={"estimate": estimate(p.people)}) for p in content.cons],
-            "topics": [
-                t.model_copy(update={"estimate": estimate(t.people)}) for t in content.topics
-            ],
+            "pros": [p.model_copy(update={"estimate": estimate(p)}) for p in content.pros],
+            "cons": [p.model_copy(update={"estimate": estimate(p)}) for p in content.cons],
+            "topics": [t.model_copy(update={"estimate": estimate(t)}) for t in content.topics],
         }
     )

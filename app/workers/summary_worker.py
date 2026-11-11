@@ -25,6 +25,14 @@ When something breaks (research note 04 §3):
 - the LLM and the classifier sit behind circuit breakers: an open LLM breaker puts the post
   back for when it closes without spending an attempt; a failing classifier means rules;
 - one post per loop, so events (a hide's 60 s run) are read between two runs.
+
+Input and recovery (Thành, PR be #128, 2026-11-11):
+- a run reads core's seeded random sample (SAMPLE_SIZE) with whole-post counts, one request
+  instead of up to 50 pages of the newest comments; an older core without the route means
+  the newest pages again, without whole-post counts;
+- every RECONCILE_EVERY_MS one replica asks core which posts it holds back for a hidden
+  source and schedules them like backfill, so a hide event core trimmed from the stream
+  (MAXLEN ~100k) is not lost for good.
 """
 
 import logging
@@ -42,7 +50,7 @@ import redis
 from pydantic import BaseModel, ConfigDict, ValidationError
 from pydantic.alias_generators import to_camel
 
-from app.clients.core_api import CoreApiClient
+from app.clients.core_api import CoreApiClient, SampleUnavailableError
 from app.clients.llm.anthropic import AnthropicLlmClient
 from app.clients.llm.base import LlmClient
 from app.clients.llm.deepseek import DeepSeekClient
@@ -57,12 +65,18 @@ from app.services.summary.comment_classifier import (
     GuardedClassifier,
     load_comment_classifier,
 )
-from app.services.summary.core_adapter import build_caption, build_itinerary, convert_comments
+from app.services.summary.core_adapter import (
+    build_caption,
+    build_itinerary,
+    convert_comments,
+    convert_sample,
+)
+from app.services.summary.estimates import PostStats
 from app.services.summary.label_store import (
     LabelStore,
-    PostStats,
     RedisLabelStore,
     StoredLabel,
+    StoredSafety,
     content_hash,
     fresh_labels,
 )
@@ -106,6 +120,13 @@ RETRY_JITTER_MS = 10_000
 ATTEMPTS_TTL_MS = 86_400_000
 PERMANENT_STATUSES = {400, 413, 422}  # core rejects the request itself: retrying cannot help
 
+# Cochran: about 2,400 writers give a share within +-2% at 95%, whatever the post size;
+# 3,000 comments use ~30 MB in the worker. [HIỆU CHỈNH]
+SAMPLE_SIZE = 3_000
+RECONCILE_EVERY_MS = 6 * 3_600_000  # [HIỆU CHỈNH] Thành suggested 6 h or once a day
+RECONCILE_RETRY_MS = 600_000
+RECONCILE_CHECK_MS = 60_000  # how often a job loop looks at the lock
+RECONCILE_KEY = "ai:summary:reconcile"  # set NX with a TTL: lock and timer in one key
 DUE_KEY = "ai:summary:due"
 INFLIGHT_KEY = "ai:summary:inflight"
 
@@ -277,6 +298,7 @@ class SummaryWorker:
         self.label_store = label_store
         self.consumer = consumer_name or f"{socket.gethostname()}-{os.getpid()}"
         self.clock_ms = clock_ms or read_clock_ms
+        self._next_reconcile_check_ms = 0
 
     def ensure_group(self) -> None:
         """Read from the start of the stream so events sent while the worker was down count."""
@@ -298,11 +320,35 @@ class SummaryWorker:
 
     def run_jobs_once(self) -> bool:
         """Run at most one due post; False when none was due."""
+        self.maybe_reconcile()
         self.scheduler.reclaim_expired(self.clock_ms())
         claimed = self.scheduler.claim_due(self.clock_ms(), limit=1)
         for post_id in claimed:
             self.summarize_post(post_id)
         return bool(claimed)
+
+    def maybe_reconcile(self) -> int:
+        """Schedule the posts core holds back, at most once per RECONCILE_EVERY_MS across all
+        replicas (whoever sets the key runs it). Returns how many posts were scheduled."""
+        now = self.clock_ms()
+        if now < self._next_reconcile_check_ms:
+            return 0
+        self._next_reconcile_check_ms = now + RECONCILE_CHECK_MS
+        if not self.redis.set(RECONCILE_KEY, now, nx=True, px=RECONCILE_EVERY_MS):
+            return 0
+        scheduled = 0
+        try:
+            for post_id in self.core.iter_held_summaries():
+                scheduled += self.scheduler.schedule_backfill(post_id, now)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != httpx.codes.NOT_FOUND:
+                raise
+            logger.warning("core has no reconciliation route yet, next try in 6 h")
+        except Exception:
+            self.redis.set(RECONCILE_KEY, now, px=RECONCILE_RETRY_MS)  # try again soon
+            raise
+        logger.info("reconciliation scheduled %s held posts", scheduled)
+        return scheduled
 
     def run_forever(self) -> None:
         """Events and runs on two threads: a 30 s run no longer stops the stream from being
@@ -395,7 +441,7 @@ class SummaryWorker:
         # A row saved before sourceCommentIds has unknown sources: core cannot tell whether a
         # hidden comment is in it, so regenerate it once rather than let the same hash skip it.
         is_known = previous is not None and previous.source_comment_ids is not None
-        comments = convert_comments(self.core.fetch_comments(post_id), post.author_id)
+        comments, stats = self._read_comments(post_id, post.author_id)
         run = run_summary(
             comments=comments,
             caption=build_caption(post),
@@ -407,7 +453,8 @@ class SummaryWorker:
             classifier=self.classifier,
             classifier_max_comments=self.classifier_max_comments,
             known_labels=self._stored_labels(post_id, comments),
-            population=self._post_stats(post_id),
+            post_stats=stats,
+            known_safety=self._kept_safety(post_id),
         )
         self._keep_labels(post_id, comments, run.new_labels)
         if run.request is None:
@@ -444,15 +491,27 @@ class SummaryWorker:
             return {}
         return fresh_labels(stored, bodies, self.classifier.version)
 
-    def _post_stats(self, post_id: str) -> PostStats | None:
-        """Counts over the whole post from the label store; None means exact counts only."""
-        if self.label_store is None:
-            return None
+    def _read_comments(
+        self, post_id: str, post_author_id: str
+    ) -> tuple[list[CommentIn], PostStats | None]:
+        """Core's random sample and its whole-post counts; the newest pages on an older core."""
         try:
-            return self.label_store.stats(post_id)
+            sample = self.core.fetch_comment_sample(post_id, SAMPLE_SIZE, seed=post_id)
+        except SampleUnavailableError as e:
+            logger.warning("post %s: no sample route (%s), reading the newest pages", post_id, e)
+            return convert_comments(self.core.fetch_comments(post_id), post_author_id), None
+        stats = PostStats(sample.stats.visible_comment_count, sample.stats.unique_author_count)
+        return convert_sample(sample.items, post_author_id), stats
+
+    def _kept_safety(self, post_id: str) -> list[StoredSafety]:
+        """Safety results the label worker kept; unreadable means the sample's own only."""
+        if self.label_store is None:
+            return []
+        try:
+            return self.label_store.get_safety(post_id)
         except Exception:
-            logger.exception("post %s: label stats unreadable, no estimates this run", post_id)
-            return None
+            logger.exception("post %s: kept safety results unreadable", post_id)
+            return []
 
     def _keep_labels(
         self, post_id: str, comments: list[CommentIn], labels: Mapping[str, CommentLabels]

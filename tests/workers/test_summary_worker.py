@@ -5,7 +5,7 @@ from typing import Any, cast
 import httpx
 import pytest
 
-from app.clients.core_api import CoreApiClient, CorePost, CoreSummary
+from app.clients.core_api import CoreApiClient, CorePost, CoreSummary, SampleUnavailableError
 from app.clients.llm.fake import FakeLlmClient
 from app.clients.llm.guarded import LlmUnavailableError
 from app.core.breaker import CircuitBreaker
@@ -33,6 +33,7 @@ class FakeRedis:
     """The few Redis commands the scheduler and handler use; TTLs are ignored."""
 
     def __init__(self) -> None:
+        self.ttl: dict[str, int | None] = {}
         self.kv: dict[str, str] = {}
         self.zsets: dict[str, dict[str, float]] = {}
         self.acked: list[str] = []
@@ -50,6 +51,7 @@ class FakeRedis:
         if nx and key in self.kv:
             return False
         self.kv[key] = str(value)
+        self.ttl[key] = px
         return True
 
     def get(self, key: str) -> str | None:
@@ -168,6 +170,12 @@ class FakeCoreApi:
     def fetch_comments(self, post_id: str) -> list[Any]:
         if self.comments_fail:
             raise RuntimeError("core down")
+        return []
+
+    def fetch_comment_sample(self, post_id: str, size: int, seed: str) -> Any:
+        raise SampleUnavailableError("core answered 404")  # an older core: the flat pages
+
+    def iter_held_summaries(self) -> list[str]:
         return []
 
     def save_summary(self, post_id: str, request: SaveSummaryRequest) -> None:
@@ -495,10 +503,13 @@ class _Store:
     def remove(self, post_id: str, comment_id: str) -> None:
         pass
 
-    def stats(self, post_id: str) -> Any:
-        from app.services.summary.label_store import PostStats
+    def put_safety(self, post_id: str, hit: Any) -> None:
+        pass
 
-        return PostStats(0, 0, 0, 0, 0, 0)
+    def get_safety(self, post_id: str) -> list[Any]:
+        if self.error:
+            raise self.error
+        return []
 
 
 from app.services.summary.comment_classifier import CommentLabels  # noqa: E402
@@ -550,3 +561,92 @@ def test_stored_labels_feed_the_run_and_a_broken_store_only_costs_time(
 
     assert seen == [{} if store_error else {"c1": _LABEL}]
     assert store.kept == ["c1"]  # only reading failed: new labels are still kept
+
+
+class _CoreWithSample(FakeCoreApi):
+    def __init__(self, held: list[str] | None = None, held_error: Exception | None = None) -> None:
+        super().__init__()
+        self.held = held or []
+        self.held_error = held_error
+        self.sample_calls: list[tuple[int, str]] = []
+        self.held_calls = 0
+
+    def fetch_comment_sample(self, post_id: str, size: int, seed: str) -> Any:
+        from app.clients.core_api import CoreCommentSample
+
+        self.sample_calls.append((size, seed))
+        item = {
+            "id": "c1",
+            "authorId": "u1",
+            "body": "Phòng sạch",
+            "createdAt": "2026-11-10T00:00:00Z",
+        }
+        stats = {"visibleCommentCount": 9_000, "uniqueAuthorCount": 4_000}
+        return CoreCommentSample.model_validate({"stats": stats, "items": [item]})
+
+    def iter_held_summaries(self) -> list[str]:
+        self.held_calls += 1
+        if self.held_error:
+            raise self.held_error
+        return self.held
+
+
+def test_a_run_reads_cores_sample_with_its_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[dict[str, Any]] = []
+
+    def fake_run(**kwargs: Any) -> SummaryRun:
+        seen.append(kwargs)
+        return SummaryRun(None)
+
+    monkeypatch.setattr(summary_worker, "run_summary", fake_run)
+    core = _CoreWithSample()
+
+    _worker(FakeRedis(), core).summarize_post(POST)
+
+    assert core.sample_calls == [(summary_worker.SAMPLE_SIZE, POST)]  # same seed every run
+    [kwargs] = seen
+    assert [c.comment_id for c in kwargs["comments"]] == ["c1"]
+    assert (kwargs["post_stats"].comments, kwargs["post_stats"].writers) == (9_000, 4_000)
+
+
+def test_an_older_core_falls_back_to_the_newest_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        summary_worker, "run_summary", lambda **kw: seen.append(kw) or SummaryRun(None)
+    )
+
+    _worker(FakeRedis(), cast(Any, _CoreWithComment())).summarize_post(POST)
+
+    assert [c.comment_id for c in seen[0]["comments"]] == ["c1"]
+    assert seen[0]["post_stats"] is None  # no whole-post counts: exact counts only
+
+
+def test_reconciliation_runs_on_one_replica_and_schedules_held_posts_like_backfill() -> None:
+    redis = FakeRedis()
+    core = _CoreWithSample(held=[POST, "p-2"])
+    first, second = _worker(redis, core), _worker(redis, core)
+
+    assert first.maybe_reconcile() == 2
+    assert second.maybe_reconcile() == 0  # the key is taken for 6 h
+    assert core.held_calls == 1
+    assert {POST, "p-2"} <= set(redis.zset)
+
+
+def test_a_failed_reconciliation_is_tried_again_soon() -> None:
+    redis = FakeRedis()
+    core = _CoreWithSample(held_error=httpx.ConnectError("core down"))
+
+    with pytest.raises(httpx.ConnectError):
+        _worker(redis, core).maybe_reconcile()
+
+    assert redis.kv[summary_worker.RECONCILE_KEY] == "1000"
+    assert redis.ttl[summary_worker.RECONCILE_KEY] == summary_worker.RECONCILE_RETRY_MS
+
+
+def test_an_older_core_without_reconciliation_only_waits() -> None:
+    response = httpx.Response(404, request=httpx.Request("GET", "http://core"))
+    error = httpx.HTTPStatusError("404", request=response.request, response=response)
+    redis = FakeRedis()
+
+    assert _worker(redis, _CoreWithSample(held_error=error)).maybe_reconcile() == 0
+    assert summary_worker.RECONCILE_KEY in redis.kv

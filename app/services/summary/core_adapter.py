@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from app.clients.core_api import CoreComment, CorePost
+from app.clients.core_api import CoreComment, CorePost, CoreSampleComment
 from app.services.summary.schemas import MAX_COMMENT_CHARS, CommentIn, ItineraryItemIn
 
 _PLACE_NAME_MAX = 200
@@ -27,6 +27,29 @@ def convert_comments(comments: Sequence[CoreComment], post_author_id: str) -> li
             is_post_author=c.author_id == post_author_id,
         )
         for c in comments
+    ]
+
+
+def convert_sample(items: Sequence[CoreSampleComment], post_author_id: str) -> list[CommentIn]:
+    """A sample in the flat list's order (newest first), so a post smaller than the sample gives
+    the same input, and the same hash, as reading it page by page."""
+    ordered = sorted(items, key=lambda c: (c.created_at, c.id), reverse=True)
+    return [
+        CommentIn(
+            comment_id=c.id,
+            author_id=c.author_id,
+            parent_id=c.parent_comment_id,
+            parent_body=c.parent_comment_body[:MAX_COMMENT_CHARS]
+            if c.parent_comment_body
+            else None,
+            body=c.body[:MAX_COMMENT_CHARS],
+            status="visible",
+            like_count=c.like_count,
+            created_at=c.created_at,
+            edited_at=c.edited_at,
+            is_post_author=c.author_id == post_author_id,
+        )
+        for c in ordered
     ]
 
 

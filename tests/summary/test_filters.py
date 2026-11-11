@@ -286,3 +286,18 @@ def test_lsh_near_duplicates_match_the_pairwise_reference() -> None:
 
     assert _near_duplicate_clusters(norms) == _pairwise_clusters(norms)
     assert len(set(_near_duplicate_clusters(norms))) < len(norms)  # copies were found
+
+
+def test_a_parent_outside_the_sample_gives_context_but_takes_no_vote() -> None:
+    reply = comment(
+        "c2",
+        body="+1 đúng vậy, phòng rất sạch và yên tĩnh",
+        parent_id="c-out",
+        parent_body="Phòng sạch không mọi người?",
+    )
+
+    [candidate] = filter_comments([reply], NOW).candidates
+
+    assert candidate.contexts == ("Phòng sạch không mọi người?",)
+    assert candidate.context_ids == ("c-out",)
+    assert candidate.supporters == frozenset()

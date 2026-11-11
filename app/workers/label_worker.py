@@ -8,7 +8,11 @@ summaries down (bulkhead).
   summary run, which has the parent text the classifier was trained with.
 - cascade: a comment the single-comment rules drop (spam, link, too short, video reaction)
   needs no label and skips the model, unless the safety rules flag it.
-- deleted / hidden: its label and counts are removed. restored: the next run labels it.
+- safety: every written comment, reply or root, that the safety rules flag keeps its result
+  (categories, public or held for review, decided with its label when there is one), so a
+  warning outside core's sample still reaches the summary. Never the comment text.
+- updated: the old label and safety result go first, the new text decides again.
+- deleted / hidden: its label and safety result are removed. restored: the next run labels it.
 - the classifier fails or its breaker is open: the batch is acked without labels. Summary
   runs still label what they need, as before, so nothing is lost but time.
 """
@@ -25,9 +29,15 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from pydantic.alias_generators import to_camel
 
 from app.core.config import get_settings
-from app.services.summary.comment_classifier import CommentClassifier
+from app.services.summary.comment_classifier import CommentClassifier, CommentLabels
 from app.services.summary.filters import filter_comments
-from app.services.summary.label_store import LabelStore, RedisLabelStore, StoredLabel, content_hash
+from app.services.summary.label_store import (
+    LabelStore,
+    RedisLabelStore,
+    StoredLabel,
+    StoredSafety,
+    content_hash,
+)
 from app.services.summary.safety import match_safety
 from app.services.summary.schemas import CommentIn
 from app.workers.summary_worker import (
@@ -74,7 +84,7 @@ class LabelWorker:
         self.clock = clock
 
     def handle_batch(self, entries: list[tuple[str, dict[str, str]]]) -> None:
-        to_label: list[_Payload] = []
+        writes: list[_Payload] = []
         for message_id, fields in entries:
             raw = fields.get("event", "")
             try:
@@ -92,11 +102,17 @@ class LabelWorker:
                     },
                 )
                 continue
-            if event.type in GONE_EVENTS:
+            if event.type in GONE_EVENTS or event.type == "content.comment.updated":
                 self.store.remove(payload.post_id, payload.comment_id)
-            elif event.type in WRITE_EVENTS and self._needs_label(payload):
-                to_label.append(payload)
-        self._label(to_label)
+            if event.type in WRITE_EVENTS:
+                writes.append(payload)
+        labels = self._label([p for p in writes if self._needs_label(p)])
+        for p in writes:
+            label = labels.get(p.comment_id)
+            if hit := match_safety(p.body, label.is_first_hand if label else None):
+                self.store.put_safety(
+                    p.post_id, StoredSafety(p.comment_id, hit.categories, hit.visibility)
+                )
         for message_id, _ in entries:
             self.redis.xack(STREAM, GROUP, message_id)
 
@@ -115,19 +131,20 @@ class LabelWorker:
         )
         return bool(filter_comments([comment], self.clock()).candidates)
 
-    def _label(self, items: list[_Payload]) -> None:
+    def _label(self, items: list[_Payload]) -> dict[str, CommentLabels]:
         if not items or self.classifier is None:
-            return
+            return {}
         try:
             found = self.classifier.classify([(p.body, "") for p in items])
         except Exception:
             logger.exception(
                 "labelling %s comments failed, summary runs will label them", len(items)
             )
-            return
+            return {}
         for p, labels in zip(items, found, strict=True):
             stored = StoredLabel(labels, self.classifier.version, content_hash(p.body))
             self.store.put(p.post_id, p.comment_id, p.author_id or p.comment_id, stored)
+        return {p.comment_id: labels for p, labels in zip(items, found, strict=True)}
 
     def ensure_group(self) -> None:
         try:
