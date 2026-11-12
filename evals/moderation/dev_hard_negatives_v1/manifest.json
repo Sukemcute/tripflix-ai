@@ -1,0 +1,51 @@
+{
+  "name": "tripflix-moderation-dev-hard-negatives-v1",
+  "created_date": "2026-11-11",
+  "split": "dev",
+  "source": "AI-authored synthetic examples derived from observed test error categories",
+  "label_status": "proposed",
+  "human_review_complete": false,
+  "originating_test_ids": [
+    "tf32-h1-slang-023",
+    "tf32-h1-slang-019"
+  ],
+  "counts": {
+    "additions": 80,
+    "clean": 40,
+    "toxic": 40,
+    "pairs": 40,
+    "expanded": 320,
+    "expanded_clean": 162,
+    "expanded_toxic": 158,
+    "expanded_groups": 267,
+    "previous_reviewed": 240,
+    "new_proposed": 80
+  },
+  "focus": {
+    "profanity": 40,
+    "quotation": 40
+  },
+  "dataset_sha256": {
+    "dev-additions.jsonl": "7c030902aef3ab4fc96b38bee6005815cf5c7173a30f79832f18868ce4ac06c5",
+    "dev-expanded.jsonl": "10a3592a3fe368ceec529e56030d634f40f695728dbf3d81f6d8bf5f65cf7d10"
+  },
+  "counts_by_kind": {
+    "slang_praise": 10,
+    "quoted_report": 20,
+    "standalone_profanity": 10,
+    "hate": 3,
+    "harassment": 33,
+    "threat": 3,
+    "violence": 1
+  },
+  "previous_dev_source": "evals/moderation/quality_review/review_240.csv",
+  "policy_source": "evals/moderation/quality_review/ANNOTATION_POLICY.md",
+  "checks": {
+    "normalized_exact_overlap_with_existing_data": 0,
+    "near_matches_at_090": 0,
+    "unique_ids": true,
+    "pair_groups_preserved": true
+  },
+  "usage": "Development and later training preparation after label review. Each pair must stay together in any future train/dev split.",
+  "evaluation_note": "Examples are informed by holdout_v1 results. Use fresh evaluation data for a subsequent model or policy developed with these examples."
+}

@@ -1,0 +1,58 @@
+{
+  "name": "tripflix-moderation-synthetic-holdout-v1",
+  "created_date": "2026-11-11",
+  "split": "test",
+  "source": "AI-authored synthetic Vietnamese travel comments",
+  "label_status": "reviewed",
+  "human_review_complete": true,
+  "model_predictions_consulted": false,
+  "dataset_sha256": "6ce54bad6ebab6c11eedcfcea2ccef85171bfaf85344972b81f0f9f774d887ff",
+  "rows": 300,
+  "toxic": 150,
+  "clean": 150,
+  "groups": 293,
+  "paired_groups": 7,
+  "policy_sha256": "471f9e297ee83a9140262e01297d94830d0dedf6f24c1c600724bff58b80c259",
+  "historical_dataset_sha256": "098f994d9175da78bb818f3e254e9f55cf0f9c5563207f9b178e1ac0bff21a4f",
+  "reviewed_dev_sha256": "c982ffb7e62e68a9027452069ede0ffcf4cc1e1a8d891f1f089f5f522cf21674",
+  "checks": {
+    "schema": "passed",
+    "unique_ids": "passed",
+    "unique_normalized_text": "passed",
+    "historical_exact_overlap": 0,
+    "reviewed_dev_exact_overlap": 0,
+    "historical_near_overlap_at_085": 0,
+    "near_check": "difflib.get_close_matches on accent/case/punctuation normalized text",
+    "note": "String checks do not establish semantic independence or representativeness."
+  },
+  "counts_by_kind": {
+    "harassment": 25,
+    "self_harm": 25,
+    "neutral": 20,
+    "quoted_report": 10,
+    "hate": 25,
+    "beach": 25,
+    "sexual": 25,
+    "violence": 25,
+    "complaint": 25,
+    "threat": 25,
+    "slang": 17,
+    "safety": 25,
+    "slang_praise": 25,
+    "standalone_profanity": 3
+  },
+  "limits": [
+    "Synthetic, balanced examples do not estimate production prevalence.",
+    "Shared policy and known error families can bias authored data.",
+    "FPR denominator is 150 clean samples; harassment/hate recall denominator is 50."
+  ],
+  "review_confirmation": {
+    "status": "confirmed",
+    "confirmed_by": "user",
+    "confirmed_date": "2026-11-11",
+    "scope": "All 300 existing binary labels confirmed without changes in chat",
+    "independent_second_review_recorded": false,
+    "confirmation_after_model_results_shared": true
+  },
+  "original_dataset_sha256": "395ce01aceb14eecc4dd66d365c353c1fe292f20cf92bb5985f95f08d5d519aa"
+}
