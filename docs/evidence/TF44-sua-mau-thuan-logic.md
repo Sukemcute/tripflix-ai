@@ -1,7 +1,7 @@
-# TF44 — Sửa 4 mâu thuẫn logic nặng trong AI tóm tắt
+# TF44 — Sửa 12 mâu thuẫn logic trong AI tóm tắt
 
 - Nhánh: `bao/TF44-sua-mau-thuan-logic` · Người làm: Bảo (dùng AI: có) · Ngày: 2026-11-13
-- **Nguồn:** rà soát toàn bộ module ngày 2026-11-13 tìm được 12 mâu thuẫn. PR này sửa 4 lỗi nặng nhất.
+- **Nguồn:** rà soát toàn bộ module ngày 2026-11-13 tìm được 12 mâu thuẫn. Phần 1 sửa 4 lỗi nặng; phần 2 sửa 8 lỗi còn lại và các ghi chú lệch code.
 
 ## Đã làm
 
@@ -52,3 +52,46 @@
 
 - Chỉ sửa repo AI. Không đổi hợp đồng API: `commentCount` và `inputHash` đã có sẵn trong body PUT.
 - **Anh Thành:** sau khi deploy, `commentCountAtSummary` của bài lớn sẽ là số bình luận đang hiện của cả bài. Còn một điểm cần anh xem về `isStale` (phần 2 của lỗi 4).
+
+
+---
+
+## Phần 2: 8 mâu thuẫn còn lại (2026-11-13)
+
+| # | Mâu thuẫn | Sửa |
+|---|---|---|
+| 5 | Câu dính an toàn được ưu tiên gửi cho LLM, rồi validator bỏ hết bằng chứng từ chúng (V5). Một tác giả có một câu an toàn thì mất luôn mọi ý khác | Luật **L14**: bình luận dính luật an toàn rời đường tóm tắt (đường an toàn vẫn báo chúng). Các bình luận khác của cùng tác giả vẫn được dùng. Câu an toàn bị phủ định ("không bị ngộ độc") không bị bắt nên vẫn giữ |
+| 6 | Ước lượng "khoảng X người" tính cả tài khoản bị đánh dấu chép (L8), trong khi số chính xác loại họ | Trọng số, số người theo tầng và tác giả được trích dẫn đều bỏ bản chép |
+| 7 | Docstring hứa model lỗi thì hash không mang version model, nhưng khi có nhãn lưu sẵn thì vẫn mang | Lượt có một phần nhãn từ luật (`labeler = mixed`) thêm `labeler` vào hash, nên khác lượt dùng model hoàn toàn. Lượt dùng model hoàn toàn và lượt chỉ dùng luật giữ nguyên hash như cũ |
+| 8 | LLM chết hay lỗi thì nhãn vừa gắn bị bỏ, nên mỗi lần hoãn 5 phút lại chạy model lại | Pipeline gọi `keep_labels` **trước** khi gọi LLM |
+| 9 | `population` gọi là số đếm toàn bài, nhưng hash trùng thì không lưu nên không theo kịp bình luận mới | Định nghĩa lại cho khớp: đó là số đếm **tại thời điểm** của bản tóm tắt, đi cùng ước lượng đã tính từ chúng. Số trực tiếp đọc qua `comment-stats` của core |
+| 10 | Cùng một phản hồi dính an toàn: label worker dùng luật, lượt tóm tắt dùng model để quyết công khai hay chờ duyệt | Label worker cũng đọc phản hồi dính an toàn bằng model (không có nội dung cha), và không lưu nhãn đó |
+| 11 | Label worker bỏ qua sự kiện `restored` | Coi `restored` là sự kiện ghi. Sự kiện hiện chưa có `body` nên chưa làm gì; core thêm `body` là tự chạy |
+| 12 | "Không có trong mẫu" bị hiểu là "nằm ngoài mẫu", kể cả khi đã đọc cả bài, nên kết quả an toàn của bình luận đã ẩn quay lại | Chỉ gộp kết quả an toàn đã lưu khi số đếm của core cho thấy lượt chỉ đọc một phần bài |
+
+**Ghi chú lệch code đã sửa:**
+- CONTEXT: "120 bình luận" thành ngân sách 12.000 token; "≥ 5 bình luận" thành 5 người có ý kiến; nhà cung cấp LLM thành 4 adapter đã commit.
+- Code: ghi chú tốc độ bộ phân loại (34 câu/s), giới hạn 500 câu mỗi lượt.
+
+**Test đổi theo hành vi mới:**
+- `test_rule_keeps_usable_comment`: câu "Ngộ độc" chuyển sang nhóm bị bỏ với mã L14.
+- `test_agreeing_replies_…`: bình luận cha đổi từ câu ngộ độc sang câu chê thường. Test kiểm phiếu đồng ý, không kiểm an toàn.
+- `test_safety_hits_are_kept_…`: phản hồi giờ do model quyết công khai hay chờ duyệt.
+- `test_stored_labels_feed_the_run_…`: nhãn được giữ qua callback.
+- `test_kept_safety_results_…`: thêm số đếm cho thấy chỉ đọc một phần bài.
+
+**Test mới:**
+- an toàn không được gửi cho LLM;
+- đọc cả bài thì bỏ kết quả an toàn cũ;
+- LLM lỗi vẫn giữ nhãn;
+- lượt có một phần nhãn từ luật cho hash khác lượt dùng model;
+- phản hồi không lưu nhãn.
+
+**Kết quả phần 2:**
+- `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest`: ruff sạch, pyright 0 lỗi, **564 passed**, 5 skipped.
+- **Eval live** (DeepSeek, 15 bài seed, 0,005 USD): 15/15 cổng, trạng thái đúng 1,0, độ phủ ý 0,966, độ chính xác ý 0,875, khác biệt video 1,0, 0 trích dẫn sai. Token vào 33.925 → **33.740**: câu dính an toàn không còn được gửi. Độ chính xác ý lên xuống giữa 0,875 và 0,903 qua các lần chạy, do LLM dao động.
+
+**Ảnh hưởng tới người khác:**
+- **Anh Thành:** đề xuất thêm `body` vào sự kiện `content.comment.restored` (chỉ thêm field).
+- **Phía FE:** `population` là số đếm tại thời điểm tóm tắt, không phải số trực tiếp.
+- **Hash:** chỉ đổi cho các lượt `mixed`, nên sau deploy hầu hết bài không bị tóm tắt lại hàng loạt.
