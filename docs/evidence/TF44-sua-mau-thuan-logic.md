@@ -112,7 +112,21 @@
 - Worker: trong nhánh hash trùng, gọi `mark_checked` với `checkedAt` là lúc bắt đầu lượt chạy, trùng mốc với `generatedAt` của một lượt lưu.
   - Lỗi mạng hoặc 5xx chỉ ghi cảnh báo. Lượt chạy không thất bại và không thử lại, vì hậu quả chỉ là bản tóm tắt bị coi là cũ.
 
-**Chờ anh Thành:** anh push nhánh `thanh/TF44-ai-summary-checked-at` (kèm sửa `CASE WHEN … THEN ::uuid END` cho đối soát). Có nhánh thì sinh lại `app/contracts` từ đó và chạy thử end-to-end. Trước khi có route, AI nhận 404 và chỉ ghi log.
+**Chạy thử end-to-end với core của anh Thành (2026-11-13):**
+- Core local dựng từ nhánh `thanh/TF44-ai-summary-checked-at` (`df02023`) bằng `pnpm stack:be`: migrate và seed chạy xong. LLM giả, nên không tốn tiền.
+- **Hợp đồng:** `contracts/openapi/core-api.json` trên nhánh đó có body bắt buộc `inputHash`, `checkedAt`, `commentCount`, response `{ updated }`, mã 200/400/401/403/404, không có 409. Khớp client.
+- **Định dạng `checkedAt`:** chạy schema Zod của core. Nhận `2025-11-13T02:13:20.123000Z` (dạng AI gửi), từ chối `+00:00`.
+- **Worker thật**, bài seed `…0001` có 10 bình luận:
+
+  | Lượt | `status` | `inputHash` | `generatedAt` | `checkedAt` | `isStale` |
+  |---|---|---|---|---|---|
+  | 1 (lưu) | `insufficient_data` | `0f316f3c…` | `04:56:18.981Z` | `null` | `false` |
+  | 2 (hash trùng, gọi `checked`) | `insufficient_data` | `0f316f3c…` (giống) | `04:56:18.981Z` (giữ nguyên) | `04:56:19.442Z` | `false` |
+
+  Lượt 1 cũng xác nhận lỗi 2 đã sửa: lượt đã gọi LLM mà ra `insufficient_data` vẫn lưu hash, nên lượt 2 không gọi LLM.
+- **Test của anh Thành** chạy trong container core: 40/40 pass (`mark-post-summary-checked`, `post-summary.e2e`, `post-summary-and-flat-comments`). Test tích hợp repository lỗi ở bước setup DB trong container, chưa xem nguyên nhân.
+- **Chưa kiểm end-to-end:** `isStale` chuyển từ `true` về `false` sau một bình luận emoji. Muốn kiểm phải đăng nhập tài khoản seed để bình luận. Phần này có trong test e2e của anh Thành.
+- **Cách chạy:** client `ai-service` local không có secret ai biết, nên Bảo đồng ý cho chép tạm hash secret của một client test sang `ai-service`. Chạy xong đã trả lại hash cũ, vô hiệu hoá client test và xoá secret test.
 
 **Test mới:**
 - `test_same_input_hash_skips_the_llm`: kiểm thêm hash và số bình luận gửi cho core.
