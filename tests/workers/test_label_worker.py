@@ -63,16 +63,22 @@ class FakeRedis:
 class StubClassifier:
     version = "v1"
 
-    def __init__(self, label: CommentLabels = FIRST_HAND, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        label: CommentLabels = FIRST_HAND,
+        error: Exception | None = None,
+        by_text: dict[str, CommentLabels] | None = None,
+    ) -> None:
         self.label = label
         self.error = error
+        self.by_text = by_text or {}
         self.seen: list[str] = []
 
     def classify(self, pairs: Sequence[tuple[str, str]]) -> list[CommentLabels]:
         if self.error:
             raise self.error
         self.seen += [text for text, _ in pairs]
-        return [self.label for _ in pairs]
+        return [self.by_text.get(text, self.label) for text, _ in pairs]
 
 
 def _event(kind: str, cid: str, body: str = "", **extra: Any) -> tuple[str, dict[str, str]]:
@@ -148,20 +154,26 @@ def test_safety_hits_are_kept_for_roots_and_replies_without_the_text() -> None:
     """A warning outside core's sample must still reach the summary (PR be #128)."""
     redis = FakeRedis()
     store = RedisLabelStore(redis)
-    worker = LabelWorker(redis, store, StubClassifier(FIRST_HAND), clock=lambda: NOW)
+    own_reply = "Mình cũng bị ngộ độc sau bữa tối ở đây"
+    classifier = StubClassifier(FIRST_HAND, by_text={"nghe nói ở đây hay bị ngộ độc": NONE})
+    worker = LabelWorker(redis, store, classifier, clock=lambda: NOW)
 
     worker.handle_batch(
         [
             _event("created", "c1", "Mình ăn hải sản ở đây xong bị ngộ độc cả nhà"),
             _event("created", "c2", "nghe nói ở đây hay bị ngộ độc", parentCommentId="c1"),
             _event("created", "c3", "phòng sạch, view biển đẹp, nhân viên dễ thương"),
+            _event("created", "c4", own_reply, parentCommentId="c1"),
         ]
     )
 
     kept = {k.comment_id: k for k in store.get_safety(POST)}
-    assert set(kept) == {"c1", "c2"}
+    assert set(kept) == {"c1", "c2", "c4"}
     assert kept["c1"].visibility == "public"  # the model says first-hand
-    assert kept["c2"].visibility == "pending_review"  # a reply: rules, and it is hearsay
+    # replies are read by the model too, as a summary run would: the same visibility either way
+    assert kept["c2"].visibility == "pending_review"
+    assert kept["c4"].visibility == "public"
+    assert set(store.get_many(POST, ["c2", "c4"])) == set()  # reply labels are not stored
     assert all("hải sản" not in raw for raw in redis.hashes["ai:safety:" + POST].values())
 
 
