@@ -95,3 +95,31 @@
 - **Anh Thành:** đề xuất thêm `body` vào sự kiện `content.comment.restored` (chỉ thêm field).
 - **Phía FE:** `population` là số đếm tại thời điểm tóm tắt, không phải số trực tiếp.
 - **Hash:** chỉ đổi cho các lượt `mixed`, nên sau deploy hầu hết bài không bị tóm tắt lại hàng loạt.
+
+---
+
+## Phần 3: phía AI cho endpoint `checked` (2026-11-13)
+
+Đây là phần 2 của lỗi 4. Anh Thành chọn cách 2: core thêm `PUT /v1/posts/:postId/ai-summary/checked`, body `{ inputHash, checkedAt, commentCount }`. Core chỉ nhận khi `inputHash` khớp bản đang lưu và `checkedAt` mới hơn cả `generatedAt` lẫn lần kiểm trước. Sau đó `isStale` tính "có thay đổi" từ mốc `max(generatedAt, checkedAt)`.
+
+**Đã làm:**
+- Pipeline: khi hash trùng, `SummaryRun.checked` mang hash và số bình luận đang hiện của cả bài. Đây cũng là số mà một lượt lưu sẽ gửi.
+- Client: thêm `mark_checked`, gọi `PUT /api/v1/posts/:id/ai-summary/checked` kèm service token.
+  - Core cũ chưa có route (404, 405) hoặc từ chối vì đã có bản mới hơn (409) thì trả `False`.
+  - Lỗi 5xx thì ném lỗi.
+- Worker: trong nhánh hash trùng, gọi `mark_checked` với `checkedAt` là lúc bắt đầu lượt chạy, trùng mốc với `generatedAt` của một lượt lưu.
+  - Lỗi mạng hoặc 5xx chỉ ghi cảnh báo. Lượt chạy không thất bại và không thử lại, vì hậu quả chỉ là bản tóm tắt bị coi là cũ.
+
+**Chờ anh Thành:** route chưa có trên core. Trước khi có route, AI nhận 404 và chỉ ghi log. Khi có contract, sinh lại `app/contracts` rồi chạy thử end-to-end.
+
+**Test mới:**
+- `test_same_input_hash_skips_the_llm`: kiểm thêm hash và số bình luận gửi cho core.
+- `test_checked_sends_hash_time_and_count_with_the_service_token`
+- `test_checked_is_false_on_an_older_core_or_a_newer_row`
+- `test_checked_raises_on_a_server_error`
+- `test_same_input_tells_core_it_was_checked_at_the_run_start`
+- `test_a_failed_check_does_not_fail_the_run`
+
+**Kết quả phần 3:**
+- `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest`: ruff sạch, pyright 0 lỗi, **571 passed**, 5 skipped.
+- Eval giả (`uv run python evals/run_evals.py`) chạy được. Không chạy eval live, vì không đổi prompt, cách chọn hay input gửi LLM.

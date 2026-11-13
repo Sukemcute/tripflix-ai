@@ -162,6 +162,10 @@ def test_same_input_hash_skips_the_llm() -> None:
 
     assert again.request is None
     assert llm.calls == 0
+    # what core needs to move its staleness mark: the same hash and the post's count
+    assert again.checked is not None
+    assert again.checked.input_hash == first.request.input_hash
+    assert again.checked.comment_count == first.request.comment_count
 
 
 def test_hiding_a_safety_comment_the_llm_never_saw_still_resaves() -> None:

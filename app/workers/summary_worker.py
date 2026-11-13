@@ -80,7 +80,7 @@ from app.services.summary.label_store import (
     content_hash,
     fresh_labels,
 )
-from app.services.summary.pipeline import CLASSIFIER_MAX_COMMENTS, run_summary
+from app.services.summary.pipeline import CLASSIFIER_MAX_COMMENTS, CheckedInput, run_summary
 from app.services.summary.schemas import CommentIn
 
 logger = logging.getLogger(__name__)
@@ -460,6 +460,8 @@ class SummaryWorker:
         )
         if run.request is None:
             logger.info("post %s: same input as last summary, LLM not called", post_id)
+            if run.checked:
+                self._mark_checked(post_id, run.checked, started)
             return
         is_failed = run.request.status == "failed"
         if is_failed and previous and previous.status == "ready":
@@ -478,6 +480,17 @@ class SummaryWorker:
         # The kill switch is on purpose: run backfill once it is off.
         if is_failed and not self.is_llm_killed:
             raise RunFailedError(f"post {post_id}: LLM output could not be trusted")
+
+    def _mark_checked(self, post_id: str, checked: CheckedInput, started: datetime) -> None:
+        """Best effort: a failed check only leaves the summary marked stale, so it never fails
+        or retries the run. checkedAt is the run start, the same mark a save would use."""
+        try:
+            if not self.core.mark_checked(
+                post_id, checked.input_hash, started, checked.comment_count
+            ):
+                logger.info("post %s: core did not take the check (no route or newer row)", post_id)
+        except httpx.HTTPError:
+            logger.warning("post %s: check not sent, summary may show as stale", post_id)
 
     def _stored_labels(self, post_id: str, comments: list[CommentIn]) -> dict[str, CommentLabels]:
         """Labels made earlier (label worker or past runs) that still match text and model.

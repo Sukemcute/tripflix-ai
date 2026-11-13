@@ -75,11 +75,21 @@ REPEAT_SHARE = 0.5
 
 
 @dataclass(frozen=True)
+class CheckedInput:
+    """Same input as the saved summary: nothing to save, but core is told it was checked, so
+    later comments that changed nothing (an emoji) do not mark the summary stale."""
+
+    input_hash: str
+    comment_count: int  # whole post's visible count, as a save would send
+
+
+@dataclass(frozen=True)
 class SummaryRun:
     request: SaveSummaryRequest | None  # None: same input as last run, nothing to save
     llm: LlmResult | None = None  # set when the LLM was called (cost is recorded from it)
     # labels the classifier made in this run, for the label store (replies get theirs here)
     new_labels: Mapping[str, CommentLabels] = field(default_factory=dict)
+    checked: CheckedInput | None = None  # set when request is None because the hash matched
 
 
 def run_summary(
@@ -146,10 +156,11 @@ def run_summary(
     counts = SummaryCounts(
         comments=len(comments), people=selection.people, sent=len(selection.items)
     )
+    # core marks a summary stale when the post's count differs from this one, so it is the
+    # whole post's visible count, not the sample read (PR be #128 stats)
+    comment_count = post_stats.comments if post_stats else len(comments)
     base = {
-        # core marks a summary stale when the post's count differs from this one, so it is the
-        # whole post's visible count, not the sample read (PR be #128 stats)
-        "comment_count": post_stats.comments if post_stats else len(comments),
+        "comment_count": comment_count,
         "safety": safety,
         "source_comment_ids": [],  # no comment text is saved until the LLM writes points
         "generated_at": now,
@@ -174,7 +185,7 @@ def run_summary(
             versions["labeler"] = labeler
     fingerprint = compute_input_hash(prompt, codes, claims, versions, safety)
     if fingerprint == previous_hash:
-        return SummaryRun(None, new_labels=new)
+        return SummaryRun(None, new_labels=new, checked=CheckedInput(fingerprint, comment_count))
     failed = SaveSummaryRequest(status="failed", prompt_version=prompt_version, **base)
     if is_llm_killed:
         logger.warning("summary LLM kill switch is on")
