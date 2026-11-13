@@ -27,11 +27,17 @@ def _comment(i: int) -> dict[str, object]:
 
 
 class FakeCore:
-    def __init__(self, has_sample_route: bool = True, checked_status: int = 204) -> None:
+    def __init__(
+        self,
+        has_sample_route: bool = True,
+        checked_status: int = 200,
+        is_check_applied: bool = True,
+    ) -> None:
         self.requests: list[httpx.Request] = []
         self.now = 0.0
         self.has_sample_route = has_sample_route
         self.checked_status = checked_status
+        self.is_check_applied = is_check_applied
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -76,7 +82,7 @@ class FakeCore:
                 },
             )
         if path.endswith("/ai-summary/checked"):
-            return httpx.Response(self.checked_status)
+            return httpx.Response(self.checked_status, json={"updated": self.is_check_applied})
         if path.endswith("/ai-summary") and request.method == "GET":
             return httpx.Response(404, json={"message": "chưa có"})
         if path.endswith("/ai-summary"):
@@ -192,13 +198,20 @@ def test_checked_sends_hash_time_and_count_with_the_service_token() -> None:
     assert put.headers["Authorization"] == "Bearer tok"
     assert json.loads(put.content) == {
         "inputHash": "h1",
-        "checkedAt": "2026-11-05T00:00:00Z",
+        "checkedAt": "2026-11-05T00:00:00Z",  # core answers 400 to +00:00
         "commentCount": 125_000,
     }
 
 
-@pytest.mark.parametrize("status", [404, 405, 409])
-def test_checked_is_false_on_an_older_core_or_a_newer_row(status: int) -> None:
+def test_checked_not_applied_is_a_normal_200() -> None:
+    """Hash no longer matches, no summary yet or an older checkedAt: 200 {updated: false}."""
+    core = FakeCore(is_check_applied=False)
+
+    assert core.client().mark_checked(POST_ID, "h", NOW, 1) is False
+
+
+@pytest.mark.parametrize("status", [404, 405])  # post gone, or an older core without the route
+def test_checked_is_false_when_core_has_no_row_or_route(status: int) -> None:
     assert FakeCore(checked_status=status).client().mark_checked(POST_ID, "h", NOW, 1) is False
 
 

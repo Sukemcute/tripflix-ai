@@ -7,7 +7,7 @@ Endpoints agreed with content (Thành, PR be #49 and #54):
 - GET  /api/v1/posts/:id/ai-summary               last summary with inputHash, 404 if none
 - PUT  /api/v1/posts/:id/ai-summary               service token, @ServiceOnly('ai-service')
 - PUT  /api/v1/posts/:id/ai-summary/checked       service token; same input as the saved row:
-                                                  core moves its staleness mark (Thành, planned)
+                                                  core moves its staleness mark, 200 {updated}
 - GET  /api/v1/posts/:id/comments/sample          service token; seeded sample of visible
                                                   comments, max 5,000, with whole-post stats
 - GET  /api/v1/internal/ai-summary/reconciliation service token; posts whose summary core holds
@@ -120,6 +120,10 @@ class _CheckedBody(_CoreModel):
     input_hash: str
     checked_at: datetime
     comment_count: int
+
+
+class _CheckedResult(_CoreModel):
+    updated: bool
 
 
 class SampleUnavailableError(Exception):
@@ -238,7 +242,8 @@ class CoreApiClient:
     ) -> bool:
         """Tell core the saved summary still matches the input as of checked_at. Core applies it
         only when input_hash matches its row and checked_at is newer than generatedAt and the
-        last check. False when core has no such route yet (older core) or turned it down."""
+        last check, and answers 200 {updated} either way. False when it did not apply it, the
+        post is gone (404) or core has no such route yet (an older core: 404/405)."""
         body = _CheckedBody(
             input_hash=input_hash, checked_at=checked_at, comment_count=comment_count
         )
@@ -247,14 +252,10 @@ class CoreApiClient:
             json=body.model_dump(mode="json", by_alias=True),
             headers=self._auth(),
         )
-        if response.status_code in (
-            httpx.codes.NOT_FOUND,
-            httpx.codes.METHOD_NOT_ALLOWED,
-            httpx.codes.CONFLICT,
-        ):
+        if response.status_code in (httpx.codes.NOT_FOUND, httpx.codes.METHOD_NOT_ALLOWED):
             return False
         response.raise_for_status()
-        return True
+        return _CheckedResult.model_validate_json(response.content).updated
 
     def _auth(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._service_token()}"}

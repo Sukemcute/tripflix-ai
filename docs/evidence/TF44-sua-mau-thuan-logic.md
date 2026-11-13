@@ -105,17 +105,20 @@
 **Đã làm:**
 - Pipeline: khi hash trùng, `SummaryRun.checked` mang hash và số bình luận đang hiện của cả bài. Đây cũng là số mà một lượt lưu sẽ gửi.
 - Client: thêm `mark_checked`, gọi `PUT /api/v1/posts/:id/ai-summary/checked` kèm service token.
-  - Core cũ chưa có route (404, 405) hoặc từ chối vì đã có bản mới hơn (409) thì trả `False`.
+  - Core trả `200 { updated }` cho mọi trường hợp đã nhận (anh Thành xác nhận): hàm trả `updated`. Hash không khớp, chưa có bản tóm tắt, hay `checkedAt` cũ hơn đều là `updated: false`, coi là bình thường.
+  - 404 (bài không còn, hoặc core cũ chưa có route) và 405 thì trả `False`. Không có 409.
+  - `checkedAt` gửi dạng `...Z`; core trả 400 với `+00:00`. Test chốt định dạng này.
   - Lỗi 5xx thì ném lỗi.
 - Worker: trong nhánh hash trùng, gọi `mark_checked` với `checkedAt` là lúc bắt đầu lượt chạy, trùng mốc với `generatedAt` của một lượt lưu.
   - Lỗi mạng hoặc 5xx chỉ ghi cảnh báo. Lượt chạy không thất bại và không thử lại, vì hậu quả chỉ là bản tóm tắt bị coi là cũ.
 
-**Chờ anh Thành:** route chưa có trên core. Trước khi có route, AI nhận 404 và chỉ ghi log. Khi có contract, sinh lại `app/contracts` rồi chạy thử end-to-end.
+**Chờ anh Thành:** anh push nhánh `thanh/TF44-ai-summary-checked-at` (kèm sửa `CASE WHEN … THEN ::uuid END` cho đối soát). Có nhánh thì sinh lại `app/contracts` từ đó và chạy thử end-to-end. Trước khi có route, AI nhận 404 và chỉ ghi log.
 
 **Test mới:**
 - `test_same_input_hash_skips_the_llm`: kiểm thêm hash và số bình luận gửi cho core.
 - `test_checked_sends_hash_time_and_count_with_the_service_token`
-- `test_checked_is_false_on_an_older_core_or_a_newer_row`
+- `test_checked_not_applied_is_a_normal_200`
+- `test_checked_is_false_when_core_has_no_row_or_route`
 - `test_checked_raises_on_a_server_error`
 - `test_same_input_tells_core_it_was_checked_at_the_run_start`
 - `test_a_failed_check_does_not_fail_the_run`
@@ -123,3 +126,7 @@
 **Kết quả phần 3:**
 - `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest`: ruff sạch, pyright 0 lỗi, **571 passed**, 5 skipped.
 - Eval giả (`uv run python evals/run_evals.py`) chạy được. Không chạy eval live, vì không đổi prompt, cách chọn hay input gửi LLM.
+
+**Anh Thành đã trả lời (2026-11-13):**
+- `post.commentCount` chỉ đếm bình luận đang hiện (ẩn và xoá đều bị trừ), cùng định nghĩa với `visibleCommentCount`. Hai số không lệch nhau, nên cách sửa lỗi 4 là đúng.
+- Sự kiện `content.comment.restored` do code moderation của chị Trang phát, schema đặt `additionalProperties: false`. Việc thêm `body` (cả payload lẫn schema) phải nhờ chị Trang.

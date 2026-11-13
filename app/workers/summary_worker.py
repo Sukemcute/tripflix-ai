@@ -488,7 +488,9 @@ class SummaryWorker:
             if not self.core.mark_checked(
                 post_id, checked.input_hash, started, checked.comment_count
             ):
-                logger.info("post %s: core did not take the check (no route or newer row)", post_id)
+                logger.info(
+                    "post %s: core did not apply the check (hash or time no longer match)", post_id
+                )
         except httpx.HTTPError:
             logger.warning("post %s: check not sent, summary may show as stale", post_id)
 
