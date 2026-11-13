@@ -1,7 +1,9 @@
 """Pick the comments sent to the LLM (QT Bước 9, BAO_CAO P6 §5): a token budget, not a fixed 120.
 
-Tiers: 1 experienced (first-hand or hearsay), 2 complaint, 3 the rest by score. Within
-tiers 1-2 newer comes first; tier 3 ranks by likes, length and recency.
+Tiers: 1 first-hand (the writer tells their own visit), 2 complaint, 3 the rest by score.
+Hearsay is no visit: it is not tier 1, and the prompt asks the LLM to exclude it anyway, so a
+tier-1 hearsay comment only spent budget (Bảo, 2026-11-13). Within tiers 1-2 newer comes first;
+tier 3 ranks by likes, length and recency.
 When everything fits, everything is sent.
 
 When it does not fit, the pick is stratified (BAO_CAO "Chọn bằng luật có làm lệch"):
@@ -18,8 +20,8 @@ A longer comment keeps its most relevant sentences instead of being cut blindly
 Tier, first-hand flag and safety are decided on the whole comment before it is shortened.
 
 Labels come from the comment classifier when it ran on every comment of a candidate
-(comment_classifier.py: experienced F1 0.768 on YouTube gold); otherwise from the rules
-(first-hand cues and complaint_model on the merged text), where experienced = first-hand.
+(comment_classifier.py: first-hand F1 0.851 on gold); otherwise from the rules
+(first-hand cues and complaint_model on the merged text).
 The video_reaction label is not used: it misreads real visits ("cô chủ dễ thương, cho mượn xe
 đạp free"); dropping on it, then ranking on it, both cost points on the live eval (BAO_CAO).
 """
@@ -47,7 +49,7 @@ TOKEN_BUDGET = 12_000  # [HIỆU CHỈNH] set again once the LLM provider is cho
 # Safety stop only: the token budget is the real limit. Was 300, which cut short comments
 # that still fit the budget (BAO_CAO). 1,000 proposed by Claude, no source.
 MAX_COMMENTS = 1_000
-MIN_PEOPLE = 5  # fewer distinct non-suspect writers -> insufficient_data, no LLM call
+MIN_PEOPLE = 5  # fewer distinct writers with a view -> insufficient_data, no LLM call
 # Fitted on real usage.prompt_tokens of 83 trial calls (BAO_CAO "Ước token"): Vietnamese
 # comment text costs 2.35 chars/token and each <comment> wrapper ~26 tokens. The old 3.4/8
 # (o200k tokenizer) under-counted real prompts by ~1.6x. Tokenizers differ per provider
@@ -77,6 +79,7 @@ class Selected:
     tokens: int
     text: str  # what is sent: the comment, or its most relevant sentences within the share
     is_complaint: bool = False  # classifier label on the whole comment
+    is_question: bool = False  # every merged part asks something and states nothing
 
 
 @dataclass(frozen=True)
@@ -84,7 +87,7 @@ class Selection:
     items: list[Selected]
     tokens: int
     skipped: int  # candidates left out by the budget or the cap
-    people: int  # distinct writers that count (L8 suspects do not)
+    people: int  # distinct writers with a view (L8 suspects and askers do not count)
     tier_writers: tuple[int, int, int] = (0, 0, 0)  # candidates per tier 1-3, sent or not
 
 
@@ -107,12 +110,11 @@ def select_comments(
         if found and len(found) == len(c.comment_ids):
             # one voice per author: any of the merged comments carries the label
             first_hand = any(label.is_first_hand for label in found)
-            experienced = any(label.is_experienced for label in found)
             complaint = not question and any(label.is_complaint for label in found)
         else:
-            first_hand = experienced = detect_first_hand(c.text_norm).is_first_hand
+            first_hand = detect_first_hand(c.text_norm).is_first_hand
             complaint = is_complaint_candidate(c.text)
-        tier = 1 if experienced else 2 if complaint else 3
+        tier = 1 if first_hand else 2 if complaint else 3
         newer_first = -c.created_at.timestamp()
         order = newer_first if tier < 3 else -_score(c, now)
         # suspects (L8 copies) go last in their tier, then questions: they are no opinion
@@ -120,7 +122,7 @@ def select_comments(
         # still feed topics, so they are not dropped (Meta exempts asking for advice).
         # comment_ids make ties deterministic.
         key = (tier, c.is_suspect, question, order, c.comment_ids)
-        ranked.append((key, tier, first_hand, complaint, c))
+        ranked.append((key, tier, first_hand, complaint, c, question))
     ranked.sort(key=lambda r: r[0])
 
     share = max(token_budget // max(target_comments, 1), MIN_SHARE_TOKENS)
@@ -136,7 +138,7 @@ def select_comments(
             (1 - target) * (sum(picked) + 1) - picked[1],
         ]
         k = 0 if strata[0] and (not strata[1] or deficits[0] >= deficits[1]) else 1
-        _, tier, first_hand, complaint, c = strata[k].pop(0)
+        _, tier, first_hand, complaint, c, question = strata[k].pop(0)
         text = fit_to_share(c.text, share)
         # reply context shares the same budget: more context means fewer comments, same cost
         cost = estimate_tokens(text) + sum(estimate_tokens(t) for t in c.contexts)
@@ -149,11 +151,16 @@ def select_comments(
                     tokens=cost,
                     text=text,
                     is_complaint=complaint,
+                    is_question=question,
                 )
             )
             used += cost
             picked[k] += 1
-    people = len({s.candidate.author_id for s in items if not s.candidate.is_suspect})
+    # People with a view: a question states none (it still feeds topics), and an L8 copy is
+    # not a person. Counting askers let 5 questions pass the gate and pay for an empty run.
+    people = len(
+        {s.candidate.author_id for s in items if not (s.candidate.is_suspect or s.is_question)}
+    )
     tiers = tuple(sum(1 for r in ranked if r[1] == t) for t in (1, 2, 3))
     return Selection(
         items=items,

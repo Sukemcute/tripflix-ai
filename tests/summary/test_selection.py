@@ -208,7 +208,8 @@ def test_a_question_is_never_counted_as_a_complaint() -> None:
     assert picked.is_complaint is False
 
 
-def test_classifier_labels_put_hearsay_in_tier_1_and_set_complaints() -> None:
+def test_classifier_labels_keep_hearsay_out_of_tier_1_and_set_complaints() -> None:
+    """Tier 1 is people who went; hearsay is no visit and the LLM is told to exclude it."""
     hearsay = CommentLabels(
         is_experienced=True,
         is_first_hand=False,
@@ -232,4 +233,19 @@ def test_classifier_labels_put_hearsay_in_tier_1_and_set_complaints() -> None:
     )
 
     tiers = {s.candidate.author_id: (s.tier, s.is_first_hand, s.is_complaint) for s in picked.items}
-    assert tiers == {"u1": (1, False, False), "u2": (2, False, True), "u3": (1, True, False)}
+    assert tiers == {"u1": (3, False, False), "u2": (2, False, True), "u3": (1, True, False)}
+
+
+def test_askers_are_not_people_with_a_view() -> None:
+    """Five questions used to pass the gate of five people and pay for an empty LLM run."""
+    asks = [
+        "Giá phòng ở đây bao nhiêu vậy mọi người?",
+        "Có hồ bơi cho trẻ em không ạ?",
+        "Đi tháng mấy thì đẹp nhất vậy?",
+    ]
+    cands = [cand(i, t) for i, t in enumerate(asks)] + [cand(9, FIRST_HAND)]
+
+    picked = select_comments(cands, NOW)
+
+    assert len(picked.items) == 4  # askers are still sent: they feed topics
+    assert picked.people == 1
