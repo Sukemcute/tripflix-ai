@@ -5,12 +5,13 @@ one (the LLM is not called again). Statuses (PRD §9.2): no_comments and insuffi
 never call the LLM; failed means the LLM output could not be trusted.
 
 The comment classifier, when loaded, labels once per run the comments the rules kept plus
-those the safety rules flag; selection and the safety path read those labels (they rank and
-flag, never drop a comment), and its version joins the input hash. No classifier (bundle
-missing or broken), or a classifier that fails during the run, means the rules decide, exactly
-as before: the run still finishes, and its hash says how labels were made (no classifier
-version for rules only, "mixed" for part rules), so the next run with a healthy classifier
-re-summarizes.
+those the safety rules flag (only the flagged ones when the rules already leave fewer than
+MIN_PEOPLE people, since the gate needs no label); selection and the safety path read those
+labels (they rank and flag, never drop a comment), and its version joins the input hash.
+No classifier (bundle missing or broken), or a classifier that fails during the run, means
+the rules decide, exactly as before: the run still finishes, and its hash says how labels
+were made (no classifier version for rules only, "mixed" for part rules), so the next run
+with a healthy classifier re-summarizes.
 """
 
 import logging
@@ -48,6 +49,7 @@ from app.services.summary.schemas import (
 from app.services.summary.selection import (
     MIN_PEOPLE,
     Selection,
+    count_people,
     decide_summary_status,
     select_comments,
 )
@@ -125,6 +127,11 @@ def run_summary(
         wanted = {i for c in candidates for i in c.comment_ids} | hits
         known = {i: label for i, label in (known_labels or {}).items() if i in wanted}
         missing = wanted - known.keys()
+        if count_people(candidates) < MIN_PEOPLE:
+            # Below the gate whatever the labels say (counting people needs no label), so only
+            # safety hits still need the model: public warning or moderator queue (DeepResearch
+            # Khi_nao_tom_tat_va_tom_tat_lai §5.4).
+            missing &= hits
         try:
             if missing:
                 new = classify_comments(
