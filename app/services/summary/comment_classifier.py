@@ -4,7 +4,8 @@ Answers what the summary needs per comment (labelling guide §15-16): did the wr
 experience the place (first-hand, or hearsay from someone who went), is it praise or a
 complaint, and is it only a reaction to the video. YouTube part of gold: experienced F1
 0.768, close to the 560M teacher's 0.780 (BAO_CAO run10). Runs on CPU with onnxruntime and
-the tokenizers library, no torch: about 19 comments/s on 2 threads (int8, batch 8).
+the tokenizers library, no torch: about 34 comments/s on 2 threads in the pipeline (int8,
+batch 8; BENCH_AI_SUMMARY).
 
 The bundle (model.int8.onnx, tokenizer.json, thresholds.json, manifest.json) is baked into the
 image and never committed (DeepResearch_Luu_tru_model_phan_loai_khi_deploy.md). When it is

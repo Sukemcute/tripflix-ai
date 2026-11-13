@@ -9,10 +9,12 @@ summaries down (bulkhead).
 - cascade: a comment the single-comment rules drop (spam, link, too short, video reaction)
   needs no label and skips the model, unless the safety rules flag it.
 - safety: every written comment, reply or root, that the safety rules flag keeps its result
-  (categories, public or held for review, decided with its label when there is one), so a
-  warning outside core's sample still reaches the summary. Never the comment text.
+  (categories, public or held for review), so a warning outside core's sample still reaches
+  the summary. Never the comment text. Own visit or hearsay is the model's call for replies
+  too, as in a summary run; their labels are not stored (made without the parent text).
 - updated: the old label and safety result go first, the new text decides again.
-- deleted / hidden: its label and safety result are removed. restored: the next run labels it.
+- deleted / hidden: its label and safety result are removed.
+- restored: a write, but core's event has no body yet, so today the next summary run labels it.
 - the classifier fails or its breaker is open: the batch is acked without labels. Summary
   runs still label what they need, as before, so nothing is lost but time.
 """
@@ -53,7 +55,9 @@ from app.workers.summary_worker import (
 logger = logging.getLogger(__name__)
 
 GROUP = "ai-labels"
-WRITE_EVENTS = {"content.comment.created", "content.comment.updated"}
+# restored carries no body today (contracts/events): handled as a write so it labels the
+# comment as soon as core adds the body; until then it is a no-op and summary runs label it.
+WRITE_EVENTS = {"content.comment.created", "content.comment.updated", "content.comment.restored"}
 GONE_EVENTS = {"content.comment.deleted", "content.comment.hidden"}
 
 
@@ -107,6 +111,11 @@ class LabelWorker:
             if event.type in WRITE_EVENTS:
                 writes.append(payload)
         labels = self._label([p for p in writes if self._needs_label(p)])
+        # A reply's own visit decides its warning too, so it is read by the model like a summary
+        # run would (there with its parent; the parent text is unknown here). Not stored: the
+        # summary run labels replies with their parent.
+        replies = [p for p in writes if p.parent_comment_id and p.body.strip()]
+        labels |= self._label([p for p in replies if match_safety(p.body)], keep=False)
         for p in writes:
             label = labels.get(p.comment_id)
             if hit := match_safety(p.body, label.is_first_hand if label else None):
@@ -131,7 +140,7 @@ class LabelWorker:
         )
         return bool(filter_comments([comment], self.clock()).candidates)
 
-    def _label(self, items: list[_Payload]) -> dict[str, CommentLabels]:
+    def _label(self, items: list[_Payload], *, keep: bool = True) -> dict[str, CommentLabels]:
         if not items or self.classifier is None:
             return {}
         try:
@@ -141,7 +150,7 @@ class LabelWorker:
                 "labelling %s comments failed, summary runs will label them", len(items)
             )
             return {}
-        for p, labels in zip(items, found, strict=True):
+        for p, labels in zip(items, found, strict=True) if keep else ():
             stored = StoredLabel(labels, self.classifier.version, content_hash(p.body))
             self.store.put(p.post_id, p.comment_id, p.author_id or p.comment_id, stored)
         return {p.comment_id: labels for p, labels in zip(items, found, strict=True)}

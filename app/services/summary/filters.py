@@ -1,9 +1,12 @@
-"""Rule filters L1-L6, L8, L9, L11-L13 (QT Bước 5). L7 and L10 wait for GĐ2.
+"""Rule filters L1-L6, L8, L9, L11-L14 (QT Bước 5). L7 and L10 wait for GĐ2.
 
 Each dropped comment gets exactly one rule code, the first rule that fires.
 L11 needs no code: a reply is judged as a standalone comment, so it passes only on its own L5.
 L13 drops prompt-injection attempts: layer 1 of 3 (OWASP LLM01), spotlighting (P8) and the
 validator (P10) stay.
+L14 takes safety comments off the summary path: the safety path reports them from the rules,
+and the validator drops them as evidence anyway (V5), so sending them only spent budget and
+counted a writer whose view could never be cited.
 """
 
 import re
@@ -226,8 +229,9 @@ def _rule_for(comment: CommentIn, text: str, norm: str, now: datetime) -> str | 
         return "L4"
     if _LINK.search(text) or _LINK_SPELLED.search(norm) or load("redirect").matches(norm):
         return "L6"
-    is_safety = match_safety(comment.body) is not None
-    if count_syllables(norm) < MIN_SYLLABLES and not is_safety:
+    if match_safety(comment.body) is not None:
+        return "L14"
+    if count_syllables(norm) < MIN_SYLLABLES:
         return "L5"
     # Lexicon only, never the classifier's video_reaction label: dropping on it lost real
     # visits it misread ("cô chủ dễ thương, cho mượn xe đạp free"), point recall 0.90 -> 0.72

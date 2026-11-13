@@ -8,13 +8,14 @@ The comment classifier, when loaded, labels once per run the comments the rules 
 those the safety rules flag; selection and the safety path read those labels (they rank and
 flag, never drop a comment), and its version joins the input hash. No classifier (bundle
 missing or broken), or a classifier that fails during the run, means the rules decide, exactly
-as before: the run still finishes, and its hash carries no classifier version, so the next run
-with a healthy classifier re-summarizes.
+as before: the run still finishes, and its hash says how labels were made (no classifier
+version for rules only, "mixed" for part rules), so the next run with a healthy classifier
+re-summarizes.
 """
 
 import logging
 from collections import Counter
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -63,8 +64,8 @@ logger = logging.getLogger(__name__)
 # The text shows first in the comment box, where an AI summary sways readers most (arXiv
 # 2609.14900); Apple keeps App Store review summaries at 100-300 chars. Full points stay in content.
 MAX_SUMMARY_CHARS = 300
-# About 2 minutes at the 15-19 comments/s measured on 2 threads (BAO_CAO). The worker passes a
-# lower cap (settings) so one big post cannot hold the loop; over the cap a stratified weighted
+# Library default; the worker passes CLASSIFIER_MAX_COMMENTS from settings (500, about 15 s at
+# the 34 comments/s measured on 2 threads, BENCH_AI_SUMMARY). Over the cap a stratified weighted
 # sample gets labels (sampling.py) and the rest fall back to rules.
 CLASSIFIER_MAX_COMMENTS = 2_000
 _SECTION_LABELS = ("Khen", "Chê", "Khác video")
@@ -74,11 +75,21 @@ REPEAT_SHARE = 0.5
 
 
 @dataclass(frozen=True)
+class CheckedInput:
+    """Same input as the saved summary: nothing to save, but core is told it was checked, so
+    later comments that changed nothing (an emoji) do not mark the summary stale."""
+
+    input_hash: str
+    comment_count: int  # whole post's visible count, as a save would send
+
+
+@dataclass(frozen=True)
 class SummaryRun:
     request: SaveSummaryRequest | None  # None: same input as last run, nothing to save
     llm: LlmResult | None = None  # set when the LLM was called (cost is recorded from it)
     # labels the classifier made in this run, for the label store (replies get theirs here)
     new_labels: Mapping[str, CommentLabels] = field(default_factory=dict)
+    checked: CheckedInput | None = None  # set when request is None because the hash matched
 
 
 def run_summary(
@@ -95,11 +106,14 @@ def run_summary(
     known_labels: Mapping[str, CommentLabels] | None = None,
     post_stats: PostStats | None = None,
     known_safety: Sequence[StoredSafety] = (),
+    keep_labels: Callable[[Mapping[str, CommentLabels]], None] | None = None,
 ) -> SummaryRun:
     """known_labels: still-true labels of this classifier version from the label store; only
     the comments without one are classified, so a rerun of a big post is cheap.
     post_stats: core's whole-post counts when `comments` is its random sample.
-    known_safety: safety results the label worker kept for comments outside the sample."""
+    known_safety: safety results the label worker kept for comments outside the sample.
+    keep_labels: called with this run's new labels before the LLM call, so a run the LLM then
+    fails or defers does not throw away the classifier's work (it was redone every 5 min)."""
     candidates = filter_comments(comments, now).candidates
     labels: dict[str, CommentLabels] | None = None
     new: dict[str, CommentLabels] = {}
@@ -126,7 +140,12 @@ def run_summary(
         labels = (known | new) or None
         if labels is not None:
             labeler = "model" if wanted <= labels.keys() else "mixed"
-    safety = _rule_safety(comments, labels, known_safety)
+        if new and keep_labels:
+            keep_labels(new)
+    # Kept results stand for comments outside a partial sample. A comment missing from a whole
+    # read is hidden or deleted, so its kept result must not come back (core's counts tell).
+    is_partial = post_stats is not None and len(comments) < post_stats.comments
+    safety = _rule_safety(comments, labels, known_safety if is_partial else ())
     if not comments:
         empty = SaveSummaryRequest(
             status="no_comments", safety=safety, source_comment_ids=[], generated_at=now
@@ -137,8 +156,11 @@ def run_summary(
     counts = SummaryCounts(
         comments=len(comments), people=selection.people, sent=len(selection.items)
     )
+    # core marks a summary stale when the post's count differs from this one, so it is the
+    # whole post's visible count, not the sample read (PR be #128 stats)
+    comment_count = post_stats.comments if post_stats else len(comments)
     base = {
-        "comment_count": len(comments),
+        "comment_count": comment_count,
         "safety": safety,
         "source_comment_ids": [],  # no comment text is saved until the LLM writes points
         "generated_at": now,
@@ -159,9 +181,11 @@ def run_summary(
     versions["model"] = llm.model
     if classifier and labels is not None:  # rules add nothing: rule-only hashes stay valid
         versions["classifier"] = classifier.version
+        if labeler == "mixed":  # part rules: a healthy classifier later must re-summarize
+            versions["labeler"] = labeler
     fingerprint = compute_input_hash(prompt, codes, claims, versions, safety)
     if fingerprint == previous_hash:
-        return SummaryRun(None, new_labels=new)
+        return SummaryRun(None, new_labels=new, checked=CheckedInput(fingerprint, comment_count))
     failed = SaveSummaryRequest(status="failed", prompt_version=prompt_version, **base)
     if is_llm_killed:
         logger.warning("summary LLM kill switch is on")
@@ -198,8 +222,16 @@ def run_summary(
     )
     if not text:
         # Enough people, but no point had 2+ of them: nothing honest to show (proposal).
-        # Keep the LLM result: the call was paid for and must be recorded.
-        empty = SaveSummaryRequest(status="insufficient_data", content=content, **base)
+        # Keep the LLM result: the call was paid for and must be recorded. The hash goes with
+        # it: without one the same input called the LLM again on every later run.
+        empty = SaveSummaryRequest(
+            status="insufficient_data",
+            content=content,
+            input_hash=fingerprint,
+            prompt_version=prompt_version,
+            model_name=result.model_name,
+            **base,
+        )
         return SummaryRun(empty, result, new_labels=new)
     request = SaveSummaryRequest(
         status="ready",
@@ -275,8 +307,10 @@ def _rule_safety(
 def _sample_shape(
     comments: Sequence[CommentIn], selection: Selection, stats: PostStats | None
 ) -> SampleShape:
-    """Weights for estimates.py: a sent writer of tier t stands for N_t / n_t writers."""
-    sent_per_tier = Counter(s.tier for s in selection.items)
+    """Weights for estimates.py: a sent writer of tier t stands for N_t / n_t writers.
+    L8 copies are no people (validator) and stand for no one here either."""
+    sent = [s for s in selection.items if not s.candidate.is_suspect]
+    sent_per_tier = Counter(s.tier for s in sent)
     return SampleShape(
         comments=len(comments),
         writers=len({c.author_id for c in comments if not c.is_post_author}),
@@ -284,12 +318,10 @@ def _sample_shape(
         is_whole=stats is not None and len(comments) >= stats.comments and selection.skipped == 0,
         weights={
             s.candidate.author_id: selection.tier_writers[s.tier - 1] / sent_per_tier[s.tier]
-            for s in selection.items
+            for s in sent
         },
-        author_of={
-            i: s.candidate.author_id for s in selection.items for i in s.candidate.comment_ids
-        },
-        sent_writers=len(selection.items),
+        author_of={i: s.candidate.author_id for s in sent for i in s.candidate.comment_ids},
+        sent_writers=len(sent),
     )
 
 

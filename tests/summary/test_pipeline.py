@@ -3,7 +3,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
+from app.clients.llm.base import LlmResult
 from app.clients.llm.fake import FakeLlmClient
+from app.clients.llm.guarded import LlmUnavailableError
 from app.services.summary.comment_classifier import CommentClassifier, CommentLabels
 from app.services.summary.estimates import PostStats
 from app.services.summary.label_store import StoredSafety
@@ -160,6 +162,10 @@ def test_same_input_hash_skips_the_llm() -> None:
 
     assert again.request is None
     assert llm.calls == 0
+    # what core needs to move its staleness mark: the same hash and the post's count
+    assert again.checked is not None
+    assert again.checked.input_hash == first.request.input_hash
+    assert again.checked.comment_count == first.request.comment_count
 
 
 def test_hiding_a_safety_comment_the_llm_never_saw_still_resaves() -> None:
@@ -482,6 +488,7 @@ def test_a_reply_whose_parent_is_outside_the_sample_keeps_it_as_context() -> Non
 
 
 def test_kept_safety_results_outside_the_sample_reach_the_summary() -> None:
+    """Only when the run read a part of the post: core's counts say there is more."""
     inside = _comment(5, "Mình ăn hải sản ở đây xong bị ngộ độc cả nhà")
     kept = [
         StoredSafety("cmt_far", ("ngo_doc",), "public"),
@@ -497,6 +504,7 @@ def test_kept_safety_results_outside_the_sample_reach_the_summary() -> None:
         now=NOW,
         llm=_llm(pros=PROS),
         known_safety=kept,
+        post_stats=PostStats(comments=500, writers=400),  # 6 of 500 read
     )
 
     assert run.request is not None and run.request.safety is not None
@@ -526,3 +534,139 @@ def test_core_counts_add_the_population_and_an_estimate_when_the_post_is_bigger(
     assert big is not None and big.content is not None
     estimate = big.content.pros[0].estimate
     assert estimate is not None and estimate.people == 2_400  # 3 of 5 writers of 4,000
+
+
+QUESTIONS = [
+    "Giá phòng ở đây bao nhiêu vậy mọi người?",
+    "Có hồ bơi cho trẻ em không ạ?",
+    "Đi tháng mấy thì đẹp nhất vậy?",
+    "Từ sân bay về đây bao xa vậy?",
+    "Phòng có view biển không mọi người?",
+]
+
+
+def test_five_questions_do_not_pass_the_gate_or_call_the_llm() -> None:
+    llm = _llm()
+
+    run = _run([_comment(i, t) for i, t in enumerate(QUESTIONS)], llm)
+
+    assert run.request is not None and run.request.status == "insufficient_data"
+    assert run.request.content is not None and run.request.content.needed == 5
+    assert llm.calls == 0
+
+
+def test_a_paid_empty_run_keeps_its_hash_so_the_same_input_is_not_paid_again() -> None:
+    """Enough people, no point with 2 of them: the LLM was paid once, never twice."""
+    llm = _llm()  # no points at all
+    first = _run(_comments(), llm)
+    assert first.request is not None and first.request.status == "insufficient_data"
+    assert first.request.input_hash is not None
+
+    again = _run(_comments(), llm, previous_hash=first.request.input_hash)
+
+    assert again.request is None and llm.calls == 1
+
+
+def test_the_comment_count_saved_is_the_whole_posts_not_the_sample() -> None:
+    """Core marks a summary stale when the post's count differs from the saved one."""
+    run = run_summary(
+        comments=_comments(),
+        caption="",
+        itinerary=[],
+        previous_hash=None,
+        now=NOW,
+        llm=_llm(pros=PROS),
+        post_stats=PostStats(comments=9_000, writers=4_000),
+    )
+
+    assert run.request is not None and run.request.comment_count == 9_000
+    assert _run(_comments(), _llm(pros=PROS)).request.comment_count == 5  # type: ignore[union-attr]
+
+
+def test_a_whole_read_ignores_kept_safety_results_of_comments_no_longer_there() -> None:
+    """Every visible comment was read, so a kept result of a missing one is a hidden comment."""
+    kept = [StoredSafety("cmt_hidden", ("ngo_doc",), "public")]
+
+    run = run_summary(
+        comments=_comments(),
+        caption="",
+        itinerary=[],
+        previous_hash=None,
+        now=NOW,
+        llm=_llm(pros=PROS),
+        known_safety=kept,
+        post_stats=PostStats(comments=5, writers=5),
+    )
+
+    assert run.request is not None and run.request.safety is not None
+    assert run.request.safety.warnings == [] and run.request.safety.pending_warnings == []
+
+
+def test_safety_comments_are_not_sent_to_the_llm() -> None:
+    """The safety path reports them; as LLM evidence they were always dropped (V5)."""
+    sent: list[str] = []
+
+    class Recording(FakeLlmClient):
+        def generate(self, system: str, user: str, schema: dict[str, object]) -> LlmResult:
+            sent.append(user)
+            return super().generate(system, user, schema)
+
+    llm = Recording(_llm(pros=PROS).output)
+    poisoned = _comment(6, "Mình ăn hải sản ở đây xong bị ngộ độc cả nhà")
+
+    run = _run([*_comments(), poisoned], llm)
+
+    assert run.request is not None and run.request.safety is not None
+    assert [
+        w.comment_ids for w in run.request.safety.pending_warnings + run.request.safety.warnings
+    ] == [["cmt_6"]]
+    assert sent and "ngộ độc" not in sent[0]
+
+
+def test_a_run_whose_llm_fails_still_keeps_its_new_labels() -> None:
+    kept: list[dict[str, CommentLabels]] = []
+
+    class DownLlm(FakeLlmClient):
+        def generate(self, system: str, user: str, schema: dict[str, object]) -> LlmResult:
+            raise LlmUnavailableError(300)
+
+    try:
+        run_summary(
+            comments=_comments(),
+            caption="",
+            itinerary=[],
+            previous_hash=None,
+            now=NOW,
+            llm=DownLlm(),
+            classifier=FakeClassifier(),
+            keep_labels=lambda labels: kept.append(dict(labels)),
+        )
+    except LlmUnavailableError:
+        pass
+
+    assert len(kept) == 1 and len(kept[0]) == 5
+
+
+def test_a_part_rules_run_hashes_apart_from_a_model_run() -> None:
+    """A classifier failing mid-run with stored labels: the next healthy run re-summarizes."""
+
+    class Broken(FakeClassifier):
+        def classify(self, pairs: Sequence[tuple[str, str]]) -> list[CommentLabels]:
+            raise RuntimeError("onnx")
+
+    def hashed(classifier: CommentClassifier, known: dict[str, CommentLabels]) -> str | None:
+        run = run_summary(
+            comments=_comments(),
+            caption="",
+            itinerary=[],
+            previous_hash=None,
+            now=NOW,
+            llm=_llm(pros=PROS),
+            classifier=classifier,
+            known_labels=known,
+        )
+        assert run.request is not None
+        return run.request.input_hash
+
+    some = {"cmt_0": NO_LABEL}
+    assert hashed(Broken(), some) != hashed(FakeClassifier(), some)

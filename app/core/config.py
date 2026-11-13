@@ -54,7 +54,8 @@ class Settings(BaseSettings):
     classifier_batch: int = Field(default=8, ge=1)
     # Unplug the classifier without a rebuild: false means rules only.
     is_classifier_enabled: bool = Field(default=True, validation_alias="CLASSIFIER_ENABLED")
-    # ~25 s at ~19 comments/s, so one big post cannot hold the worker; the rest use rules.
+    # ~15 s at the 34 comments/s measured on 2 threads (BENCH_AI_SUMMARY), so one big post cannot
+    # hold the worker; the rest use rules.
     classifier_max_comments: int = Field(default=500, ge=1)  # [HIỆU CHỈNH]
 
 

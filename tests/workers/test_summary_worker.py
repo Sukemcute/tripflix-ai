@@ -9,7 +9,7 @@ from app.clients.core_api import CoreApiClient, CorePost, CoreSummary, SampleUna
 from app.clients.llm.fake import FakeLlmClient
 from app.clients.llm.guarded import LlmUnavailableError
 from app.core.breaker import CircuitBreaker
-from app.services.summary.pipeline import SummaryRun
+from app.services.summary.pipeline import CheckedInput, SummaryRun
 from app.services.summary.schemas import SaveSummaryRequest
 from app.workers import summary_worker
 from app.workers.summary_worker import (
@@ -160,6 +160,8 @@ class FakeCoreApi:
         self.previous = previous
         self.comments_fail = comments_fail
         self.saved: list[SaveSummaryRequest] = []
+        self.checked: list[tuple[str, str, datetime, int]] = []
+        self.checked_error: Exception | None = None
 
     def fetch_post(self, post_id: str) -> CorePost:
         return CorePost(id=post_id, author_id="u-0")
@@ -180,6 +182,14 @@ class FakeCoreApi:
 
     def save_summary(self, post_id: str, request: SaveSummaryRequest) -> None:
         self.saved.append(request)
+
+    def mark_checked(
+        self, post_id: str, input_hash: str, checked_at: datetime, comment_count: int
+    ) -> bool:
+        if self.checked_error:
+            raise self.checked_error
+        self.checked.append((post_id, input_hash, checked_at, comment_count))
+        return True
 
 
 def _worker(redis: FakeRedis, core: FakeCoreApi) -> SummaryWorker:
@@ -307,6 +317,35 @@ def test_a_summary_without_sources_is_regenerated_once(
     _worker(FakeRedis(), FakeCoreApi(previous=previous)).summarize_post(POST)
 
     assert seen == [previous_hash]
+
+
+def test_same_input_tells_core_it_was_checked_at_the_run_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        summary_worker,
+        "run_summary",
+        lambda **_: SummaryRun(None, checked=CheckedInput("h", 125_000)),
+    )
+    core = FakeCoreApi(previous=CoreSummary(status="ready", input_hash="h", source_comment_ids=[]))
+
+    _worker(FakeRedis(), core).summarize_post(POST)
+
+    # clock_ms 1_000: the same mark a save would use as generatedAt
+    assert core.checked == [(POST, "h", datetime.fromtimestamp(1, UTC), 125_000)]
+    assert core.saved == []
+
+
+def test_a_failed_check_does_not_fail_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        summary_worker, "run_summary", lambda **_: SummaryRun(None, checked=CheckedInput("h", 3))
+    )
+    core = FakeCoreApi(previous=CoreSummary(status="ready", input_hash="h", source_comment_ids=[]))
+    core.checked_error = httpx.ConnectError("core down")
+
+    _worker(FakeRedis(), core).summarize_post(POST)  # no exception: the summary only shows stale
+
+    assert core.saved == []
 
 
 def test_failed_run_keeps_the_previous_ready_summary(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -543,6 +582,7 @@ def test_stored_labels_feed_the_run_and_a_broken_store_only_costs_time(
 
     def fake_run(**kwargs: Any) -> SummaryRun:
         seen.append(kwargs["known_labels"])
+        kwargs["keep_labels"]({"c1": _LABEL})  # the pipeline keeps them before the LLM call
         return SummaryRun(None, new_labels={"c1": _LABEL})
 
     monkeypatch.setattr(summary_worker, "run_summary", fake_run)

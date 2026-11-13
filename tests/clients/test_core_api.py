@@ -27,10 +27,17 @@ def _comment(i: int) -> dict[str, object]:
 
 
 class FakeCore:
-    def __init__(self, has_sample_route: bool = True) -> None:
+    def __init__(
+        self,
+        has_sample_route: bool = True,
+        checked_status: int = 200,
+        is_check_applied: bool = True,
+    ) -> None:
         self.requests: list[httpx.Request] = []
         self.now = 0.0
         self.has_sample_route = has_sample_route
+        self.checked_status = checked_status
+        self.is_check_applied = is_check_applied
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -74,6 +81,8 @@ class FakeCore:
                     "hasMore": first_page,
                 },
             )
+        if path.endswith("/ai-summary/checked"):
+            return httpx.Response(self.checked_status, json={"updated": self.is_check_applied})
         if path.endswith("/ai-summary") and request.method == "GET":
             return httpx.Response(404, json={"message": "chưa có"})
         if path.endswith("/ai-summary"):
@@ -177,3 +186,35 @@ def test_held_summaries_are_read_until_the_cursor_ends() -> None:
     assert [r.url.params.get("cursor") for r in pages] == [None, "p2"]
     assert pages[0].url.params["limit"] == "200"
     assert all(r.headers["Authorization"] == "Bearer tok" for r in pages)
+
+
+def test_checked_sends_hash_time_and_count_with_the_service_token() -> None:
+    core = FakeCore()
+
+    assert core.client().mark_checked(POST_ID, "h1", NOW, 125_000) is True
+
+    put = core.requests[-1]
+    assert put.method == "PUT" and put.url.path == f"/api/v1/posts/{POST_ID}/ai-summary/checked"
+    assert put.headers["Authorization"] == "Bearer tok"
+    assert json.loads(put.content) == {
+        "inputHash": "h1",
+        "checkedAt": "2026-11-05T00:00:00Z",  # core answers 400 to +00:00
+        "commentCount": 125_000,
+    }
+
+
+def test_checked_not_applied_is_a_normal_200() -> None:
+    """Hash no longer matches, no summary yet or an older checkedAt: 200 {updated: false}."""
+    core = FakeCore(is_check_applied=False)
+
+    assert core.client().mark_checked(POST_ID, "h", NOW, 1) is False
+
+
+@pytest.mark.parametrize("status", [404, 405])  # post gone, or an older core without the route
+def test_checked_is_false_when_core_has_no_row_or_route(status: int) -> None:
+    assert FakeCore(checked_status=status).client().mark_checked(POST_ID, "h", NOW, 1) is False
+
+
+def test_checked_raises_on_a_server_error() -> None:
+    with pytest.raises(httpx.HTTPStatusError):
+        FakeCore(checked_status=500).client().mark_checked(POST_ID, "h", NOW, 1)

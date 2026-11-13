@@ -45,6 +45,8 @@ def reason(**overrides: Any) -> str | None:
         ({"body": "Nhạc hay quá ad ơi"}, "L12"),
         ({"body": "Ước được đi 1 lần"}, "L12"),
         ({"body": "Clip hài quá cười đau bụng luôn"}, "L12"),
+        ({"body": "Ngộ độc"}, "L14"),  # short safety: the safety path reports it, not L5
+        ({"body": "Mình ăn buffet ở đây xong bị ngộ độc cả nhà"}, "L14"),
     ],
 )
 def test_rule_drops_with_its_code(overrides: dict[str, Any], code: str) -> None:
@@ -56,7 +58,7 @@ def test_rule_drops_with_its_code(overrides: dict[str, Any], code: str) -> None:
     [
         {},
         {"created_at": NOW - timedelta(days=365)},  # exactly one year still counts
-        {"body": "Ngộ độc"},  # short but safety: L5 must not drop it
+        {"body": "Không có sứa đâu, nước trong lắm"},  # negated: no safety hit, a real view
         {"body": "Nhạc hay mà phòng bẩn"},  # mixed: talks about the real room
         {"body": "Flycam mượt nhưng thất vọng"},  # mixed: complaint
         {"body": "Giá 1.500k một đêm, hơi đắt"},  # a dot in a price is not a link
@@ -227,7 +229,8 @@ def test_parent_that_must_not_travel_gives_no_context(parent_overrides: dict[str
 
 def test_agreeing_replies_are_counted_as_supporters_without_their_text() -> None:
     """ABCD-style agree/disagree on replies: "+1", "đúng vậy" are votes even when L5 drops them."""
-    parent = comment("c1", author_id="u1", body="Buffet sáng ăn xong cả nhà bị ngộ độc")
+    # not a safety comment: those leave the summary path (L14), votes on them count nowhere
+    parent = comment("c1", author_id="u1", body="Buffet sáng nguội, ít món, không đáng tiền")
     replies = [
         comment("c2", author_id="u2", parent_id="c1", body="+1"),
         comment("c3", author_id="u3", parent_id="c1", body="Đúng vậy"),
