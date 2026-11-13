@@ -526,3 +526,50 @@ def test_core_counts_add_the_population_and_an_estimate_when_the_post_is_bigger(
     assert big is not None and big.content is not None
     estimate = big.content.pros[0].estimate
     assert estimate is not None and estimate.people == 2_400  # 3 of 5 writers of 4,000
+
+
+QUESTIONS = [
+    "Giá phòng ở đây bao nhiêu vậy mọi người?",
+    "Có hồ bơi cho trẻ em không ạ?",
+    "Đi tháng mấy thì đẹp nhất vậy?",
+    "Từ sân bay về đây bao xa vậy?",
+    "Phòng có view biển không mọi người?",
+]
+
+
+def test_five_questions_do_not_pass_the_gate_or_call_the_llm() -> None:
+    llm = _llm()
+
+    run = _run([_comment(i, t) for i, t in enumerate(QUESTIONS)], llm)
+
+    assert run.request is not None and run.request.status == "insufficient_data"
+    assert run.request.content is not None and run.request.content.needed == 5
+    assert llm.calls == 0
+
+
+def test_a_paid_empty_run_keeps_its_hash_so_the_same_input_is_not_paid_again() -> None:
+    """Enough people, no point with 2 of them: the LLM was paid once, never twice."""
+    llm = _llm()  # no points at all
+    first = _run(_comments(), llm)
+    assert first.request is not None and first.request.status == "insufficient_data"
+    assert first.request.input_hash is not None
+
+    again = _run(_comments(), llm, previous_hash=first.request.input_hash)
+
+    assert again.request is None and llm.calls == 1
+
+
+def test_the_comment_count_saved_is_the_whole_posts_not_the_sample() -> None:
+    """Core marks a summary stale when the post's count differs from the saved one."""
+    run = run_summary(
+        comments=_comments(),
+        caption="",
+        itinerary=[],
+        previous_hash=None,
+        now=NOW,
+        llm=_llm(pros=PROS),
+        post_stats=PostStats(comments=9_000, writers=4_000),
+    )
+
+    assert run.request is not None and run.request.comment_count == 9_000
+    assert _run(_comments(), _llm(pros=PROS)).request.comment_count == 5  # type: ignore[union-attr]

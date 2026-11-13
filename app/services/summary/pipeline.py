@@ -138,7 +138,9 @@ def run_summary(
         comments=len(comments), people=selection.people, sent=len(selection.items)
     )
     base = {
-        "comment_count": len(comments),
+        # core marks a summary stale when the post's count differs from this one, so it is the
+        # whole post's visible count, not the sample read (PR be #128 stats)
+        "comment_count": post_stats.comments if post_stats else len(comments),
         "safety": safety,
         "source_comment_ids": [],  # no comment text is saved until the LLM writes points
         "generated_at": now,
@@ -198,8 +200,16 @@ def run_summary(
     )
     if not text:
         # Enough people, but no point had 2+ of them: nothing honest to show (proposal).
-        # Keep the LLM result: the call was paid for and must be recorded.
-        empty = SaveSummaryRequest(status="insufficient_data", content=content, **base)
+        # Keep the LLM result: the call was paid for and must be recorded. The hash goes with
+        # it: without one the same input called the LLM again on every later run.
+        empty = SaveSummaryRequest(
+            status="insufficient_data",
+            content=content,
+            input_hash=fingerprint,
+            prompt_version=prompt_version,
+            model_name=result.model_name,
+            **base,
+        )
         return SummaryRun(empty, result, new_labels=new)
     request = SaveSummaryRequest(
         status="ready",
