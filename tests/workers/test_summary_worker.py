@@ -543,6 +543,7 @@ def test_stored_labels_feed_the_run_and_a_broken_store_only_costs_time(
 
     def fake_run(**kwargs: Any) -> SummaryRun:
         seen.append(kwargs["known_labels"])
+        kwargs["keep_labels"]({"c1": _LABEL})  # the pipeline keeps them before the LLM call
         return SummaryRun(None, new_labels={"c1": _LABEL})
 
     monkeypatch.setattr(summary_worker, "run_summary", fake_run)

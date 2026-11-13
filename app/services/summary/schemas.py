@@ -196,7 +196,10 @@ Labeler = Literal["model", "rules", "mixed"]
 
 
 class PostPopulation(_CamelModel):
-    """Whole-post counts from core next to what the run read (core's random sample)."""
+    """Whole-post counts from core next to what the run read (core's random sample), as of this
+    summary's generatedAt: the estimates were scaled from them, so they stay together. A run
+    whose input hash is unchanged saves nothing, so these do not follow later comments; for live
+    counts read core's comment-stats."""
 
     comments: int  # visible comments of the post, the post author's included
     writers: int  # distinct writers of those comments

@@ -455,8 +455,9 @@ class SummaryWorker:
             known_labels=self._stored_labels(post_id, comments),
             post_stats=stats,
             known_safety=self._kept_safety(post_id),
+            # before the LLM call: a run the LLM fails or defers keeps the classifier's work
+            keep_labels=lambda labels: self._keep_labels(post_id, comments, labels),
         )
-        self._keep_labels(post_id, comments, run.new_labels)
         if run.request is None:
             logger.info("post %s: same input as last summary, LLM not called", post_id)
             return

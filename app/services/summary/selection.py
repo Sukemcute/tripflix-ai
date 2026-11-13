@@ -63,9 +63,10 @@ MIN_SHARE_TOKENS = math.ceil(150 / CHARS_PER_TOKEN) + ITEM_OVERHEAD_TOKENS
 # that joins one author's merged comments. shortcut: unpunctuated text stays one sentence,
 # then falls back to a word-boundary cut.
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+|\n+|\s\|\s")
-# Which sentence survives first when a comment is shortened: safety, then complaints
+# Which sentence survives first when a comment is shortened: safety talk, then complaints
 # (classifier), then first-hand or service talk (the aspects hotel summarizers keep,
-# Tsai et al. 2020). Order proposed by Claude: safety first, as in QT.
+# Tsai et al. 2020). Real safety hits never get here (L14); what is left is negated talk such
+# as "không bị ngộ độc", a view worth keeping. Order proposed by Claude.
 _SENTENCE_LEXICONS = (("safety", 3), ("first_hand_cues", 1), ("service_terms", 1))
 COMPLAINT_SENTENCE_WEIGHT = 2
 GAP = " … "  # marks dropped sentences so the LLM never reads two far-apart ones as one
@@ -88,7 +89,7 @@ class Selection:
     tokens: int
     skipped: int  # candidates left out by the budget or the cap
     people: int  # distinct writers with a view (L8 suspects and askers do not count)
-    tier_writers: tuple[int, int, int] = (0, 0, 0)  # candidates per tier 1-3, sent or not
+    tier_writers: tuple[int, int, int] = (0, 0, 0)  # writers per tier 1-3, sent or not, no L8
 
 
 def estimate_tokens(text: str) -> int:
@@ -161,7 +162,8 @@ def select_comments(
     people = len(
         {s.candidate.author_id for s in items if not (s.candidate.is_suspect or s.is_question)}
     )
-    tiers = tuple(sum(1 for r in ranked if r[1] == t) for t in (1, 2, 3))
+    # writers per tier for estimates.py; L8 copies are no people there either
+    tiers = tuple(sum(1 for r in ranked if r[1] == t and not r[4].is_suspect) for t in (1, 2, 3))
     return Selection(
         items=items,
         tokens=used,
