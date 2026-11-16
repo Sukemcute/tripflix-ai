@@ -52,8 +52,22 @@
 - Pytest: **583 pass, 5 skip** (5 test Redis thật cần `REDIS_TEST_URL`).
 - `uv run python -m scripts.export_openapi` đã sinh lại hợp đồng.
 
-**Chưa chạy:**
-- Thử với server thật: core và Redis trên máy đang tắt (16/11). Sẽ chạy cả luồng sau PR Responder.
+**Chạy thật ngày 16/11:**
+- Môi trường: `pnpm stack:be` (core, Redis, Postgres trong Docker), ai-service bằng uvicorn ở :8000, `CHAT_LLM_ENABLED=true`, salt ngẫu nhiên cho lần thử.
+- Kết quả:
+
+| Ca | Kết quả |
+|---|---|
+| Khách gửi 6 lượt liên tiếp | 5 lượt 200 (SSE), lượt 6 là 429 `GUEST_LIMIT_REACHED`, `loginRequired: true`, `Retry-After` tới nửa đêm |
+| Gửi kèm token sai | 401 "Token không hợp lệ", không hạ xuống khách |
+| `member@tripflix.local` (seed) đăng nhập rồi chat | 200, bước hiểu câu `ok`, thẻ video |
+| Người đăng nhập gửi 2 lượt cùng lúc | `[200, 409]`, lượt sau `TURN_IN_PROGRESS` |
+| Chi phí mỗi lượt (bước hiểu câu) | khoảng 1.120 token vào, 56–81 token ra, 0,00015–0,00025 USD |
+
+- Log server không có lỗi hay traceback.
+
+**Chưa kiểm được:**
+- **Controller trên OpenAI.** `.env` chưa có `CHAT_CONTROLLER_MODEL` và 3 giá `CHAT_CONTROLLER_PRICE_*`, nên lần chạy đầu Controller báo `missing_config` và đi dự phòng đúng thiết kế. Lần chạy thật ở trên đặt tạm `CHAT_CONTROLLER_PROVIDER=deepseek` (chỉ biến môi trường của tiến trình thử).
 - Eval live: bộ eval hội thoại có ở PR sau.
 
 **Thay đổi test cũ theo yêu cầu mới:**
