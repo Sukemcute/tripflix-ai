@@ -569,3 +569,75 @@ def test_reel_picked_by_name_from_cards_is_not_rejected_by_its_post_title():
         trip=trip,
     )
     assert answer.cards[0].kind == "itinerary" and "Cầu Đất" in (answer.lead or "")
+
+
+# ---- airports from city names (plan A2, T8): Core knows the code, the LLM does not guess it
+
+
+def airports(*codes: str) -> dict:
+    return {"items": [{"type": "airport", "refId": c, "name": f"Sân bay {c}"} for c in codes]}
+
+
+class AirportCore(FakeCore):
+    """Answers /api/suggest by the city asked; everything else by path like FakeCore."""
+
+    def __init__(self, by_city: dict[str, dict], routes: Mapping[str, object]):
+        super().__init__(routes)
+        self.by_city = by_city
+
+    def client(self) -> httpx.AsyncClient:
+        def handle(request: httpx.Request) -> httpx.Response:
+            self.calls.append((request.url.path, dict(request.url.params)))
+            if request.url.path == "/api/suggest":
+                body = self.by_city.get(request.url.params["q"], {"items": []})
+                return httpx.Response(200, json=body)
+            for prefix, body in self.routes.items():
+                if request.url.path.startswith(prefix):
+                    return httpx.Response(200, json=body)
+            return httpx.Response(404)
+
+        return httpx.AsyncClient(
+            base_url="https://core.test", transport=httpx.MockTransport(handle)
+        )
+
+
+def test_city_names_become_airport_codes_through_core():
+    core = AirportCore(
+        {"TP.HCM": airports("SGN"), "Hà Nội": airports("HAN")},
+        {"/api/flights": {"flights": [flight("VN1", "09:00", 900_000)]}},
+    )
+    answer, _ = run_turn(
+        plan(intent="find_flight", from_city="TP.HCM", to_city="Hà Nội", start=dm(IN_5)), core
+    )
+    params = dict(core.calls)["/api/flights"]
+    assert (params["from"], params["to"]) == ("SGN", "HAN")
+    card = answer.cards[0]
+    # Everything the app needs to open its own flight screen for the same search.
+    assert (card.kind, card.from_airport, card.to_airport, card.passengers) == (
+        "flight",
+        "SGN",
+        "HAN",
+        2,
+    )
+
+
+def test_a_city_without_an_airport_is_said_not_searched():
+    core = AirportCore({"TP.HCM": airports("SGN")}, {})
+    answer, _ = run_turn(
+        plan(intent="find_flight", from_city="TP.HCM", to_city="Vũng Tàu", start=dm(IN_5)), core
+    )
+    assert answer.kind == "no_result" and "Vũng Tàu" in answer.text
+    assert "/api/flights" not in core.paths()
+
+
+def test_two_airports_for_one_name_are_asked_about():
+    core = AirportCore({"Miền Bắc": airports("HAN", "HPH")}, {})
+    answer, _ = run_turn(
+        plan(intent="find_flight", from_city="Miền Bắc", to_airport="DAD", start=dm(IN_5)), core
+    )
+    assert answer.kind == "clarify" and "HAN" in answer.text and "HPH" in answer.text
+
+
+def test_only_the_destination_city_asks_for_the_origin():
+    answer, _ = run_turn(plan(intent="clarify", missing="origin", to_city="Đà Lạt"), FakeCore({}))
+    assert answer.text == "Bạn bay từ thành phố nào đi?"

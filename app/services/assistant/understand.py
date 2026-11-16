@@ -26,7 +26,7 @@ from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
 
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v3.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v4.md"
 
 
 class LlmNotConfiguredError(Exception):

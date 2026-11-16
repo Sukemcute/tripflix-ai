@@ -53,6 +53,8 @@ EMPTY_PLAN = {
     "infants": None,
     "from_airport": None,
     "to_airport": None,
+    "from_city": "",
+    "to_city": "",
     "cheapest_only": False,
     "round_trip": False,
     "price_max_per_night": None,
@@ -173,6 +175,7 @@ CORE = {
 SUGGEST = {
     "place": {"items": [{"type": "place", "refId": "place-1"}]},
     "hotel": {"items": [{"type": "hotel", "refId": "h2", "name": "Vinpearl Luxury Nha Trang"}]},
+    "airport": {"items": [{"type": "airport", "refId": "HAN", "name": "Sân bay Nội Bài"}]},
 }
 
 

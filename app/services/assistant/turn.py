@@ -199,7 +199,9 @@ class Turn:
         if parsed.missing == "dates":
             destination = f" {place}" if place else ""
             question = f"Bạn dự định đi{destination} vào ngày nào?"
-        elif parsed.to_airport and not parsed.from_airport:
+        elif (parsed.to_airport or parsed.to_city) and not (
+            parsed.from_airport or parsed.from_city
+        ):
             question = "Bạn bay từ thành phố nào đi?"
         elif place:
             question = f"Bạn muốn tìm lộ trình, chỗ ở hay chuyến bay đến {place}?"

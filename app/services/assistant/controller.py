@@ -94,6 +94,8 @@ class ControllerOutput(BaseModel):
     infants: int | None
     from_airport: str | None
     to_airport: str | None
+    from_city: str
+    to_city: str
     cheapest_only: bool
     round_trip: bool
     price_max_per_night: int | None
@@ -187,6 +189,8 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         infants=trip.infants if out.infants is None else (_count(out.infants, 0, 9) or 0),
         from_airport=out.from_airport,
         to_airport=out.to_airport,
+        from_city=out.from_city.strip()[:60],
+        to_city=out.to_city.strip()[:60],
         cheapest_only=out.cheapest_only,
         round_trip=out.round_trip,
         day_ref=out.day_ref,
@@ -211,7 +215,7 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         is_past=(start is not None and start < today) or out.day_ref == "yesterday",
     )
     if out.missing == "origin":
-        understood.from_airport = None
+        understood.from_airport, understood.from_city = None, ""
     return understood
 
 
@@ -234,7 +238,11 @@ def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> Cont
     intent = out.intent
     if intent == "refusal" and re.search(IDENTITY_CUE, text):
         intent = "identity"  # "ban lam duoc gi" was refused 3/3
-    elif intent == "refusal" and out.from_airport and out.to_airport:
+    elif (
+        intent == "refusal"
+        and (out.from_airport or out.from_city)
+        and (out.to_airport or out.to_city)
+    ):
         intent = "find_flight"  # flight-02: both airports read, then refused
     elif intent == "check_room" and not hotel_name and not has_reel:
         intent = "find_stay"  # no reel to read a hotel from: the user means stays there
