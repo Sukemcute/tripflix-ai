@@ -74,6 +74,9 @@ EMPTY_PLAN = {
     "packing_only": [],
     "packing_limit": None,
     "is_beach_trip": None,
+    "interests": [],
+    "stop_name": "",
+    "pace": None,
 }
 
 
@@ -171,7 +174,37 @@ CORE = {
     "/api/hotels/": {
         "id": "h1",
         "name": "Vinpearl Beach Nha Trang",
+        "location": {"lat": 10.01, "lng": 107.01},
         "rooms": [{"isAvailable": True, "ratePlans": [{"totalPrice": 2, "pricePerNight": 1}]}],
+    },
+    # Simulated points around the fake town centre (10, 107): Stage B plans need coordinates.
+    "/api/places": {
+        "items": [
+            {
+                "id": f"osm:{i}",
+                "name": name,
+                "kind": kind,
+                "lat": 10 + dy,
+                "lng": 107 + dx,
+                "city": "Demo",
+                "tags": tags,
+                "popularity": pop,
+            }
+            for i, (name, kind, dy, dx, tags, pop) in enumerate(
+                [
+                    ("Hải Đăng", "see", -0.013, -0.007, ["viewpoint"], 0.9),
+                    ("Mũi Nghinh Phong", "see", -0.022, 0.0, ["sunset"], 0.8),
+                    ("Tượng Chúa Kitô", "see", -0.019, 0.002, ["viewpoint"], 0.85),
+                    ("Bãi Sau", "see", 0.003, 0.009, ["beach"], 0.9),
+                    ("Bạch Dinh", "see", 0.007, -0.016, ["museum"], 0.6),
+                    ("Hồ Mây", "see", 0.0, -0.013, ["park"], 0.7),
+                    ("Quán hải sản", "food", -0.001, -0.012, [], 0.7),
+                    ("Cafe biển", "cafe", -0.013, -0.001, [], 0.6),
+                    ("Nhà nghỉ Biển Xanh", "lodging", 0.003, 0.011, [], 0.5),
+                ]
+            )
+        ],
+        "attribution": "© OpenStreetMap contributors (ODbL)",
     },
     f"/api/v1/posts/{REEL}/ai-summary": None,  # no summary yet: core answers 404
     f"/api/v1/posts/{REEL}": POST,
@@ -393,14 +426,15 @@ async def run_search(queries: list[dict]) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["ci", "live", "chain", "search"], default="ci")
-    parser.add_argument("--cases", choices=["v1", "v2", "v3", "all"], default="all")
+    parser.add_argument("--cases", choices=["v1", "v2", "v3", "v4", "all"], default="all")
     parser.add_argument("--runs", type=int, default=3)
     args = parser.parse_args()
     if args.mode == "chain":
-        return asyncio.run(run_chain(read_jsonl("chains.v1.jsonl"), args.runs))
+        chains = read_jsonl("chains.v1.jsonl") + read_jsonl("chains.v2.jsonl")
+        return asyncio.run(run_chain(chains, args.runs))
     if args.mode == "search":
         return asyncio.run(run_search(read_jsonl("search.v1.jsonl")))
-    versions = ["v1", "v2", "v3"] if args.cases == "all" else [args.cases]
+    versions = ["v1", "v2", "v3", "v4"] if args.cases == "all" else [args.cases]
     cases = [case for version in versions for case in load_cases(version)]
     if args.mode == "ci":
         return asyncio.run(run_ci(cases))

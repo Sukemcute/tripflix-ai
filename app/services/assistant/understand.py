@@ -26,7 +26,7 @@ from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
 
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v4.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v5.md"
 
 
 class LlmNotConfiguredError(Exception):
@@ -57,6 +57,11 @@ def build_understanding_input(
                 "priceMaxPerNight": trip.price_max_per_night,
                 "hasReel": trip.reel_id is not None,
                 "lastCards": [{"ref": c.ref, "kind": c.kind} for c in trip.last_cards],
+                # Stage B plan: names from Core and OSM, never ids or user-written titles.
+                "originCity": trip.origin_city,
+                "stay": trip.stay.name if trip.stay else None,
+                "planStops": [stop.name for day in trip.days for stop in day][:20],
+                "pendingCount": len(trip.pending),
             },
             "message": mask_pii(request.message),
             "history": [

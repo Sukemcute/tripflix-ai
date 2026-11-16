@@ -82,6 +82,13 @@ class ControllerOutput(BaseModel):
         "thanks",
         "ack",
         "goodbye",
+        # Stage B (plan B7): plan the whole trip and edit it
+        "plan_trip",
+        "change_stay",
+        "change_transport",
+        "remove_stop",
+        "undo",
+        "select_option",
     ]
     query: str
     missing: Literal["place", "dates", "origin", "none"]
@@ -121,6 +128,9 @@ class ControllerOutput(BaseModel):
     packing_only: list[str]
     packing_limit: int | None
     is_beach_trip: bool | None
+    interests: list[str]
+    stop_name: str
+    pace: Literal["relaxed", "packed"] | None
 
 
 def build_date(day_month: DayMonth | None, today: date) -> date | None:
@@ -222,6 +232,9 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         packing_only=[s[:60] for s in out.packing_only[:5]],
         packing_limit=_count(out.packing_limit, 1, 20),
         is_beach_trip=out.is_beach_trip,
+        interests=[s[:30] for s in out.interests[:5]],
+        stop_name=out.stop_name.strip()[:120],
+        pace=out.pace,
         is_past=(start is not None and start < today) or out.day_ref == "yesterday",
     )
     if out.missing == "origin":
@@ -256,6 +269,8 @@ def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> Cont
         and (out.to_airport or out.to_city)
     ):
         intent = "find_flight"  # flight-02: both airports read, then refused
+    elif intent in {"find_reel", "search"} and has_reel and out.uses_context_post:
+        intent = "post_itinerary"  # "video này ở đâu vậy" in a reel was find_reel 3/3
     elif intent == "check_room" and not hotel_name and not has_reel:
         intent = "find_stay"  # no reel to read a hotel from: the user means stays there
     elif (
