@@ -44,10 +44,13 @@ class _CoreModel(BaseModel):
 class CoreItineraryItem(_CoreModel):
     title: str = ""
     location: str | None = None
+    day: int | None = None  # read by Tripi (itinerary card); the summary ignores it
 
 
 class CoreTripAttachment(_CoreModel):
     hotel_name: str | None = None
+    hotel_id: str | None = None  # read by Tripi to check the reel's hotel
+    days_count: int | None = None
     destination_name: str | None = None
     items: list[CoreItineraryItem] = []
 

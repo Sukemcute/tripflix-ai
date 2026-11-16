@@ -46,6 +46,8 @@ class DeepSeekClient:
         max_output_tokens: int = 3000,
         http: httpx.Client | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        max_attempts: int = MAX_ATTEMPTS,
+        async_http: httpx.AsyncClient | None = None,
     ) -> None:
         if not api_key.get_secret_value():
             raise ValueError(f"{self.KEY_NAME} is empty")
@@ -54,6 +56,10 @@ class DeepSeekClient:
         self.max_output_tokens = max_output_tokens
         self.http = http or httpx.Client(base_url=base_url, timeout=timeout_seconds)
         self.sleep = sleep
+        # Chat passes 1: a retry with backoff would outlive its deadline and bill twice.
+        self.max_attempts = max_attempts
+        self.async_http = async_http
+        self._async_options = {"base_url": base_url, "timeout": timeout_seconds}
 
     def _body(self, system: str, user: str, schema: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -74,13 +80,9 @@ class DeepSeekClient:
     def generate(self, system: str, user: str, schema: dict[str, Any]) -> LlmResult:
         body = self._body(system, user, schema)
         data: dict[str, Any] = {}
-        for attempt in range(1, MAX_ATTEMPTS + 1):
-            response = self.http.post(
-                "/chat/completions",
-                json=body,
-                headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
-            )
-            if _is_retryable(response) and attempt < MAX_ATTEMPTS:
+        for attempt in range(1, self.max_attempts + 1):
+            response = self.http.post("/chat/completions", json=body, headers=self._headers())
+            if _is_retryable(response) and attempt < self.max_attempts:
                 self.sleep(BACKOFF_SECONDS * attempt)
                 continue
             response.raise_for_status()
@@ -88,6 +90,22 @@ class DeepSeekClient:
             # Out of tokens is not blank by chance: the same request ends the same way.
             if _content(data).strip() or _finish_reason(data) == "length":
                 break
+        return self._result(data)
+
+    async def agenerate(self, system: str, user: str, schema: dict[str, Any]) -> LlmResult:
+        """One call, no retry: the chat turn has its own deadline and a no-LLM fallback."""
+        if self.async_http is None:  # created on first use: the sync worker never needs it
+            self.async_http = httpx.AsyncClient(**self._async_options)
+        response = await self.async_http.post(
+            "/chat/completions", json=self._body(system, user, schema), headers=self._headers()
+        )
+        response.raise_for_status()
+        return self._result(response.json())
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.api_key.get_secret_value()}"}
+
+    def _result(self, data: dict[str, Any]) -> LlmResult:
         usage = data.get("usage", {})
         return LlmResult(
             output=_content(data),
@@ -95,6 +113,7 @@ class DeepSeekClient:
             input_tokens=int(usage.get("prompt_tokens", 0)),
             output_tokens=int(usage.get("completion_tokens", 0)),
             cost_usd=self._cost(usage),
+            finish_reason=_finish_reason(data),
         )
 
 
