@@ -31,6 +31,7 @@ from app.services.assistant.skills.content import search
 from app.services.assistant.skills.flight import search_flights
 from app.services.assistant.skills.stay import search_stays
 from app.services.summary.pii import mask_pii
+from app.services.summary.vi_text import normalize_text
 
 logger = logging.getLogger(__name__)
 SKILL_SECONDS = 3.0
@@ -80,11 +81,41 @@ class Turn:
         self.degraded: list[str] = []
         self.is_asked = planner.has_asked_before(request)
         self.memory = request.trip or TripContext()
+        place = normalize_text(self.memory.place)
+        is_chat = request.search_mode != "reel"
+        self.cancel_destination = bool(
+            is_chat
+            and place
+            and re.fullmatch(
+                rf"(?:toi |minh |em )?khong (?:con )?muon di {re.escape(place)} nua",
+                normalize_text(request.message),
+            )
+        )
+        self.short_stay_dates = planner.short_stay_dates(request, today) if is_chat else None
         self.reel_id: UUID | None = None
         self.is_reel_from_cards = False
 
     async def answer(self) -> Answer:
+        if self.cancel_destination:
+            return Answer(kind="clarify", text="Được nha. Bạn muốn đổi sang điểm đến nào?")
+        if isinstance(self.short_stay_dates, planner.DateProblem):
+            return Answer(kind="clarify", text=self.short_stay_dates.question)
         parsed = self.parsed
+        if self.short_stay_dates is not None:
+            if parsed is None or parsed.intent not in {"find_stay", "check_room"}:
+                parsed = Understanding(
+                    intent="find_stay",
+                    place=self.memory.place,
+                    adults=self.memory.adults,
+                    price_max_per_night=self.memory.price_max_per_night,
+                    children=self.memory.children,
+                    infants=self.memory.infants,
+                )
+                self.parsed = parsed
+            # A date-only reply is for the stay that Tripi just asked about.
+            parsed.place = self.memory.place or parsed.place
+            parsed.check_in, parsed.check_out = self.short_stay_dates
+            parsed.day_ref, parsed.nights, parsed.is_past = "none", None, False
         if parsed is None or self.request.search_mode == "reel":
             return await self._discover()
         fixed = self._fixed(parsed)
@@ -109,6 +140,10 @@ class Turn:
 
     def next_trip(self, answer: Answer) -> TripContext:
         """The trip memory after this turn: only what the user said or Core confirmed."""
+        if self.cancel_destination:
+            return TripContext()
+        if isinstance(self.short_stay_dates, planner.DateProblem):
+            return self.memory
         memory = self.memory.model_copy(deep=True)
         parsed = self.parsed
         if parsed is not None and parsed.intent not in SOCIAL:
@@ -214,7 +249,7 @@ class Turn:
             found = planner.stay_range(parsed, self.today)
         if isinstance(found, tuple):
             return found
-        return Answer(kind="clarify", text="Bạn muốn nhận phòng và trả phòng vào ngày nào?")
+        return Answer(kind="clarify", text=planner.STAY_DATE_QUESTION)
 
     async def _stay(self, parsed: Understanding) -> Answer:
         is_one_night_assumed = parsed.check_out is None and not parsed.nights
