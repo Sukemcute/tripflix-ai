@@ -190,6 +190,15 @@ async def reel_room(
     )
 
 
+HOTEL_WORDS = {"ks", "khach", "san", "hotel", "resort", "homestay", "villa", "nha", "nghi"}
+
+
+def _has_every_word(asked: str, found: str) -> bool:
+    words = [w for w in normalize_text(asked).split() if w not in HOTEL_WORDS]
+    folded = f" {normalize_text(found)} "
+    return bool(words) and all(f" {w} " in folded for w in words)
+
+
 async def named_hotel_room(
     core: httpx.AsyncClient, name: str, check_in: date, check_out: date, adults: int
 ) -> Answer:
@@ -198,7 +207,9 @@ async def named_hotel_room(
     response.raise_for_status()
     hotels = [i for i in response.json().get("items") or [] if i.get("type") == "hotel"]
     exact = [h for h in hotels if normalize_text(h.get("name", "")) == normalize_text(name)]
-    picks = exact or hotels
+    # Suggest is fuzzy: "Hoàng Hôn Mộc Châu" came back as another hotel and Tripi said that one
+    # had rooms (eval fake-01). Without an exact name, every distinctive word must be there.
+    picks = exact or [h for h in hotels if _has_every_word(name, h.get("name", ""))]
     if not picks:
         return Answer(kind="no_result", text=f"Tripi chưa tìm thấy «{name[:60]}» trên Tripflix.")
     if len(picks) > 1:
