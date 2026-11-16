@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -9,9 +9,8 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
     if len(understood.place.strip()) < 2:
         return Answer(kind="clarify", text="Bạn muốn tìm chỗ ở tại đâu?")
     start, end = understood.check_in, understood.check_out
-    # Vietnam uses UTC+7 year-round; avoid requiring system tzdata on Windows.
-    today = datetime.now(timezone(timedelta(hours=7))).date()
-    if start is None or end is None or start < today or end <= start:
+    # Past days are refused by the planner against the turn's own "today".
+    if start is None or end is None or end <= start:
         return Answer(kind="clarify", text="Bạn muốn nhận phòng và trả phòng vào ngày nào?")
     response = await core.get("/api/suggest", params={"q": understood.place, "types": "place"})
     response.raise_for_status()
@@ -28,17 +27,31 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
             "checkOut": end.isoformat(),
             "adults": understood.adults,
             "limit": 5,
-        },
+        }
+        | ({"priceMax": cap} if (cap := understood.price_max_per_night) else {}),
     )
     response.raise_for_status()
-    stays = Stays.model_validate(response.json()).items[:5]
+    # Core filters by priceMax; check again so a card never breaks the user's cap (D01, D03).
+    stays = [
+        stay
+        for stay in Stays.model_validate(response.json()).items
+        if cap is None or stay.unitPrice <= cap
+    ][:5]
     if not stays:
+        if cap:
+            return Answer(
+                kind="no_result",
+                text=f"Chưa có chỗ ở còn phòng dưới {vnd(cap)}/đêm cho ngày bạn chọn. "
+                "Bạn muốn nới ngân sách hay đổi ngày không?",
+                suggestions=["Nới ngân sách", "Đổi ngày"],
+            )
         return Answer(
             kind="no_result", text="Mình chưa tìm thấy chỗ ở còn phòng theo ngày đã chọn."
         )
     return Answer(
         kind="answer",
-        text="Đây là chỗ ở còn phòng theo ngày và số khách đã tìm.",
+        text=f"Đây là chỗ ở còn phòng {start:%d/%m}–{end:%d/%m} cho {understood.adults} người"
+        + (f", dưới {vnd(cap)}/đêm." if cap else "."),
         cards=[
             Card(
                 ref=f"r{i}",
@@ -55,3 +68,7 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
             for i, stay in enumerate(stays, 1)
         ],
     )
+
+
+def vnd(amount: int) -> str:
+    return f"{amount:,}".replace(",", ".") + "đ"

@@ -1,7 +1,7 @@
-"""Skills about the reel the chat was opened from: its itinerary, people's views, its hotel.
+"""Skills about a reel (its itinerary, people's views, its hotel) and about a named hotel.
 
-The post id comes from the app (contextPostId), never from the LLM. Core answers 404 for a
-hidden or deleted post, so a removed reel is never described.
+The reel id comes from the app (contextPostId) or from a card Tripi showed, never from the
+LLM. Core answers 404 for a hidden or deleted post, so a removed reel is never described.
 """
 
 from datetime import UTC, date, datetime
@@ -11,6 +11,7 @@ import httpx
 
 from app.clients.core_api import CorePost
 from app.services.assistant.schemas import Answer, Card, CardLine
+from app.services.summary.vi_text import normalize_text
 
 GONE = Answer(kind="no_result", text="Reel này không còn hiển thị nữa, bạn thử reel khác nha.")
 
@@ -23,13 +24,59 @@ async def fetch_post(core: httpx.AsyncClient, post_id: UUID) -> CorePost | None:
     return CorePost.model_validate(response.json()["post"])
 
 
-async def post_itinerary(core: httpx.AsyncClient, post_id: UUID) -> Answer:
+def matches(query: str, title: str) -> bool:
+    """Does the user's name for a reel fit this title? Every word of the query, no accents."""
+    words = normalize_text(query).split()
+    folded = f" {normalize_text(title)} "
+    useful = [w for w in words if w not in {"reel", "video", "clip", "vua", "goi", "y", "cua"}]
+    return bool(useful) and all(f" {w} " in folded for w in useful)
+
+
+def _stops(items, day: int) -> str:
+    return "; ".join(
+        " · ".join(part for part in (item.title, item.location) if part)
+        for item in items
+        if item.day == day
+    )
+
+
+async def post_itinerary(
+    core: httpx.AsyncClient,
+    post_id: UUID,
+    *,
+    day: int | None = None,
+    asks_days_count: bool = False,
+    reel_query: str = "",
+) -> Answer:
     post = await fetch_post(core, post_id)
     if post is None:
         return GONE
     trip = post.trip_attachment
+    title = post.title or (trip.destination_name if trip else "") or "Lộ trình"
+    # The user named another reel than the one in view: say so, never answer for the wrong
+    # one (Expo Web report P15, R14).
+    if reel_query and not matches(reel_query, title):
+        return Answer(
+            kind="no_result",
+            text=f"Reel đang mở là «{title[:80]}», không phải reel bạn vừa nhắc. "
+            "Bạn mở đúng reel đó hoặc để Tripi tìm lại nha.",
+            suggestions=[f"Tìm reel {reel_query[:40]}"],
+        )
     if trip is None or not trip.items:
         return Answer(kind="no_result", text="Reel này chưa gắn lộ trình chi tiết.")
+    days = trip.days_count or max((i.day or 0) for i in trip.items) or None
+    lead = None
+    if asks_days_count and days:
+        lead = f"Reel này đi {days} ngày."
+    elif day is not None:
+        stops = _stops(trip.items, day)
+        lead = (
+            f"Ngày {day}: {stops}."
+            if stops
+            else f"Reel này chỉ có {days} ngày, không có ngày {day}."
+            if days and day > days
+            else f"Lộ trình chưa ghi điểm nào cho ngày {day}."
+        )
     lines = [
         CardLine(
             label=f"Ngày {item.day}" if item.day else "Điểm",
@@ -37,10 +84,10 @@ async def post_itinerary(core: httpx.AsyncClient, post_id: UUID) -> Answer:
         )
         for item in trip.items[:12]
     ]
-    title = post.title or trip.destination_name or "Lộ trình"
     return Answer(
         kind="answer",
-        text="Đây là lộ trình trong reel bạn đang xem.",
+        text=lead or "Đây là lộ trình trong reel bạn đang xem.",
+        lead=lead,
         cards=[
             Card(
                 ref="r1",
@@ -58,8 +105,9 @@ async def post_itinerary(core: httpx.AsyncClient, post_id: UUID) -> Answer:
                 "ref": "r1",
                 "kind": "itinerary",
                 "destination": trip.destination_name,
-                "days": trip.days_count,
+                "days": days,
                 "hotel": trip.hotel_name,
+                "askedDay": day,
                 "stops": [
                     {"day": i.day, "title": i.title, "place": i.location} for i in trip.items[:12]
                 ],
@@ -100,16 +148,48 @@ async def post_reviews(core: httpx.AsyncClient, post_id: UUID) -> Answer:
     )
 
 
-async def check_room(
+async def reel_room(
     core: httpx.AsyncClient, post_id: UUID, check_in: date, check_out: date, adults: int
 ) -> Answer:
     post = await fetch_post(core, post_id)
     if post is None:
         return GONE
     attachment = post.trip_attachment
-    hotel_id = attachment.hotel_id if attachment else None
-    if attachment is None or not hotel_id:
+    if attachment is None or not attachment.hotel_id:
         return Answer(kind="no_result", text="Reel này chưa gắn khách sạn trên Tripflix.")
+    return await hotel_room(
+        core, attachment.hotel_id, check_in, check_out, adults, fallback_name=attachment.hotel_name
+    )
+
+
+async def named_hotel_room(
+    core: httpx.AsyncClient, name: str, check_in: date, check_out: date, adults: int
+) -> Answer:
+    """A hotel the user called by name wins over the reel's hotel (Expo Web report R11)."""
+    response = await core.get("/api/suggest", params={"q": name, "types": "hotel"})
+    response.raise_for_status()
+    hotels = [i for i in response.json().get("items") or [] if i.get("type") == "hotel"]
+    exact = [h for h in hotels if normalize_text(h.get("name", "")) == normalize_text(name)]
+    picks = exact or hotels
+    if not picks:
+        return Answer(kind="no_result", text=f"Tripi chưa tìm thấy «{name[:60]}» trên Tripflix.")
+    if len(picks) > 1:
+        names = ", ".join(str(h.get("name")) for h in picks[:3])
+        return Answer(kind="clarify", text=f"Bạn hỏi khách sạn nào: {names}?")
+    return await hotel_room(
+        core, str(picks[0]["refId"]), check_in, check_out, adults, fallback_name=name
+    )
+
+
+async def hotel_room(
+    core: httpx.AsyncClient,
+    hotel_id: str,
+    check_in: date,
+    check_out: date,
+    adults: int,
+    *,
+    fallback_name: str | None = None,
+) -> Answer:
     response = await core.get(
         f"/api/hotels/{hotel_id}",
         params={
@@ -119,9 +199,10 @@ async def check_room(
         },
     )
     if response.status_code == httpx.codes.NOT_FOUND:
-        return Answer(kind="no_result", text="Khách sạn trong reel không còn bán trên Tripflix.")
+        return Answer(kind="no_result", text="Khách sạn này không còn bán trên Tripflix.")
     response.raise_for_status()
     hotel = response.json()
+    name = str(hotel.get("name") or fallback_name or "Khách sạn")
     totals = [
         (plan.get("totalPrice"), plan.get("pricePerNight"))
         for room in hotel.get("rooms") or []
@@ -131,18 +212,24 @@ async def check_room(
     ]
     is_available = bool(totals)
     total, per_night = min(totals) if totals else (None, None)
-    when = f"{check_in:%d/%m} – {check_out:%d/%m}"
+    when = f"{check_in:%d/%m/%Y}–{check_out:%d/%m/%Y}"
+    # The lead names the hotel and the exact dates Core was asked, so words and card always
+    # speak of the same thing (Expo Web report R11, V11).
+    lead = (
+        f"{name} còn phòng cho {adults} người, {when}."
+        if is_available
+        else f"{name} đã hết phòng cho {adults} người, {when}."
+    )
     return Answer(
         kind="answer" if is_available else "no_result",
-        text=f"Khách sạn trong reel còn phòng cho {when}."
-        if is_available
-        else f"Khách sạn trong reel đã hết phòng cho {when}.",
+        text=lead,
+        lead=lead,
         cards=[
             Card(
                 ref="r1",
                 id=str(hotel.get("id") or hotel_id),
                 kind="stay",
-                title=str(hotel.get("name") or attachment.hotel_name or "Khách sạn"),
+                title=name,
                 price_from=per_night,
                 total_price=total,
                 price_basis="per_night_per_room" if is_available else "unavailable",
@@ -156,7 +243,7 @@ async def check_room(
             {
                 "ref": "r1",
                 "kind": "stay",
-                "title": hotel.get("name"),
+                "title": name,
                 "available": is_available,
                 "checkIn": f"{check_in:%d/%m}",
                 "checkOut": f"{check_out:%d/%m}",

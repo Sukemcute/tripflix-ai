@@ -254,7 +254,7 @@ async def run_turn(
                 yield event("status", {"step": "writing"})
                 try:
                     async with asyncio.timeout(min(RESPONDER_SECONDS, remaining - 0.5)):
-                        sentences, result = await respond(request, answer)
+                        sentences, result = await respond(request, answer, today=turn.today)
                     add_usage("responder", result)
                 except (
                     TimeoutError,
@@ -265,7 +265,7 @@ async def run_turn(
                     ValueError,
                 ):
                     degraded.append("responder")
-            parts = sentences or split_for_stream(answer.text)
+            parts = sentences or split_for_stream(answer.lead or answer.text)
             for i, part in enumerate(parts):
                 # The app appends deltas as they come: keep a space between sentences.
                 yield event("text", {"delta": part if i == len(parts) - 1 else f"{part} "})
@@ -275,6 +275,8 @@ async def run_turn(
             )
             if answer.suggestions:
                 yield event("suggestions", {"items": answer.suggestions[:3]})
+            # What Tripi remembers; the app sends it back next turn (trip memory, v3.1).
+            yield event("trip", turn.next_trip(answer).model_dump(mode="json", by_alias=True))
             yield event("done", {"kind": answer.kind, "usage": usage, "degraded": degraded})
     except (TimeoutError, httpx.HTTPError, ValidationError, ValueError):
         yield event("error", {"code": "DEPENDENCY_UNAVAILABLE", "usage": usage})

@@ -17,27 +17,45 @@ from app.clients.llm.guarded import GuardedLlmClient
 from app.clients.llm.openai import OpenAILlmClient
 from app.core.breaker import CircuitBreaker
 from app.core.config import get_chat_settings
+from app.services.assistant.controller import ControllerOutput, to_understanding
 from app.services.assistant.planner import today_in_vietnam
 from app.services.assistant.schemas import ChatRequest, Understanding
 from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
 
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v2.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v3.md"
 
 
 class LlmNotConfiguredError(Exception):
     pass
 
 
+WEEKDAYS_VI = ["thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật"]
+
+
 def build_understanding_input(
     request: ChatRequest, *, max_turns: int = 6, today: date | None = None
 ) -> str:
+    today = today or today_in_vietnam()
+    trip = request.trip
     return json.dumps(
         {
-            "today": (today or today_in_vietnam()).isoformat(),
+            "today": f"{today.isoformat()} ({WEEKDAYS_VI[today.weekday()]})",
             # Only whether a reel is in view: its id never reaches the LLM.
             "hasContextPost": request.context_post_id is not None,
+            # What Tripi remembers, without ids or user-written titles (trusted fields only).
+            "trip": None
+            if trip is None
+            else {
+                "place": trip.place,
+                "dateFrom": trip.date_from.isoformat() if trip.date_from else None,
+                "dateTo": trip.date_to.isoformat() if trip.date_to else None,
+                "adults": trip.adults,
+                "priceMaxPerNight": trip.price_max_per_night,
+                "hasReel": trip.reel_id is not None,
+                "lastCards": [{"ref": c.ref, "kind": c.kind} for c in trip.last_cards],
+            },
             "message": mask_pii(request.message),
             "history": [
                 {"role": turn.role, "text": mask_pii(turn.text)}
@@ -94,9 +112,10 @@ async def understand(request: ChatRequest, *, max_turns: int) -> tuple[Understan
     result = await get_role_llm("controller").agenerate(
         PROMPT.read_text(encoding="utf-8"),
         build_understanding_input(request, max_turns=max_turns),
-        strict_json_schema(Understanding),
+        strict_json_schema(ControllerOutput),
     )
     # A cut JSON can still parse into something wrong; never trust it.
     if result.finish_reason == "length":
         raise ValueError("controller output was cut")
-    return Understanding.model_validate_json(result.output), result
+    out = ControllerOutput.model_validate_json(result.output)
+    return to_understanding(out, request.trip, today_in_vietnam()), result

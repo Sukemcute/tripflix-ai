@@ -1,0 +1,44 @@
+# What to bring, by rules (Tripi v3.1). Matched on vi_text.normalize_text: lowercase, no
+# diacritics. v2 (2026-11-16, Expo Web report §7.3): every item has a group so the user can
+# ask for one group only ("chỉ đồ chống mưa"), rain also follows the sky label, and the
+# beach group can be switched off ("đi họp, không đi biển"). Drafted by Claude, pending
+# review by Bảo. v1 is kept unchanged.
+version: 2
+groups:
+  base:
+    aliases: [giay to, cccd, sac, pin, thuoc, co ban]
+    items:
+      - CCCD hoặc giấy tờ tùy thân
+      - Sạc và pin dự phòng
+      - Thuốc cá nhân
+  beach:
+    match: [bien, dao, vung tau, nha trang, phu quoc, quy nhon, mui ne, con dao, ha long, cat ba, ho tram, long hai]
+    aliases: [bien, boi, tam bien]
+    items:
+      - Đồ bơi và khăn
+      - Kem chống nắng
+      - Kính râm, nón
+      - Dép lê
+  rain:
+    min_chance: 40
+    skies: [co mua, mua rao, co dong, mua phun]
+    aliases: [mua, chong mua, ao mua, o, du]
+    items:
+      - Áo mưa mỏng hoặc ô
+      - Túi chống nước cho điện thoại
+  hot:
+    min_temp: 32
+    aliases: [nang, nong, chong nang]
+    items:
+      - Bình nước
+      - Áo mỏng, thoáng
+  cool:
+    max_temp: 20
+    aliases: [giu am, lanh, ao khoac, am]
+    items:
+      - Áo khoác
+  long:
+    min_nights: 2
+    aliases: [giat, do ban]
+    items:
+      - Đồ giặt nhanh hoặc túi đựng đồ bẩn
