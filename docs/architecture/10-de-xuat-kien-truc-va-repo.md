@@ -88,7 +88,7 @@ flowchart TB
 
   NS[notification-service<br/>in-app · out-app]
   AI[ai-service<br/>FastAPI]
-  VW[video-worker<br/>FFmpeg → HLS]
+  VW[video-worker<br/>Go + FFmpeg → HLS]
 
   PG1[(Postgres core<br/>5 schema, gồm commerce, analytics)]
   PG2[(Postgres notification)]
@@ -123,12 +123,12 @@ flowchart TB
 | Deployable | Repo | Công nghệ | Sở hữu dữ liệu | Lý do tách |
 |---|---|---|---|---|
 | `core-api` | BE | NestJS | Postgres `core` (5 schema, gồm `commerce`, `analytics`) | Lõi nghiệp vụ và kho sự kiện |
-| `notification-service` | BE | NestJS, BullMQ, Socket.IO | Postgres `notification` (database riêng) | Nhận sự kiện từ mọi module, tải theo đợt, scale ngang riêng |
-| `video-worker` | BE | Node + FFmpeg | Không; ghi kết quả vào S3, báo về core bằng sự kiện | CPU nặng, scale riêng |
+| `notification-service` | BE | NestJS, Socket.IO, Nodemailer (BullMQ cho push: chưa làm) | Postgres `notification` (database riêng) | Nhận sự kiện từ mọi module, tải theo đợt, scale ngang riêng |
+| `video-worker` | BE | Go + FFmpeg (staging chạy bản này); bản Node + FFmpeg cũ còn dùng ở dev local | Không; ghi kết quả vào S3, báo về core bằng sự kiện | CPU nặng, scale riêng |
 | `ai-service` | AI | Python, FastAPI | Không giữ dữ liệu nghiệp vụ | Ecosystem Python, vòng đánh giá riêng |
 | `mobile`, `web`, `admin` | FE | Expo, Next.js | — | Mobile/web là Front Office; admin là Back Office, API được role guard |
 
-`video-worker` và `notification-service` build từ cùng monorepo BE với `core-api` (dùng chung `libs/`), mỗi cái một entrypoint và một Dockerfile.
+`notification-service` build từ cùng monorepo BE với `core-api` (dùng chung `libs/`), mỗi cái một entrypoint và một Dockerfile. `video-worker` có hai bản: bản Go (`apps/video-worker-go`, image `video-worker-go`) chạy trên staging, bản Node (`apps/video-worker`) chỉ còn chạy trong compose dev. Bản Go không dùng chung `libs/`, nên giữ nguyên tên sự kiện, payload và cấu trúc thư mục HLS như bản Node. Hai bản chung consumer group `video-worker`, **không chạy cùng lúc trên một Redis**. Khi bản Go đủ ổn định thì bỏ bản Node.
 
 ### 3.2. Năm module trong `core-api`
 
@@ -198,7 +198,7 @@ sequenceDiagram
 |---|---|---|
 | Là gì | Hộp thông báo trong app, chấm đỏ, số đếm realtime (thích, bình luận) | Push lên điện thoại khi app đóng; email (xác nhận đơn, đặt lại mật khẩu) |
 | Lưu ở đâu | Bảng `inbox` trong Postgres `notification` | Bảng `deliveries` (trạng thái gửi, số lần thử) |
-| Đường đi | WebSocket (Socket.IO, adapter Redis để nhiều replica cùng phát) | BullMQ: hàng đợi riêng cho `push` và `email`, thử lại có giới hạn |
+| Đường đi | WebSocket (Socket.IO, adapter Redis để nhiều replica cùng phát) | **Hiện tại:** email gửi thẳng từ consumer qua Nodemailer; lỗi thì sự kiện nằm lại trong Redis Streams, được nhận lại, quá 5 lần vào `stream:dead-letter`, job phát lại giãn cách (5 phút × 2^n, tối đa 8 lần). **Kế hoạch:** push và hàng đợi BullMQ riêng cho `push`, `email` (Dũng, chưa làm) |
 | Nhà cung cấp | — | Expo Push (đi qua FCM/APNs), email qua Amazon SES |
 
 **Chịu tải cao khi dữ liệu đổ về từ nhiều module:**
@@ -207,7 +207,7 @@ sequenceDiagram
 - **Sự kiện mang sẵn dữ liệu cần dùng** (người nhận, tên người gửi, tiêu đề bài, ảnh bìa), nên service không phải gọi ngược về core mỗi lần gửi và không kéo core chậm theo.
 - **Gom thông báo:** nhiều lượt thích cùng một bài trong 1–2 phút thì gộp thành một thông báo ("Lan và 11 người khác thích bài của bạn").
 - Tôn trọng tuỳ chọn người dùng: tắt từng loại, giờ im lặng; có giới hạn số push mỗi người mỗi giờ.
-- Idempotent theo `event_id`; push lỗi thì thử lại có giãn cách, quá 5 lần thì vào hàng lỗi để xem tay.
+- Idempotent theo `event_id`; gửi lỗi thì thử lại có giãn cách, quá 5 lần thì vào `stream:dead-letter`, job phát lại tự thử tiếp tối đa 8 lần rồi để xem tay.
 - Core không bao giờ chờ thông báo: core chỉ ghi outbox. `notification-service` sập thì đặt chỗ, đăng bài vẫn chạy, thông báo đến muộn khi service lên lại.
 
 ### 3.6. Module `analytics` và kho sự kiện
@@ -275,7 +275,7 @@ Chỉ mục có trễ vài giây cũng chỉ làm bài mới xuất hiện muộ
 | Module ↔ module trong core | Phản ứng với thay đổi | Sự kiện qua outbox; consumer trong core nghe Redis Streams |
 | Core → service khác, và giữa các module | Thông báo, transcode; analytics, discovery nghe sự kiện | Outbox → Redis Streams (consumer group) |
 | Service → core (đồng bộ) | AI gọi search | REST nội bộ, token service-to-service do `access` cấp |
-| Job nội bộ | Hết hạn đơn, gửi push, transcode | BullMQ trên Redis |
+| Job nội bộ | Hết hạn giữ chỗ, mở lịch trống, đối soát, dọn dữ liệu | Job định kỳ trong tiến trình `core-api` (`APP_ROLE=worker` hoặc `all`). Transcode nhận việc qua Redis Streams (group `video-worker`), không qua hàng đợi job. BullMQ chỉ dự kiến cho push (chưa làm) |
 
 **Redis Streams cho MVP:**
 
@@ -331,7 +331,7 @@ Bản 0.6 bỏ `mock-channel-manager`: Tripflix **tự quản lý lịch trống
 |---|---|---|
 | Postgres `core` | 5 schema (`access`, `content`, `discovery`, `analytics`, `commerce`) | Một ORM cho cả app, mỗi module một kết nối (docs/11 §3.3). Tìm kiếm full-text, `pg_trgm`, `pgvector` chạy ngay trên đây |
 | Postgres `notification` | Database riêng | Dev và MVP: chung server với `core`, khác database; tách instance khi tải tăng |
-| Redis | Cache, rate limit, BullMQ, Streams, adapter Socket.IO | Bật AOF |
+| Redis | Cache, rate limit, Streams, adapter Socket.IO (BullMQ khi làm push) | Bật AOF. Không đặt `maxmemory-policy allkeys-*`: Redis sẽ xoá cả stream |
 | S3 media + CloudFront | Video HLS, ảnh | Dev dùng bucket S3 dev + CloudFront dev riêng, không dùng MinIO (docs/11 §7.2) |
 
 ## 5. Cấu trúc repo
@@ -369,7 +369,8 @@ tripflix-be/
 │  │     ├─ analytics/    # ingest/ (Streams → events) jobs/ (mart_*) api/
 │  │     └─ <module>/{index.ts, domain/, application/, infra/, db/}
 │  ├─ notification-service/   # consumers/ inapp/ outapp/ (push, email)
-│  └─ video-worker/
+│  ├─ video-worker/       # bản Node, chỉ dùng ở dev local
+│  └─ video-worker-go/    # bản Go, chạy trên staging
 ├─ libs/
 │  ├─ contracts/       # DTO + JSON Schema của event, dùng chung (AI sinh pydantic từ đây)
 │  ├─ outbox/          # bảng outbox + relay sang Redis Streams
@@ -476,7 +477,7 @@ Chỉ tách khi có ít nhất một tín hiệu dưới đây. Vì module đã 
 | Push qua Expo Push hay gọi thẳng FCM/APNs | Dũng | Trước grooming thông báo |
 | ~~Nx hay NestJS monorepo mode cho BE~~ Đã chốt: pnpm + Turborepo (docs/11 Q1) | Tech Lead | Xong 04/11 |
 | ~~Prisma hay Drizzle~~ Đã chốt: Drizzle 1.0.0-rc.5, mỗi module một kết nối (docs/11 Q2, Q3) | Tech Lead | Xong 04/11 |
-| Transcode bằng FFmpeg tự chạy hay AWS MediaConvert | Phong | Trước grooming F1 |
+| ~~Transcode bằng FFmpeg tự chạy hay AWS MediaConvert~~ Đã chốt: FFmpeg tự chạy trong `video-worker` bản Go (docs feed D9, D13) | Phong | Xong |
 | Nơi deploy (VPS + compose, hay AWS ECS) | Tech Lead | Trước tuần 2 |
 
 ## Tham khảo
