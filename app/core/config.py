@@ -107,7 +107,9 @@ class ChatSettings(BaseSettings):
     """Settings of POST /chat (Tripi, TF31). Separate from Settings for the same reason as
     ModerationSettings: the API container gets no LLM_PROVIDER. Limits are [HIỆU CHỈNH]."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # An empty line such as CHAT_CONTROLLER_PRICE_INPUT= (as in .env.example) means "not set":
+    # parsing "" as a float stopped the whole service, /moderate included (anh Phong 16/11).
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
     core_api_url: str = "http://localhost:3000"
     jwks_url: str = ""
