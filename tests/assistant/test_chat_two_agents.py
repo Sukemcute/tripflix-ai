@@ -46,16 +46,18 @@ def test_relative_days(ref, today, expected):
 
 
 def test_stay_dates_use_nights_and_explicit_dates_win():
-    assert planner.stay_dates(u(day_ref="saturday", nights=2), MONDAY) == (
+    assert planner.stay_range(u(day_ref="saturday", nights=2), MONDAY) == (
         date(2026, 11, 21),
         date(2026, 11, 23),
     )
     explicit = u(day_ref="saturday", check_in=date(2026, 12, 1), check_out=date(2026, 12, 3))
-    assert planner.stay_dates(explicit, MONDAY) == (date(2026, 12, 1), date(2026, 12, 3))
+    assert planner.stay_range(explicit, MONDAY) == (date(2026, 12, 1), date(2026, 12, 3))
 
 
 def test_weather_days_default_to_the_next_three_and_say_so():
-    assert planner.trip_days(u(), MONDAY) == (MONDAY, date(2026, 11, 18), True)
+    assert planner.day_window(u(), MONDAY) == planner.DayWindow(
+        MONDAY, date(2026, 11, 18), is_assumed=True, is_past=False
+    )
 
 
 def test_one_clarifying_question_per_conversation():
@@ -123,12 +125,16 @@ class FakeWeather:
         return [d for d in self.days if start <= d.day <= end]
 
 
+WEEKEND = planner.DayWindow(date(2026, 11, 21), date(2026, 11, 22), is_assumed=False, is_past=False)
+
+
+def weather_for(window: planner.DayWindow, client=None) -> Answer:
+    found = asyncio.run(weather_skill.forecast(client or FakeWeather(), "Vũng Tàu", window))
+    return weather_skill.weather_answer(found, "Vũng Tàu", window)
+
+
 def test_weather_card_carries_numbers_and_attribution():
-    answer, days = asyncio.run(
-        weather_skill.weather(
-            FakeWeather(), "Vũng Tàu", date(2026, 11, 21), date(2026, 11, 22), is_assumed=False
-        )
-    )
+    answer = weather_for(WEEKEND)
     card = answer.cards[0]
     assert (card.kind, card.source) == ("weather", "Open-Meteo.com")
     assert card.lines and card.lines[0].detail == "26–33°C, mưa rào, mưa 70%"
@@ -136,14 +142,16 @@ def test_weather_card_carries_numbers_and_attribution():
 
 
 def test_weather_beyond_the_forecast_is_said_not_guessed():
-    answer, _ = asyncio.run(
-        weather_skill.weather(FakeWeather(days=[]), "Vũng Tàu", MONDAY, MONDAY, is_assumed=False)
-    )
+    window = planner.DayWindow(MONDAY, MONDAY, is_assumed=False, is_past=False)
+    answer = weather_for(window, FakeWeather(days=[]))
     assert answer.kind == "no_result" and answer.cards == []
 
 
 def test_packing_list_follows_place_and_weather():
-    items = weather_skill.packing_list("Vũng Tàu muốn đi biển", DAYS, nights=1)
+    pairs = weather_skill.packing_list(
+        u(intent="packing", query="muốn đi biển"), "Vũng Tàu", DAYS, 1
+    )
+    items = [item for item, _ in pairs]
     assert "Kem chống nắng" in items  # beach
     assert "Áo mưa mỏng hoặc ô" in items  # 70% rain
     assert "Bình nước" in items  # 33 °C
@@ -213,7 +221,7 @@ def test_reel_hotel_room_check_keeps_price_off_the_facts():
                 "/api/hotels/h1": httpx.Response(200, json=hotel),
             }
         ) as core:
-            return await trip.check_room(core, uuid4(), date(2026, 11, 21), date(2026, 11, 23), 2)
+            return await trip.reel_room(core, uuid4(), date(2026, 11, 21), date(2026, 11, 23), 2)
 
     answer = asyncio.run(run())
     assert answer.kind == "answer"
@@ -367,7 +375,7 @@ def test_round_trips_and_infants_are_asked_not_searched():
     assert asyncio.run(run()).kind == "clarify"
 
 
-def test_room_question_about_the_reel_is_a_room_check_whatever_the_model_said():
+def test_room_question_without_a_hotel_name_checks_the_reel_hotel():
     hotel = {"id": "h1", "name": "Resort A", "rooms": []}
 
     async def run():
@@ -383,7 +391,7 @@ def test_room_question_about_the_reel_is_a_room_check_whatever_the_model_said():
                     message="ks trong reel t7 nay con phong k",
                     context_post_id=uuid4(),
                 ),
-                Understanding(intent="post_itinerary", day_ref="saturday"),
+                Understanding(intent="check_room", day_ref="saturday"),
                 core=core,
                 weather=FakeWeather(),
                 today=MONDAY,
