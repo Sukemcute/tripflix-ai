@@ -30,6 +30,9 @@ from app.services.assistant.schemas import (
     TripContext,
     Understanding,
 )
+from app.services.assistant.schemas import (
+    Turn as HistoryTurn,
+)
 from app.services.assistant.skills import weather as weather_skill
 from app.services.assistant.turn import Turn
 from app.services.assistant.verifier import verify
@@ -91,16 +94,22 @@ def run_turn(
     trip: TripContext | None = None,
     context_post_id=None,
     weather: FakeWeather | None = None,
+    history: list[HistoryTurn] | None = None,
+    today: date = TODAY,
 ) -> tuple[Answer, Turn]:
     request = ChatRequest(
-        conversation_id=uuid4(), message=message, trip=trip, context_post_id=context_post_id
+        conversation_id=uuid4(),
+        message=message,
+        trip=trip,
+        context_post_id=context_post_id,
+        history=history or [],
     )
-    parsed = to_understanding(out, trip, TODAY)
+    parsed = to_understanding(out, trip, today)
 
     async def go():
         async with core.client() as client:
             turn = Turn(
-                request, parsed, core=client, weather=weather or FakeWeather([]), today=TODAY
+                request, parsed, core=client, weather=weather or FakeWeather([]), today=today
             )
             return await turn.answer(), turn
 
@@ -120,6 +129,70 @@ def stays(*prices: int) -> dict:
 
 
 # ---- dates: the LLM never writes a year, code never searches another range
+
+
+def test_short_stay_date_reply_overrides_weekend_default():
+    core = FakeCore(PLACE | {"/api/stays": stays(420_000)})
+    answer, turn = run_turn(
+        plan(intent="find_stay", place="Nha Trang"),
+        core,
+        message="Ngày 17 18",
+        history=[
+            HistoryTurn(
+                role="assistant",
+                kind="clarify",
+                text="Bạn muốn nhận phòng và trả phòng vào ngày nào?",
+            )
+        ],
+        trip=TripContext(place="Nha Trang", asked=True),
+        today=date(2026, 11, 16),
+    )
+    params = dict(core.calls)["/api/stays"]
+    assert (params["checkIn"], params["checkOut"]) == ("2026-11-17", "2026-11-18")
+    assert answer.cards[0].check_in == date(2026, 11, 17)
+    assert turn.next_trip(answer).date_to == date(2026, 11, 18)
+
+
+def test_ambiguous_short_stay_dates_ask_before_searching():
+    core = FakeCore(PLACE | {"/api/stays": stays(420_000)})
+    answer, _ = run_turn(
+        plan(intent="find_stay", place="Nha Trang", day_ref="this_weekend"),
+        core,
+        message="Ngày 30 1",
+        history=[
+            HistoryTurn(
+                role="assistant",
+                kind="clarify",
+                text="Bạn muốn nhận phòng và trả phòng vào ngày nào?",
+            )
+        ],
+        trip=TripContext(place="Nha Trang", asked=True),
+        today=date(2026, 11, 16),
+    )
+    assert answer.kind == "clarify"
+    assert not core.calls
+
+
+def test_cancel_current_destination_clears_trip_instead_of_refusing():
+    core = FakeCore({})
+    old_reel = uuid4()
+    answer, turn = run_turn(
+        plan(intent="refusal"),
+        core,
+        message="Tôi không muốn đi đà lạt nữa",
+        trip=TripContext(
+            place="Đà Lạt",
+            date_from=IN_5,
+            date_to=IN_6,
+            reel_id=old_reel,
+            asked=True,
+        ),
+        context_post_id=old_reel,
+    )
+    assert answer.kind == "clarify"
+    assert "đổi sang" in answer.text
+    assert turn.next_trip(answer) == TripContext()
+    assert not core.calls
 
 
 def test_v11_b09_year_comes_from_code_not_the_model():
