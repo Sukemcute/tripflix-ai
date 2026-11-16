@@ -415,6 +415,10 @@ def test_reel_named_from_last_cards_is_the_one_opened():
         ("ngay 2 di dau", {"intent": "post_itinerary", "start": {"day": 2, "month": 11}}, True,
          {"itinerary_day": 2, "start": None}),
         ("vay du roi", {"intent": "ack"}, False, {"intent": "ack"}),
+        ("Hii 😄", {"intent": "packing"}, True, {"intent": "greeting"}),
+        ("Hiiii!!!", {"intent": "packing"}, False, {"intent": "greeting"}),
+        ("Hi, tìm khách sạn Đà Lạt", {"intent": "search", "place": "Đà Lạt"}, False,
+         {"intent": "find_stay"}),
         ("ban lam duoc gi", {"intent": "refusal"}, False, {"intent": "identity"}),
         ("bay re nhat tu ha noi vao sai gon t7",
          {"intent": "refusal", "from_airport": "HAN", "to_airport": "SGN"}, False,
@@ -425,6 +429,24 @@ def test_reel_named_from_last_cards_is_the_one_opened():
 def test_guards_drop_what_the_message_does_not_say(message, said, has_reel, want):
     got = apply_guards(plan(**said), message, has_reel=has_reel).model_dump()
     assert {key: got[key] for key in want} == want
+
+
+@pytest.mark.parametrize("intent", ["weather", "packing"])
+def test_weather_and_packing_prefer_tomorrow_to_a_remembered_or_invented_day(intent):
+    message = "Đi Đà Lạt ngày mai có cần mang áo khoác vì trời mưa lạnh không?"
+    remembered = TripContext(place="Đà Lạt", date_from=TODAY + timedelta(days=4))
+    mistaken = plan(intent=intent, day_ref="none", start={"day": 18, "month": 11})
+    guarded = apply_guards(mistaken, message, has_reel=False)
+    window = planner.day_window(to_understanding(guarded, remembered, TODAY), TODAY)
+    assert window.start == window.end == TODAY + timedelta(days=1)
+
+
+def test_verifier_accepts_an_itinerary_with_a_numeric_day_count():
+    sentence = "Lộ trình này đi 3 ngày."
+    facts = [{"ref": "r1", "kind": "itinerary", "days": 3}]
+    kept, dropped = verify([sentence], facts, {"r1"}, "Reel này đi mấy ngày?", today=TODAY)
+    assert kept == [sentence]
+    assert not dropped
 
 
 @pytest.mark.parametrize("query", ["reel này", "lộ trình video này", "video đó"])

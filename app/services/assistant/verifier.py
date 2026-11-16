@@ -70,7 +70,10 @@ def _weather_days(facts: list[dict], today: date | None) -> dict[date, set[str]]
     days: dict[date, set[str]] = {}
     year = (today or date.today()).year
     for fact in facts:
-        for day in fact.get("days") or []:
+        forecast = fact.get("days")
+        if not isinstance(forecast, list):
+            continue  # Itinerary facts use "days" for the number of days.
+        for day in forecast:
             found = DATE.search(str(day.get("day", "")))
             if not found:
                 continue

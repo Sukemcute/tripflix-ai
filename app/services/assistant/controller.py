@@ -24,6 +24,9 @@ DAY_CUES = {
     "tomorrow": r"\b(mai|ngay mai)\b",
     "yesterday": r"\b(hom qua)\b",
 }
+EXPLICIT_WEATHER_DAYS = {"hom nay": "today", "ngay mai": "tomorrow", "hom qua": "yesterday"}
+CALENDAR_DATE = r"\b\d{1,2}(?:\s*[/.-]\s*|\s+th[aá]ng\s+)\d{1,2}\b"
+GREETING = r"(?:hi+|hell?o+|hey+|(?:xin )?chao(?: ban| tripi)?)"
 ROUND_TRIP_CUE = r"\b(khu hoi|(2|hai) chieu|chieu ve|round ?trip)\b"
 INFANT_CUE = r"\b(em be|so sinh|infants?)\b"
 STAY_CUE = (
@@ -215,6 +218,8 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
 def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> ControllerOutput:
     """Drop or fix what the model said that the message does not support [ĐỀ XUẤT]."""
     text = normalize_text(message)
+    if re.fullmatch(GREETING, text):
+        return out.model_copy(update={"intent": "greeting"})
     fixed: dict = {}
     if out.day_ref in DAY_CUES and not re.search(DAY_CUES[out.day_ref], text):
         fixed["day_ref"] = "none"
@@ -248,6 +253,15 @@ def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> Cont
         fixed["intent"] = intent
         if out.missing == "dates" and intent in {"find_stay", "weather"}:
             fixed["missing"] = "none"
+    if intent in {"weather", "packing"} and not re.search(CALENDAR_DATE, message, re.IGNORECASE):
+        explicit_days = {
+            day
+            for phrase, day in EXPLICIT_WEATHER_DAYS.items()
+            if re.search(rf"\b{phrase}\b", text)
+        }
+        if len(explicit_days) == 1:
+            # An explicit relative day in the latest message beats remembered or invented dates.
+            fixed |= {"day_ref": explicit_days.pop(), "start": None}
     if intent == "post_itinerary" and out.itinerary_day is None:
         found = re.search(ITINERARY_DAY, text)
         if found:
