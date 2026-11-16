@@ -7,7 +7,6 @@ the app refreshes it instead of silently dropping to the guest budget.
 import asyncio
 import json
 import logging
-import re
 from functools import cache
 from typing import Annotated
 
@@ -23,14 +22,9 @@ from starlette.concurrency import run_in_threadpool
 
 from app.clients.llm.base import LlmResult
 from app.clients.llm.guarded import LlmUnavailableError
+from app.clients.weather import OpenMeteoWeather
 from app.core.config import ChatSettings, get_chat_settings
-from app.services.assistant import (
-    Answer,
-    ChatRequest,
-    search,
-    search_flights,
-    search_stays,
-)
+from app.services.assistant import ChatRequest
 from app.services.assistant.admission import (
     ChatRejectedError,
     Identity,
@@ -40,14 +34,18 @@ from app.services.assistant.admission import (
     guest_identity,
     user_identity,
 )
+from app.services.assistant.planner import today_in_vietnam
+from app.services.assistant.responder import respond, split_for_stream
+from app.services.assistant.turn import Turn
 from app.services.assistant.understand import LlmNotConfiguredError, understand
-from app.services.summary.pii import mask_pii
 
 __all__ = ["ChatSettings", "get_chat_settings", "router"]
 
 router = APIRouter()
 bearer = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
+RESPONDER_SECONDS = 4.0
+RESPONDER_MIN_SECONDS = 3.0  # less time left than this: keep the fixed text
 
 
 @cache
@@ -64,6 +62,11 @@ def get_core_client() -> httpx.AsyncClient:
         timeout=3,
         limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
     )
+
+
+@cache
+def get_weather() -> OpenMeteoWeather:
+    return OpenMeteoWeather()
 
 
 @cache
@@ -194,26 +197,29 @@ async def chat(
 async def run_turn(
     request: ChatRequest, settings: ChatSettings, gate: TurnGate, ticket: Ticket, deadline: float
 ):
+    loop = asyncio.get_running_loop()
     usage = {"inputTokens": 0, "outputTokens": 0, "costUsd": 0.0, "estimated": True}
+    degraded = list(ticket.degraded)
+    is_llm_on = settings.chat_llm_enabled and "quota" not in degraded
+
+    def add_usage(role: str, result: LlmResult) -> None:
+        record_usage(ticket.identity, role, result)
+        usage["inputTokens"] += result.input_tokens
+        usage["outputTokens"] += result.output_tokens
+        usage["costUsd"] += result.cost_usd
+
     try:
         yield event("status", {"step": "understanding"})
         async with asyncio.timeout_at(deadline):
             parsed = None
-            llm_status = "disabled"
-            if "quota" in ticket.degraded:
-                llm_status = "quota"
-            elif settings.chat_llm_enabled:
+            llm_status = "quota" if "quota" in degraded else "disabled"
+            if is_llm_on:
                 yield event("status", {"step": "llm", "outcome": "calling"})
                 try:
                     parsed, result = await understand(
                         request, max_turns=gate.history_turns(ticket.identity)
                     )
-                    record_usage(ticket.identity, "controller", result)
-                    usage.update(
-                        inputTokens=result.input_tokens,
-                        outputTokens=result.output_tokens,
-                        costUsd=result.cost_usd,
-                    )
+                    add_usage("controller", result)
                     llm_status = "ok"
                 except LlmNotConfiguredError:
                     llm_status = "missing_config"
@@ -226,13 +232,50 @@ async def run_turn(
                 except (ValueError, KeyError, IndexError, TypeError):
                     llm_status = "invalid_response"
             yield event("status", {"step": "llm", "outcome": llm_status})
-            answer = await answer_from(request, parsed)
-            yield event("text", {"delta": answer.text})
+            yield event("status", {"step": "searching"})
+            turn = Turn(
+                request,
+                parsed,
+                core=get_core_client(),
+                weather=get_weather(),
+                today=today_in_vietnam(),
+            )
+            answer = await turn.answer()
+            degraded += turn.degraded
+            sentences = None
+            remaining = deadline - loop.time()
+            if (
+                is_llm_on
+                and parsed is not None
+                and answer.kind in {"answer", "no_result"}
+                and (answer.cards or answer.facts)
+                and remaining >= RESPONDER_MIN_SECONDS
+            ):
+                yield event("status", {"step": "writing"})
+                try:
+                    async with asyncio.timeout(min(RESPONDER_SECONDS, remaining - 0.5)):
+                        sentences, result = await respond(request, answer)
+                    add_usage("responder", result)
+                except (
+                    TimeoutError,
+                    LlmNotConfiguredError,
+                    LlmUnavailableError,
+                    httpx.HTTPError,
+                    ValidationError,
+                    ValueError,
+                ):
+                    degraded.append("responder")
+            parts = sentences or split_for_stream(answer.text)
+            for i, part in enumerate(parts):
+                # The app appends deltas as they come: keep a space between sentences.
+                yield event("text", {"delta": part if i == len(parts) - 1 else f"{part} "})
             yield event(
                 "cards",
                 {"items": [card.model_dump(mode="json", by_alias=True) for card in answer.cards]},
             )
-            yield event("done", {"kind": answer.kind, "usage": usage, "degraded": ticket.degraded})
+            if answer.suggestions:
+                yield event("suggestions", {"items": answer.suggestions[:3]})
+            yield event("done", {"kind": answer.kind, "usage": usage, "degraded": degraded})
     except (TimeoutError, httpx.HTTPError, ValidationError, ValueError):
         yield event("error", {"code": "DEPENDENCY_UNAVAILABLE", "usage": usage})
     finally:
@@ -247,56 +290,3 @@ async def run_turn(
                 )
             finally:
                 await gate.leave(ticket)
-
-
-async def answer_from(request: ChatRequest, parsed) -> Answer:
-    if parsed and (
-        parsed.intent == "refusal"
-        or (request.search_mode is None and parsed.intent in {"small_talk", "clarify"})
-    ):
-        if parsed.intent == "refusal":
-            return Answer(
-                kind="refusal", text="Mình hỗ trợ du lịch an toàn. Bạn muốn khám phá nơi nào?"
-            )
-        if parsed.intent == "small_talk":
-            return Answer(
-                kind="answer",
-                text="Mình là Tripi, trợ lý du lịch của Tripflix. "
-                "Mình có thể giúp bạn tìm Reel, lộ trình, khách sạn và chuyến bay.",
-            )
-        place = parsed.place.strip()
-        if parsed.missing == "dates":
-            destination = f" {place}" if place else ""
-            question = f"Bạn dự định đi{destination} vào ngày nào?"
-        elif place:
-            question = f"Bạn muốn tìm lộ trình, chỗ ở hay chuyến bay đến {place}?"
-        elif parsed.missing == "place":
-            question = "Bạn muốn đi đâu?"
-        else:
-            question = "Bạn muốn mình tìm gì cho chuyến đi này?"
-        return Answer(kind="clarify", text=question)
-    core = get_core_client()
-    query = parsed.query if parsed else mask_pii(request.message)
-    if request.search_mode == "reel":
-        return await search(
-            core, mask_pii(request.message.strip()), reels_only=True, fallback=parsed is None
-        )
-    if parsed and parsed.intent == "find_stay":
-        return await search_stays(core, parsed)
-    if parsed and parsed.intent == "find_flight":
-        if re.search(r"\b(?:rẻ nhất|re nhat|cheapest)\b", request.message, re.I):
-            parsed.cheapest_only = True
-        return await search_flights(core, parsed)
-    reel_request = re.match(
-        r"^(?:(?:tìm|tim|cho mình xem)\s+)?(?:reels?|video)\b\s*",
-        request.message.strip(),
-        re.IGNORECASE,
-    )
-    if reel_request and parsed is None:
-        query = mask_pii(request.message.strip()[reel_request.end() :])
-    return await search(
-        core,
-        query,
-        fallback=parsed is None,
-        reels_only=bool(reel_request or (parsed and parsed.intent == "find_reel")),
-    )

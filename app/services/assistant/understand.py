@@ -5,6 +5,7 @@ own adapter and breaker (Bảo, 2026-11-16: Controller on OpenAI, Responder on D
 """
 
 import json
+from datetime import date
 from functools import cache
 from pathlib import Path
 from typing import Literal
@@ -16,21 +17,27 @@ from app.clients.llm.guarded import GuardedLlmClient
 from app.clients.llm.openai import OpenAILlmClient
 from app.core.breaker import CircuitBreaker
 from app.core.config import get_chat_settings
+from app.services.assistant.planner import today_in_vietnam
 from app.services.assistant.schemas import ChatRequest, Understanding
 from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
 
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-understand.v2.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v1.md"
 
 
 class LlmNotConfiguredError(Exception):
     pass
 
 
-def build_understanding_input(request: ChatRequest, *, max_turns: int = 6) -> str:
+def build_understanding_input(
+    request: ChatRequest, *, max_turns: int = 6, today: date | None = None
+) -> str:
     return json.dumps(
         {
+            "today": (today or today_in_vietnam()).isoformat(),
+            # Only whether a reel is in view: its id never reaches the LLM.
+            "hasContextPost": request.context_post_id is not None,
             "message": mask_pii(request.message),
             "history": [
                 {"role": turn.role, "text": mask_pii(turn.text)}

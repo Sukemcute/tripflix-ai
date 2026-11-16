@@ -193,14 +193,17 @@ def test_sse_refusal_uses_fixed_text(monkeypatch):
             )
         assert response.status_code == 200
         events = response.text.strip().split("\n\n")
-        assert [part.splitlines()[0] for part in events] == [
-            "event: status",
-            "event: status",
-            "event: status",
-            "event: text",
-            "event: cards",
-            "event: done",
-        ]
+        names = [part.splitlines()[0] for part in events]
+        # v3 adds steps (searching, writing) and a suggestions event: check meaning, not count.
+        assert names[0] == "event: status"
+        assert names[-1] == "event: done"
+        assert "event: cards" in names
+        text = "".join(
+            json.loads(part.split("data: ")[1])["delta"]
+            for part in events
+            if part.startswith("event: text")
+        )
+        assert "Mình hỗ trợ du lịch an toàn" in text
         assert json.loads(events[-1].split("data: ")[1])["kind"] == "refusal"
     finally:
         app.dependency_overrides.clear()

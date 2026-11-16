@@ -1,0 +1,33 @@
+# What to bring, by rules (Tripi v3, DeepResearch_Tripi_tro_ly_du_lich_day_du §5.4).
+# Matched on vi_text.normalize_text of the place and the question: lowercase, no diacritics.
+# v1: drafted by Claude 2026-11-16, pending review by Bảo.
+version: 1
+base:
+  - CCCD hoặc giấy tờ tùy thân
+  - Sạc và pin dự phòng
+  - Thuốc cá nhân
+beach:
+  match: [bien, dao, vung tau, nha trang, phu quoc, da nang, quy nhon, mui ne, con dao, ha long, hoi an, cat ba, ho tram, long hai]
+  items:
+    - Đồ bơi và khăn
+    - Kem chống nắng
+    - Kính râm, nón
+    - Dép lê
+rain:
+  min_chance: 50
+  items:
+    - Áo mưa mỏng hoặc ô
+    - Túi chống nước cho điện thoại
+hot:
+  min_temp: 32
+  items:
+    - Bình nước
+    - Áo mỏng, thoáng
+cool:
+  max_temp: 20
+  items:
+    - Áo khoác
+long:
+  min_nights: 2
+  items:
+    - Đồ giặt nhanh hoặc túi đựng đồ bẩn

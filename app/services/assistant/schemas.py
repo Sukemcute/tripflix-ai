@@ -28,8 +28,22 @@ class ChatRequest(WireModel):
 
 
 class Understanding(WireModel):
+    """The Controller's plan for one turn. Code turns it into Skill calls (planner.py)."""
+
     intent: Literal[
-        "search", "find_reel", "find_stay", "find_flight", "clarify", "refusal", "small_talk"
+        "search",
+        "find_reel",
+        "find_stay",
+        "find_flight",
+        "clarify",
+        "refusal",
+        "small_talk",
+        # v3 (2026-11-16): questions about the reel in view, weather and what to bring
+        "post_itinerary",
+        "post_reviews",
+        "check_room",
+        "weather",
+        "packing",
     ]
     query: str = Field(default="", max_length=200)
     missing: Literal["place", "dates", "none"] = "none"
@@ -41,6 +55,13 @@ class Understanding(WireModel):
     to_airport: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     flight_date: date | None = None
     cheapest_only: bool = False
+    # Relative days are resolved by code in Vietnam time, never computed by the LLM.
+    day_ref: Literal[
+        "none", "today", "tomorrow", "this_weekend", "next_weekend", "saturday", "sunday"
+    ] = "none"
+    nights: int | None = Field(default=None, ge=0, le=30)
+    # True when the user means the reel the chat was opened from ("video này", "ks đó").
+    uses_context_post: bool = False
 
 
 class SearchItem(BaseModel):
@@ -60,6 +81,11 @@ class Section(BaseModel):
 class SearchResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     sections: list[Section]
+
+
+class CardLine(WireModel):
+    label: str
+    detail: str = ""
 
 
 class Card(WireModel):
@@ -85,12 +111,18 @@ class Card(WireModel):
     to_airport: str | None = None
     passengers: int | None = None
     fare_code: str | None = None
+    # v3 cards without a price: weather days, a packing list, itinerary days.
+    lines: list[CardLine] | None = None
+    source: str | None = None  # attribution the app must show, e.g. "Open-Meteo.com"
 
 
 class Answer(WireModel):
     kind: Literal["answer", "clarify", "refusal", "no_result", "fallback"]
-    text: str
+    text: str  # fixed template: what the user sees when the Responder is off or fails
     cards: list[Card] = Field(default_factory=list)
+    # What the Responder may talk about: short fields only, never prices (Verifier V2).
+    facts: list[dict] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
 
 
 class Place(BaseModel):
