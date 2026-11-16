@@ -146,10 +146,12 @@ class ChatSettings(BaseSettings):
     chat_max_inflight: int = Field(default=30, ge=1)
     chat_user_turns_per_minute: int = Field(default=6, ge=1)
     chat_guest_turns_per_minute: int = Field(default=3, ge=1)
+    # A two-agent turn measured ~3,500 tokens (local run 2026-11-16), not the 2,500 estimated:
+    # 150k is ~40 turns (~0.01 USD a day), 20k is ~5 guest turns.
     chat_user_daily_turns: int = Field(default=40, ge=1)
-    chat_user_daily_tokens: int = Field(default=60_000, ge=1)
+    chat_user_daily_tokens: int = Field(default=150_000, ge=1)
     chat_guest_daily_turns: int = Field(default=5, ge=1)
-    chat_guest_daily_tokens: int = Field(default=8_000, ge=1)
+    chat_guest_daily_tokens: int = Field(default=20_000, ge=1)
     chat_system_daily_usd: float = Field(default=3.0, gt=0)
     chat_user_history_turns: int = Field(default=6, ge=0, le=10)
     chat_guest_history_turns: int = Field(default=4, ge=0, le=10)

@@ -1,10 +1,11 @@
 """Wire models of POST /chat and the core responses Tripi reads (TF31)."""
 
+import re
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -62,6 +63,24 @@ class Understanding(WireModel):
     nights: int | None = Field(default=None, ge=0, le=30)
     # True when the user means the reel the chat was opened from ("video này", "ks đó").
     uses_context_post: bool = False
+
+    @field_validator("check_in", "check_out", "flight_date", mode="before")
+    @classmethod
+    def drop_placeholder_dates(cls, value: object) -> object:
+        # OpenAI strict mode must fill every field and sometimes writes "0000-01-01" for
+        # "no date" (live eval 2026-11-16): treat any year before 2000 as no date.
+        if isinstance(value, str) and value[:4].isdigit() and int(value[:4]) < 2000:
+            return None
+        return value
+
+    @field_validator("from_airport", "to_airport", mode="before")
+    @classmethod
+    def drop_non_iata(cls, value: object) -> object:
+        # "Hanoi" instead of "HAN" must not void the whole plan (live eval 2026-11-16): no code
+        # means Tripi asks which airports.
+        if isinstance(value, str) and not re.fullmatch(r"[A-Z]{3}", value):
+            return None
+        return value
 
 
 class SearchItem(BaseModel):

@@ -23,6 +23,7 @@ from app.services.assistant.skills.content import search
 from app.services.assistant.skills.flight import search_flights
 from app.services.assistant.skills.stay import search_stays
 from app.services.summary.pii import mask_pii
+from app.services.summary.vi_text import normalize_text
 
 logger = logging.getLogger(__name__)
 SKILL_SECONDS = 3.0
@@ -37,6 +38,8 @@ LABELS = {
     "trip": "reel",
     "weather": "thời tiết",
 }
+ROOM_QUESTION = re.compile(r"\b(con phong|het phong|phong trong|con cho o)\b")
+UNSUPPORTED_FARES = re.compile(r"\b(khu hoi|em be|tre em|tre so sinh|round trip|return ticket)\b")
 DISCOVERY_SUGGESTIONS = ["Thời tiết ở đó", "Cần mang gì?", "Tìm chỗ ở"]
 NEEDS_REEL = Answer(
     kind="no_result",
@@ -70,6 +73,12 @@ class Turn:
         if fixed is not None:
             return fixed
         intent = parsed.intent
+        if self.request.context_post_id and ROOM_QUESTION.search(
+            normalize_text(self.request.message)
+        ):
+            # After an itinerary turn the model kept answering with the itinerary (local run
+            # 2026-11-16): a room question about the reel in view is always a room check.
+            intent = parsed.intent = "check_room"
         if intent in {"post_itinerary", "post_reviews", "check_room"}:
             return await self._about_reel(parsed)
         if intent in {"weather", "packing"}:
@@ -77,6 +86,13 @@ class Turn:
         if intent == "find_stay":
             return await self._stay(parsed)
         if intent == "find_flight":
+            if UNSUPPORTED_FARES.search(normalize_text(self.request.message)):
+                # The model kept searching one-way adult fares here (live eval 2026-11-16).
+                return Answer(
+                    kind="clarify",
+                    text="Tripi mới tìm được vé một chiều cho người lớn. Vé khứ hồi hay vé "
+                    "trẻ em, em bé bạn chọn ngay ở màn đặt vé nha.",
+                )
             parsed.flight_date = parsed.flight_date or planner.start_day(parsed, self.today)
             if re.search(r"\b(?:rẻ nhất|re nhat|cheapest)\b", self.request.message, re.I):
                 parsed.cheapest_only = True

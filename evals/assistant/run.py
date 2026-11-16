@@ -5,7 +5,8 @@
 
 ci   checks the code after the Controller (planner, Skills, cards, clarify-once) against the
      40 labelled cases in cases.v1.jsonl, with a fake Core and fake weather.
-live asks the real Controller three times per case and scores the intent: accuracy over all
+live asks the real Controller three times per case and scores the intent (a case may accept
+     other intents in "alsoOk" when the code still ends the same way): accuracy over all
      runs and pass^3 (all three right; tau-bench, Yao et al. 2024), plus tokens and cost.
      It costs money: run it only when a prompt or model changes.
 """
@@ -135,6 +136,7 @@ async def run_live(cases: list[dict], runs: int) -> int:
     from app.services.assistant.understand import understand  # noqa: PLC0415  # needs .env
 
     by_case: dict[str, list[bool]] = {}
+    answers: dict[str, list[str]] = {}
     latencies, tokens, cost = [], 0, 0.0
     by_tag: Counter[str] = Counter()
     wrong_by_tag: Counter[str] = Counter()
@@ -145,10 +147,13 @@ async def run_live(cases: list[dict], runs: int) -> int:
                 parsed, result = await understand(request_of(case), max_turns=6)
                 tokens += result.input_tokens + result.output_tokens
                 cost += result.cost_usd
-                is_right = parsed.intent == case["expect"]["intent"]
+                expect = case["expect"]
+                is_right = parsed.intent in [expect["intent"], *expect.get("alsoOk", [])]
+                got = parsed.intent
             except Exception as error:  # noqa: BLE001  # an eval run reports, never stops
-                print(f"  ERROR {case['id']}: {type(error).__name__}")
+                got = f"{type(error).__name__}: {str(error).splitlines()[:3]}"
                 is_right = False
+            answers.setdefault(case["id"], []).append(got)
             latencies.append(time.perf_counter() - started)
             by_case.setdefault(case["id"], []).append(is_right)
             for tag in case["tags"]:
@@ -169,7 +174,8 @@ async def run_live(cases: list[dict], runs: int) -> int:
         print(f"  {tag}: {by_tag[tag] - wrong_by_tag[tag]}/{by_tag[tag]}")
     for case_id, results in by_case.items():
         if not all(results):
-            print(f"  UNSTABLE {case_id}: {results}")
+            want = next(c["expect"]["intent"] for c in cases if c["id"] == case_id)
+            print(f"  UNSTABLE {case_id}: want {want}, got {answers[case_id]}")
     return 0
 
 

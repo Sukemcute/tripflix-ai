@@ -338,3 +338,57 @@ def test_reel_without_a_summary_is_not_called_hidden():
 
     answer = asyncio.run(run())
     assert answer.kind == "no_result" and "chưa đủ bình luận" in answer.text
+
+
+def test_placeholder_dates_from_strict_mode_mean_no_date():
+    parsed = Understanding.model_validate_json(
+        '{"intent":"small_talk","checkIn":"0000-01-01","flightDate":"0001-01-01"}'
+    )
+    assert parsed.check_in is None and parsed.flight_date is None
+
+
+def test_airport_names_instead_of_codes_do_not_void_the_plan():
+    parsed = Understanding.model_validate({"intent": "find_flight", "fromAirport": "Hanoi"})
+    assert parsed.from_airport is None
+
+
+def test_round_trips_and_infants_are_asked_not_searched():
+    async def run():
+        async with core_with({}) as core:  # any call to Core would 404
+            turn = ChatTurn(
+                ChatRequest(conversation_id=uuid4(), message="ve khu hoi da nang 1 em be"),
+                Understanding(intent="find_flight", to_airport="DAD"),
+                core=core,
+                weather=FakeWeather(),
+                today=MONDAY,
+            )
+            return await turn.answer()
+
+    assert asyncio.run(run()).kind == "clarify"
+
+
+def test_room_question_about_the_reel_is_a_room_check_whatever_the_model_said():
+    hotel = {"id": "h1", "name": "Resort A", "rooms": []}
+
+    async def run():
+        async with core_with(
+            {
+                "/api/v1/posts/": httpx.Response(200, json=POST),
+                "/api/hotels/h1": httpx.Response(200, json=hotel),
+            }
+        ) as core:
+            turn = ChatTurn(
+                ChatRequest(
+                    conversation_id=uuid4(),
+                    message="ks trong reel t7 nay con phong k",
+                    context_post_id=uuid4(),
+                ),
+                Understanding(intent="post_itinerary", day_ref="saturday"),
+                core=core,
+                weather=FakeWeather(),
+                today=MONDAY,
+            )
+            return await turn.answer()
+
+    answer = asyncio.run(run())
+    assert answer.cards[0].kind == "stay" and answer.kind == "no_result"  # sold out, said so
