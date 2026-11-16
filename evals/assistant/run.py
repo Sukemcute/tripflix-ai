@@ -14,11 +14,16 @@ live  asks the real Controller three times per case and scores the intent (a cas
       tokens and cost. It costs money: run it only when a prompt or model changes.
 chain plays the turns of chains.v1.jsonl in order, each with the history and trip memory the
       previous turn returned, as the app does (Expo Web report §6.1, §7.6). It costs money.
+ab    the TF14 comparison: the same fixed plans written by A (one agent: fixed text, what
+      CHAT_RESPONDER_ENABLED=false serves) and by B (the real Responder through the Verifier).
+      Reports how often B is used, sentences the Verifier drops by rule, latency and cost.
+      Judging tone is left to people reading the printed answers. It costs money.
 """
 
 import argparse
 import asyncio
 import json
+import logging
 import sys
 import time
 from collections import Counter
@@ -337,9 +342,69 @@ async def run_chain(chains: list[dict], runs: int) -> int:
     return 0
 
 
+class _DroppedRules(logging.Handler):
+    """Collects the Verifier's dropped-sentence counts that respond() logs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rules: Counter[str] = Counter()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.rules.update(getattr(record, "rules", {}))
+
+
+async def run_ab(cases: list[dict]) -> int:
+    from app.services.assistant.responder import respond  # noqa: PLC0415  # needs .env
+
+    dropped = _DroppedRules()
+    logging.getLogger("app.services.assistant.responder").addHandler(dropped)
+    logging.getLogger("app.services.assistant.responder").setLevel(logging.INFO)
+    written = fallback = errors = 0
+    latencies, cost = [], 0.0
+    shown: list[tuple[str, str, str]] = []
+    for case in cases:
+        request = request_of(case)
+        async with fake_core() as core:
+            turn = Turn(
+                request, plan_of(case, request), core=core, weather=FakeWeather(), today=TODAY
+            )
+            answer = await turn.answer()
+        if answer.kind not in {"answer", "no_result"} or not (answer.cards or answer.facts):
+            continue  # A and B say the same: the Responder never runs on these turns
+        started = time.perf_counter()
+        try:
+            sentences, result = await respond(request, answer, today=TODAY)
+            cost += result.cost_usd
+        except Exception:  # noqa: BLE001  # an eval run reports, never stops
+            sentences, errors = None, errors + 1
+        latencies.append(time.perf_counter() - started)
+        if sentences:
+            written += 1
+            shown.append((case["id"], answer.text, " ".join(sentences)))
+        else:
+            fallback += 1
+    total = written + fallback
+    latencies.sort()
+    print(f"ab: {total} turns where the Responder runs (others are identical in A and B)")
+    print(
+        f"  B written: {written}/{total}; "
+        f"B fell back to A's fixed text: {fallback} ({errors} errors)"
+    )
+    print(f"  Verifier dropped sentences by rule: {dict(dropped.rules) or 'none'}")
+    if latencies:
+        print(
+            f"  B extra latency p50 {latencies[len(latencies) // 2]:.2f} s, "
+            f"p95 {latencies[max(0, int(len(latencies) * 0.95) - 1)]:.2f} s; "
+            f"cost {cost:.5f} USD ({cost / total:.6f} per turn)"
+        )
+    for case_id, fixed, voiced in shown:
+        print(f"  {case_id}\n    A: {fixed}\n    B: {voiced}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["ci", "live", "chain"], default="ci")
+    parser.add_argument("--mode", choices=["ci", "live", "chain", "ab"], default="ci")
     parser.add_argument("--cases", choices=["v1", "v2", "all"], default="all")
     parser.add_argument("--runs", type=int, default=3)
     args = parser.parse_args()
@@ -349,6 +414,8 @@ def main() -> int:
     cases = [case for version in versions for case in load_cases(version)]
     if args.mode == "ci":
         return asyncio.run(run_ci(cases))
+    if args.mode == "ab":
+        return asyncio.run(run_ab(cases))
     return asyncio.run(run_live(cases, args.runs))
 
 
