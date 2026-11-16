@@ -1,6 +1,6 @@
 # Tripi: kiến trúc chi tiết nối với core và database
 
-- **Ngày:** 2026-11-16 · **Người viết:** Bảo (dùng AI: có) · **Trạng thái:** sơ đồ cho thiết kế, chưa code
+- **Ngày:** 2026-11-16 · **Người viết:** Bảo (dùng AI: có) · **Trạng thái:** cập nhật 16/11. Giai đoạn A phía AI đã xây (PR1 `bao/TF31-tripi-v3-nen`, PR2 `bao/TF31-tripi-v3-hai-agent`), phần đã xây tô xanh đậm
 - **Đọc từ code ngày 16/11:**
   - `tripflix-ai`: nhánh hiện tại, develop `ca8390d` + 2 commit.
   - `tripflix-be`: develop `c00fa5e`, `contracts/openapi/core-api.json`, `db/schema` của 5 module, `deploy/`.
@@ -18,6 +18,8 @@
 | 🟨 Vàng | Đã có nhưng thiếu dữ liệu hoặc phải sửa |
 | 🟥 **Đỏ** | **API, bảng, khóa hoặc nguồn dữ liệu chưa có** |
 | 🟦 Xanh dương, viền đứt | Thành phần bên trong ai-service sẽ viết mới (không phải API) |
+| ✅ **Xanh đậm, viền dày** | **Đã xây trong Giai đoạn A** (PR1, PR2, 16/11): có test và đã chạy thật với core local |
+| Xanh nhạt, viền đứt | Đã xây một phần |
 
 Nhãn trong sơ đồ dùng tiếng Anh, mô tả chung, không gắn tên công nghệ (CONTEXT §6). Tên endpoint và tên bảng là tên thật trong code.
 
@@ -27,6 +29,8 @@ Nhãn trong sơ đồ dùng tiếng Anh, mô tả chung, không gắn tên công
 
 ```mermaid
 flowchart LR
+classDef built fill:#b9f0c2,stroke:#0b6b2b,color:#053d17,stroke-width:3px
+classDef partbuilt fill:#e4f7d2,stroke:#0b6b2b,color:#053d17,stroke-width:2px,stroke-dasharray:4 2
 classDef exists fill:#e3f6e5,stroke:#2e7d32,color:#1b5e20
 classDef partial fill:#fff4d6,stroke:#b7791f,color:#7a4f00
 classDef missing fill:#fde2e1,stroke:#c62828,color:#8e0000,stroke-width:2px
@@ -41,7 +45,7 @@ end
 GW["Gateway: /api to core, /ai/chat to assistant, per-IP rate limit"]:::partial
 
 subgraph AIS["Assistant service, stateless"]
-  CHAT["POST /chat, event stream"]:::partial
+  CHAT["POST /chat, event stream"]:::built
   MODR["POST /moderate, internal"]:::exists
   HLT["GET /health"]:::exists
   SUMW["Summary worker"]:::exists
@@ -61,7 +65,7 @@ KV[("Key-value store: event streams and technical keys")]:::exists
 
 LLM["LLM provider"]:::exists
 MAP["Map provider: places, distance, directions"]:::missing
-WX["Weather provider"]:::missing
+WX["Weather provider, free tier"]:::built
 TRN["Intercity bus data provider"]:::missing
 
 MOB --> GW
@@ -103,37 +107,39 @@ KV -->|"ai.usage.recorded, consumer missing"| ANA
 
 ```mermaid
 flowchart LR
+classDef built fill:#b9f0c2,stroke:#0b6b2b,color:#053d17,stroke-width:3px
+classDef partbuilt fill:#e4f7d2,stroke:#0b6b2b,color:#053d17,stroke-width:2px,stroke-dasharray:4 2
 classDef exists fill:#e3f6e5,stroke:#2e7d32,color:#1b5e20
 classDef partial fill:#fff4d6,stroke:#b7791f,color:#7a4f00
 classDef missing fill:#fde2e1,stroke:#c62828,color:#8e0000,stroke-width:2px
 classDef planned fill:#e6f0ff,stroke:#1e5bb8,color:#0d3c80,stroke-dasharray:5 3
 
-REQ["Request: message, history, contextPostId, tripDraft, action"]:::partial
+REQ["Request: message, history, contextPostId, tripDraft, action"]:::partbuilt
 
 subgraph AI["Assistant service"]
-  AUTH["Verify user token and session"]:::exists
-  ADM["Admission: per-user lock, rate, daily budget, in-flight cap"]:::planned
-  GRD["Input guard: length, mask personal data, injection tag"]:::exists
-  CTRL["Controller agent: plan as JSON"]:::planned
-  CHK["Plan checker: allowed skills, max steps, clarify once"]:::planned
-  EXE["Executor: dependencies, parallel, per-step deadline"]:::planned
+  AUTH["Verify user token and session, or guest by salted IP"]:::built
+  ADM["Admission: per-user lock, rate, daily budget, in-flight cap"]:::built
+  GRD["Input guard: length, mask personal data; injection tag not wired yet"]:::partbuilt
+  CTRL["Controller agent: plan as JSON"]:::built
+  CHK["Planner: relative days, clarify once, defaults"]:::built
+  EXE["Turn: picks skills by intent, per-skill deadline, degraded"]:::built
   OPS["Draft ops: set, select, remove, undo"]:::planned
   ENG["Itinerary engine: pick, cluster by day, order from stay"]:::planned
-  PACK["Packing rules"]:::planned
-  RESP["Responder agent: Tripi voice, no tools"]:::planned
-  VER["Verifier: refs, names and numbers must be in facts"]:::planned
-  REND["Cards by policy, quick replies, updated draft"]:::planned
+  PACK["Packing rules"]:::built
+  RESP["Responder agent: Tripi voice, no tools"]:::built
+  VER["Verifier: refs, names and numbers must be in facts"]:::built
+  REND["Cards by policy, quick replies, updated draft"]:::built
 end
 
 subgraph SKC["Skills calling core"]
-  K_EXP["content.explore"]:::exists
-  K_REEL["content.reels"]:::exists
-  K_POST["trip.get_post"]:::planned
-  K_VOI["voices.summary"]:::planned
-  K_SUG["place.resolve"]:::exists
-  K_STAY["stay.search"]:::exists
-  K_OFF["stay.offers"]:::planned
-  K_FLT["flight.search"]:::exists
+  K_EXP["content.explore"]:::built
+  K_REEL["content.reels"]:::built
+  K_POST["trip.get_post"]:::built
+  K_VOI["voices.summary"]:::built
+  K_SUG["place.resolve"]:::built
+  K_STAY["stay.search"]:::built
+  K_OFF["stay.offers"]:::built
+  K_FLT["flight.search"]:::built
   K_RT["flight.routes"]:::planned
   K_REC["taste.for_you"]:::planned
   K_POI["place.search, POI with coordinates"]:::planned
@@ -143,7 +149,7 @@ end
 subgraph SKX["Skills calling outside providers"]
   X_GEO["place.geocode"]:::planned
   X_RTE["route.matrix, route.directions"]:::planned
-  X_WX["weather.forecast"]:::planned
+  X_WX["weather.forecast, place lookup included"]:::built
   X_BUS["transport.bus"]:::planned
 end
 
@@ -168,7 +174,7 @@ end
 
 subgraph EXT["Outside providers"]
   P_MAP["Map provider"]:::missing
-  P_WX["Weather provider"]:::missing
+  P_WX["Weather provider"]:::built
   P_BUS["Bus data provider or seed"]:::missing
   P_LLM["LLM provider"]:::exists
 end
@@ -232,6 +238,8 @@ Chỉ vẽ phần Tripi và worker tóm tắt dùng. Bảng lấy từ `apps/cor
 
 ```mermaid
 flowchart LR
+classDef built fill:#b9f0c2,stroke:#0b6b2b,color:#053d17,stroke-width:3px
+classDef partbuilt fill:#e4f7d2,stroke:#0b6b2b,color:#053d17,stroke-width:2px,stroke-dasharray:4 2
 classDef exists fill:#e3f6e5,stroke:#2e7d32,color:#1b5e20
 classDef partial fill:#fff4d6,stroke:#b7791f,color:#7a4f00
 classDef missing fill:#fde2e1,stroke:#c62828,color:#8e0000,stroke-width:2px
@@ -318,6 +326,8 @@ T_MOD -.->|"hidden posts leave the index"| T_SDOC
 
 ```mermaid
 flowchart LR
+classDef built fill:#b9f0c2,stroke:#0b6b2b,color:#053d17,stroke-width:3px
+classDef partbuilt fill:#e4f7d2,stroke:#0b6b2b,color:#053d17,stroke-width:2px,stroke-dasharray:4 2
 classDef exists fill:#e3f6e5,stroke:#2e7d32,color:#1b5e20
 classDef missing fill:#fde2e1,stroke:#c62828,color:#8e0000,stroke-width:2px
 
@@ -335,11 +345,11 @@ subgraph SUMK["Summary keys, existing"]
 end
 
 subgraph CHK["Chat keys, new"]
-  C1["chat:busy per user: one turn running, 15 s"]:::missing
-  C2["chat:rate per user: token bucket"]:::missing
-  C3["chat:spend per user per day: micro-USD and turns"]:::missing
-  C4["chat:spend all per day: system budget"]:::missing
-  C5["chat cache: weather per place and date, 30 min"]:::missing
+  C1["chat:busy per user: one turn running, 15 s"]:::built
+  C2["chat:rate per user: token bucket"]:::built
+  C3["chat:spend per user per day: micro-USD and turns"]:::built
+  C4["chat:spend all per day: system budget"]:::built
+  C5["chat cache: weather per place and date, 30 min, in process for now"]:::partbuilt
 end
 
 OUTBOX["Core outbox relay"] --> ST_CON
@@ -368,16 +378,16 @@ ST_USE -.-> ANA["analytics consumer, missing"]:::missing
 | Trường hoặc sự kiện | Trạng thái | Ghi chú |
 |---|---|---|
 | `conversationId`, `message`, `history[{role, text}]` | 🟩 có | |
-| `history[].kind` | 🟨 có trong schema, FE chưa gửi | Cần cho "hỏi lại một lần" |
+| `history[].kind` | ✅ server dùng (PR2); 🟨 app chưa gửi | Cần cho "hỏi lại một lần" |
 | `searchMode` | 🟩 có | |
-| `contextPostId` | 🟥 chưa có | Reel đang xem (R4) |
+| `contextPostId` | ✅ có (PR1, dùng ở PR2); 🟨 app chưa gửi | Reel đang xem (R4) |
 | `tripDraft` | 🟥 chưa có | Bộ nhớ làm việc M2 |
 | `action` (bấm nút Chọn, Đổi, Bỏ, Hoàn tác) | 🟥 chưa có | Không gọi LLM |
 | `noMemory` | 🟥 chưa có | Chế độ "không nhớ" (M3) |
-| SSE `status`, `text`, `cards`, `done`, `error` | 🟩 có | `text` sẽ gửi theo từng câu |
+| SSE `status`, `text`, `cards`, `done`, `error` | ✅ có; `text` gửi theo từng câu (PR2) | Thêm bước `searching`, `writing` |
 | SSE `draft` | 🟥 chưa có | Trả draft mới |
-| `done.degraded`, `cards[].kind` loại mới, chip gợi ý | 🟥 chưa có | |
-| HTTP 409, 429, 503 có `retryAfterSeconds` | 🟥 chưa có | Hạn mức (báo cáo SWE §3.4) |
+| `done.degraded`, `cards[].kind` loại mới, chip gợi ý | ✅ có (PR2): sự kiện `suggestions`; thẻ `weather`, `checklist`, `itinerary`, `summary` có `lines`, `source` | App chưa hiển thị |
+| HTTP 409, 429, 503 có `retryAfterSeconds` | ✅ có (PR1), kèm `loginRequired` cho khách | Hạn mức (báo cáo SWE §3.4) |
 
 Mọi thay đổi chỉ là **thêm** trường; client cũ vẫn chạy. Sinh lại `contracts/openapi/ai-service.json`, FE chạy `pnpm gen:api` (RULES §4.1).
 
@@ -403,6 +413,8 @@ Thêm ngày 16/11. Chi tiết về bộ nhớ ở [báo cáo SWE §3A](../resear
 
 ```mermaid
 flowchart LR
+classDef built fill:#b9f0c2,stroke:#0b6b2b,color:#053d17,stroke-width:3px
+classDef partbuilt fill:#e4f7d2,stroke:#0b6b2b,color:#053d17,stroke-width:2px,stroke-dasharray:4 2
 classDef exists fill:#e3f6e5,stroke:#2e7d32,color:#1b5e20
 classDef missing fill:#fde2e1,stroke:#c62828,color:#8e0000,stroke-width:2px
 
@@ -416,8 +428,8 @@ end
 subgraph KVS["Key-value store"]
   R1["Blocked session ids"]:::exists
   R2["Login and action rate counters"]:::exists
-  R3["Chat lock, rate, daily budget per user"]:::missing
-  R4["Weather cache, 30 min"]:::missing
+  R3["Chat lock, rate, daily budget per user"]:::built
+  R4["Weather cache, 30 min, in process for now"]:::partbuilt
 end
 
 subgraph RDB["Relational database, core"]
@@ -506,6 +518,8 @@ ai-service không giữ gì về phiên. Mỗi lượt nó kiểm chữ ký JWT 
 | `localStorage` trên web đọc được bằng JavaScript (nguy cơ XSS) | Không lưu token hay PII trong draft; chỉ lưu ID và lựa chọn | Thành |
 
 ## 7. Danh sách việc ngoài ai-service suy ra từ sơ đồ
+
+Cập nhật 16/11: chưa việc nào xong. O1 và O4 là PR4, PR3 em làm khi có đồng ý của Dũng và chị Trang.
 
 | # | Việc | Repo, module | Chủ | Cần cho |
 |---|---|---|---|---|

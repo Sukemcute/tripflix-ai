@@ -1,6 +1,6 @@
-# Tripi v3: nghiên cứu, kiến trúc và kế hoạch (bản đề xuất)
+# Tripi v3: nghiên cứu, kiến trúc, kế hoạch và trạng thái triển khai
 
-- **Ngày:** 2026-11-16 · **Người viết:** Bảo (dùng AI: có) · **Trạng thái:** đề xuất v0.2, chờ Bảo duyệt trước khi code
+- **Ngày:** 2026-11-16 · **Người viết:** Bảo (dùng AI: có) · **Trạng thái:** v0.6, Giai đoạn A phía AI **đã code xong** (PR1, PR2 đã push, chưa merge); mobile (PR3) và gateway (PR4) chưa làm
 - **v0.5 (16/11), Bảo chốt để code Giai đoạn A:**
   - Chỉ làm trên mobile (reel); web để sau.
   - Khách chưa đăng nhập dùng được với hạn mức nhỏ hơn nhiều (5 lượt hoặc 8.000 token mỗi ngày). Ngữ cảnh của khách chỉ nằm trong bộ nhớ app: đăng nhập thì chat tiếp với nguyên ngữ cảnh, không đăng nhập thì mất.
@@ -24,6 +24,43 @@
 
 ---
 
+## Trạng thái triển khai (cập nhật 16/11)
+
+**Ký hiệu:**
+- ✅ đã xong trong code (đã test, đã chạy thật với core local)
+- 🟡 xong phía AI, còn chờ phần khác (app, gateway)
+- ⬜ chưa làm
+
+| Phần | Trạng thái | Ở đâu |
+|---|---|---|
+| Tách package `app/services/assistant/` | ✅ | PR1 `bao/TF31-tripi-v3-nen` |
+| Adapter LLM async, gọi 1 lần, đọc `finish_reason` | ✅ | PR1 |
+| Khách chưa đăng nhập, hạn mức 5 tầng, khóa 1 lượt, 409/429/503 | ✅ | PR1 (`admission.py`) |
+| Controller OpenAI `gpt-5-nano` + Responder DeepSeek, mỗi vai một breaker | ✅ | PR1, PR2 |
+| Planner: ngày tương đối theo giờ Việt Nam, hỏi lại một lần | ✅ | PR2 (`planner.py`) |
+| Skill: tìm reel, chỗ ở, chuyến bay (có từ TF31) | ✅ | PR2 (`skills/`) |
+| Skill mới: lộ trình, review, khách sạn của reel đang xem | ✅ | PR2 (`skills/trip.py`) |
+| Thời tiết Open-Meteo, đồ mang theo bằng luật | ✅ | PR2 (`clients/weather.py`, `skills/weather.py`) |
+| Responder giọng Tripi + Verifier V1–V7 | ✅ | PR2 (`responder.py`, `verifier.py`) |
+| Thẻ theo câu hỏi, chip gợi ý, chữ gửi theo câu, `done.degraded` | ✅ | PR2 (`turn.py`, `api/chat.py`) |
+| Eval 40 câu (ci + live, pass^3) | ✅ | PR2 (`evals/assistant/`); live: 97,5% ý định, pass^3 97,5% |
+| App gửi `kind`, `contextPostId`; mời đăng nhập; lưu hội thoại; thẻ mới | ⬜ | PR3 `tripflix-fe` (chờ chị Trang đồng ý) |
+| Router gateway riêng cho `/ai/chat` | ⬜ | PR4 `tripflix-be` (chờ Dũng, Tech Lead) |
+| Cờ `CHAT_RESPONDER_ENABLED`, `CHAT_SKILLS_DISABLED` | ⬜ | Chưa làm; hiện chỉ có kill switch `CHAT_LLM_ENABLED` |
+| Gắn cờ injection (`match_injection`) vào luồng chat | ⬜ | Chưa làm; an toàn hiện dựa vào cấu trúc (mục 3.7) |
+| Sân bay theo tên qua `/api/suggest?types=airport` (T8) | ⬜ | Chưa làm |
+| Giai đoạn B: Itinerary Engine, Trip Draft, chỉ đường, xe khách, chỗ ở ngoài | ⬜ | Sau Giai đoạn A |
+
+**Khác thiết kế** (đã ghi trong evidence):
+- **Controller ra ý định và thông tin, không ra danh sách bước.**
+  - Lý do: strict mode của OpenAI không cho tham số tự do trong JSON.
+  - Chuỗi bước do code quyết định (`turn.py`); "Plan checker" và "Executor" nằm trong `planner.py` và `turn.py`.
+- **`build_llm` không chuyển chỗ.** Chat có hàm riêng `get_role_llm(role)`.
+- **Cache thời tiết nằm trong process**, chưa nằm trong Redis.
+- **Hạn mức token đã hiệu chỉnh theo số đo:** người đăng nhập 150.000, khách 20.000 mỗi ngày.
+
+Màu xanh đậm viền dày trong các sơ đồ dưới đây là phần **đã xây**.
+
 ## 0. Tóm tắt một trang
 
 **Vấn đề.** Trợ lý hiện tại chạy được (TF31), nhưng là bản nối để test:
@@ -36,14 +73,14 @@
 
 | # | Quyết định | Vì sao (ngắn) |
 |---|---|---|
-| D1 | **Hai agent LLM có vai trò cách ly** (mục 2A). **Controller** đọc câu và lập kế hoạch dưới dạng JSON, không bao giờ thấy kết quả core. **Responder** đọc kết quả rồi viết câu trả lời, không có tool. Giữa hai agent là **các Skill chuyên trách** viết bằng code (reel, chỗ ở, chuyến bay, lộ trình, tóm tắt) và một **Verifier** bằng code | Đây là mẫu Dual LLM / plan-then-execute [NGUỒN 3, 4, 12]. Đổi Skill thành agent LLM riêng thì hỏng nặng hơn với việc tuần tự và nặng tool (−39 đến −70%) [NGUỒN 14], tốn token hơn [NGUỒN 15, 17] |
-| D2 | **Mỗi lượt gọi LLM 2 lần** (Controller, Responder). Responder hỏng hoặc bị Verifier chặn hết câu thì dùng **câu mẫu** (dự phòng) | Có chữ tự nhiên, kiểu người trẻ, mà vẫn không lộ giá giả: LLM tự sửa lỗi không đáng tin [NGUỒN 18], nên Verifier bằng code là lớp chặn cuối |
-| D3 | **Mỗi vai là một cổng (port)**: Controller, Plan checker, Skill, Responder, Verifier. Mỗi cổng có bản thật và bản giả; mỗi agent và mỗi Skill tắt được bằng cờ | Báo cáo 11/11 mục 3, seam "Chạy một lượt Tripi" |
-| D4 | **Gọi LLM qua `LlmClient` + `GuardedLlmClient` có sẵn**, không gọi DeepSeek trực tiếp trong route | Bỏ bảng giá trùng, có circuit breaker, đổi được nhà cung cấp |
-| D5 | **Thêm 3 ý định**: `post_detail` (lộ trình của reel), `check_room` (khách sạn trong reel còn phòng không), `what_people_say` (đọc tóm tắt bình luận đã có) | Dùng thế mạnh riêng của Tripflix: reel có lộ trình và tóm tắt "người đi rồi nói gì" |
-| D6 | **Client gửi thêm `contextPostId` và `kind` của từng lượt cũ** | Để hiểu "khách sạn trong video này", và để đếm chính xác số lần đã hỏi lại |
-| D7 | **Hỏng một công cụ thì chỉ mất phần đó.** LLM hỏng thì core tự hiểu câu (chế độ dự phòng) | PRD: AI hỏng thì tìm và đặt vẫn chạy |
-| D8 | **Bộ eval hội thoại** `evals/assistant/`: chạy bằng LLM giả trong CI, chạy bằng LLM thật khi đổi prompt; đo pass^3 | PRD yêu cầu 100 kịch bản; RULES §10 yêu cầu điểm trước/sau |
+| D1 | **Hai agent LLM có vai trò cách ly** (mục 2A). **Controller** đọc câu và lập kế hoạch dưới dạng JSON, không bao giờ thấy kết quả core. **Responder** đọc kết quả rồi viết câu trả lời, không có tool. Giữa hai agent là **các Skill chuyên trách** viết bằng code (reel, chỗ ở, chuyến bay, lộ trình, tóm tắt) và một **Verifier** bằng code **[✅ PR2]** | Đây là mẫu Dual LLM / plan-then-execute [NGUỒN 3, 4, 12]. Đổi Skill thành agent LLM riêng thì hỏng nặng hơn với việc tuần tự và nặng tool (−39 đến −70%) [NGUỒN 14], tốn token hơn [NGUỒN 15, 17] |
+| D2 | **Mỗi lượt gọi LLM 2 lần** (Controller, Responder). Responder hỏng hoặc bị Verifier chặn hết câu thì dùng **câu mẫu** (dự phòng) **[✅ PR2]** | Có chữ tự nhiên, kiểu người trẻ, mà vẫn không lộ giá giả: LLM tự sửa lỗi không đáng tin [NGUỒN 18], nên Verifier bằng code là lớp chặn cuối |
+| D3 | **Mỗi vai là một cổng (port)**: Controller, Plan checker, Skill, Responder, Verifier. Mỗi cổng có bản thật và bản giả; mỗi agent và mỗi Skill tắt được bằng cờ **[🟡 Skill lỗi chỉ hỏng phần của nó; chưa có cờ tắt từng vai, từng Skill]** | Báo cáo 11/11 mục 3, seam "Chạy một lượt Tripi" |
+| D4 | **Gọi LLM qua `LlmClient` + `GuardedLlmClient` có sẵn**, không gọi DeepSeek trực tiếp trong route **[✅ PR1]** | Bỏ bảng giá trùng, có circuit breaker, đổi được nhà cung cấp |
+| D5 | **Thêm 3 ý định**: `post_detail` (lộ trình của reel), `check_room` (khách sạn trong reel còn phòng không), `what_people_say` (đọc tóm tắt bình luận đã có) **[✅ PR2]** | Dùng thế mạnh riêng của Tripflix: reel có lộ trình và tóm tắt "người đi rồi nói gì" |
+| D6 | **Client gửi thêm `contextPostId` và `kind` của từng lượt cũ** **[🟡 server đọc được; app chưa gửi]** | Để hiểu "khách sạn trong video này", và để đếm chính xác số lần đã hỏi lại |
+| D7 | **Hỏng một công cụ thì chỉ mất phần đó.** LLM hỏng thì core tự hiểu câu (chế độ dự phòng) **[✅ PR2]** | PRD: AI hỏng thì tìm và đặt vẫn chạy |
+| D8 | **Bộ eval hội thoại** `evals/assistant/`: chạy bằng LLM giả trong CI, chạy bằng LLM thật khi đổi prompt; đo pass^3 **[✅ PR2]** | PRD yêu cầu 100 kịch bản; RULES §10 yêu cầu điểm trước/sau |
 
 **Không làm** ở v3:
 - Tool ghi (đặt chỗ, sửa lộ trình).
@@ -64,19 +101,19 @@ Ghi lại theo lời Bảo; ví dụ là của Bảo. Phần này **mở rộng*
 
 | # | Khả năng | Ví dụ của Bảo | Hiện có? |
 |---|---|---|---|
-| R1 | Gợi ý theo câu tự nhiên, kèm thẻ video | "muốn đi Vũng Tàu 2 ngày 1 đêm" → 3 thẻ video | Có (TF31) |
-| R2 | **Không phải câu nào cũng hiện 3 thẻ video**: loại thẻ và số thẻ theo câu hỏi | hỏi thời tiết thì không cần thẻ video | Chưa (hiện ưu tiên video cho mọi câu tìm) |
-| R3 | Trả lời các câu hỏi tiếp theo về chuyến đi | "lộ trình như nào", "ở đâu", "thời tiết sắp tới", "cần mang gì" | Chưa |
-| R4 | Đọc lộ trình của video đang nói tới | "lộ trình của video này" | Chưa (đề xuất `post_detail`) |
-| R5 | **Tự đề xuất lộ trình** | Vũng Tàu 2N1Đ | Chưa |
-| R6 | Đề xuất vé máy bay, chỗ ở **từ kho dữ liệu** của Tripflix | | Có một phần (tìm chỗ ở, chuyến bay) |
-| R7 | Thêm các điểm đi chơi nổi tiếng | Ngọn Hải Đăng, Mũi Nghinh Phong, bãi biển | Chưa (core chưa có nguồn POI: `food`, `cafe`, `see` đang rỗng) |
-| R8 | Hỏi người dùng đang ở đâu, rồi **hướng dẫn cách đi** tới nơi đến | ở TP.HCM → Vũng Tàu | Chưa |
-| R9 | Có chuyến bay thì đề xuất vé; không có thì đề xuất **nhà xe** | | Chưa có dữ liệu xe |
-| R10 | Đề xuất nơi ở (khách sạn, nhà nghỉ, resort): **ưu tiên dịch vụ Tripflix có bán trước, ngoài hệ thống sau** | | Chưa có nguồn ngoài |
-| R11 | Xếp lộ trình thuận đường **tính từ nơi ở** | resort → Hải Đăng → Mũi Nghinh Phong → biển | Chưa |
-| R12 | **Sửa kế hoạch theo yêu cầu**, agent tự gợi ý phương án thay | đổi máy bay sang xe, đổi hãng bay, đổi nơi ở | Chưa |
-| R13 | Responder trả lời **vui tươi, trẻ trung**, không cứng nhắc như câu mẫu hiện tại | | Chưa |
+| R1 | Gợi ý theo câu tự nhiên, kèm thẻ video | "muốn đi Vũng Tàu 2 ngày 1 đêm" → 3 thẻ video | ✅ Có (TF31) |
+| R2 | **Không phải câu nào cũng hiện 3 thẻ video**: loại thẻ và số thẻ theo câu hỏi | hỏi thời tiết thì không cần thẻ video | ✅ Xong (PR2) |
+| R3 | Trả lời các câu hỏi tiếp theo về chuyến đi | "lộ trình như nào", "ở đâu", "thời tiết sắp tới", "cần mang gì" | ✅ Xong (PR2): thời tiết, đồ mang theo, lộ trình reel, chỗ ở |
+| R4 | Đọc lộ trình của video đang nói tới | "lộ trình của video này" | ✅ Xong (PR2) |
+| R5 | **Tự đề xuất lộ trình** | Vũng Tàu 2N1Đ | ⬜ Giai đoạn B |
+| R6 | Đề xuất vé máy bay, chỗ ở **từ kho dữ liệu** của Tripflix | | ✅ Có; ngày tương đối do code đổi (PR2) |
+| R7 | Thêm các điểm đi chơi nổi tiếng | Ngọn Hải Đăng, Mũi Nghinh Phong, bãi biển | ⬜ Giai đoạn B |
+| R8 | Hỏi người dùng đang ở đâu, rồi **hướng dẫn cách đi** tới nơi đến | ở TP.HCM → Vũng Tàu | ⬜ Giai đoạn B |
+| R9 | Có chuyến bay thì đề xuất vé; không có thì đề xuất **nhà xe** | | ⬜ Giai đoạn B |
+| R10 | Đề xuất nơi ở (khách sạn, nhà nghỉ, resort): **ưu tiên dịch vụ Tripflix có bán trước, ngoài hệ thống sau** | | 🟡 Tripflix có (PR2); chỗ ngoài: Giai đoạn B |
+| R11 | Xếp lộ trình thuận đường **tính từ nơi ở** | resort → Hải Đăng → Mũi Nghinh Phong → biển | ⬜ Giai đoạn B |
+| R12 | **Sửa kế hoạch theo yêu cầu**, agent tự gợi ý phương án thay | đổi máy bay sang xe, đổi hãng bay, đổi nơi ở | ⬜ Giai đoạn B |
+| R13 | Responder trả lời **vui tươi, trẻ trung**, không cứng nhắc như câu mẫu hiện tại | | ✅ Xong (PR2) |
 
 **Giả định của Bảo:** có API bản đồ (kiểu Google Maps: tìm địa điểm, khoảng cách, chỉ đường) và API thời tiết.
 
@@ -128,17 +165,17 @@ FE mobile (assistant-transport.ts)
 
 | # | Phát hiện | Ở đâu | Hệ quả |
 |---|---|---|---|
-| H1 | Route gọi DeepSeek bằng httpx riêng, có bảng giá riêng trong `ChatSettings` | [chat.py:117](../../app/api/chat.py#L117), [chat.py:48](../../app/api/chat.py#L48) | Hai bảng giá lệch nhau theo thời gian. Không có breaker. Không đổi được nhà cung cấp |
-| H2 | Định tuyến là chuỗi `if` lồng nhau, có regex đọc thẳng câu gốc ("rẻ nhất", "reel") | [chat.py:202-263](../../app/api/chat.py#L202) | Thêm một ý định phải sửa route. Khó test từng nhánh |
-| H3 | Một API core lỗi thì cả lượt trả `DEPENDENCY_UNAVAILABLE` | [chat.py:274](../../app/api/chat.py#L274) | Chuyến bay chậm làm hỏng cả câu hỏi về reel |
-| H4 | "Hỏi lại đúng một câu" chưa được đảm bảo: FE không gửi `kind`, server mặc định mọi lượt là `answer` | FE `assistant-transport.ts`, [assistant.py:22](../../app/services/assistant.py#L22) | Có thể hỏi lại nhiều lần liên tiếp |
-| H5 | Bắt buộc đăng nhập, trong khi PRD F9 cho khách vãng lai dùng | [chat.py:84](../../app/api/chat.py#L84), PRD F9 AC 1 | Lệch PRD. Đây cũng là mâu thuẫn TF31 đã ghi ở v2 |
-| H6 | Không biết người dùng đang xem reel nào | `ChatRequest` | Không trả lời được "khách sạn trong video này còn phòng không" |
-| H7 | Chuyến bay cần LLM tự đoán mã sân bay IATA | prompt v2 | Người trẻ gõ "bay ra hn", không gõ "HAN". Core đã có `/api/suggest?types=airport` |
-| H8 | Mỗi lượt tạo 3 `httpx.AsyncClient` mới (auth, LLM, core) | chat.py | Mỗi lượt bắt tay TCP/TLS lại, thêm độ trễ |
-| H9 | Chưa có hạn mức theo người, trần chi phí ngày, giới hạn số lượt chạy đồng thời | — | OWASP LLM10 (tiêu thụ không giới hạn) [NGUỒN 7] |
-| H10 | Chưa có bộ eval hội thoại | `evals/` chỉ có summary, moderation | Không có số đo cho TF14/TF40 |
-| H11 | `ai.usage.recorded` mới ghi log; core chưa có consumer nào cho sự kiện này | chat.py:158; grep `tripflix-be` | Đẩy lên stream lúc này cũng chưa ai đọc |
+| H1 | Route gọi DeepSeek bằng httpx riêng, có bảng giá riêng trong `ChatSettings` | [chat.py:117](../../app/api/chat.py#L117), [chat.py:48](../../app/api/chat.py#L48) | Hai bảng giá lệch nhau theo thời gian. Không có breaker. Không đổi được nhà cung cấp **[✅ PR1]** |
+| H2 | Định tuyến là chuỗi `if` lồng nhau, có regex đọc thẳng câu gốc ("rẻ nhất", "reel") | [chat.py:202-263](../../app/api/chat.py#L202) | Thêm một ý định phải sửa route. Khó test từng nhánh **[✅ PR2]** |
+| H3 | Một API core lỗi thì cả lượt trả `DEPENDENCY_UNAVAILABLE` | [chat.py:274](../../app/api/chat.py#L274) | Chuyến bay chậm làm hỏng cả câu hỏi về reel **[✅ PR2]** |
+| H4 | "Hỏi lại đúng một câu" chưa được đảm bảo: FE không gửi `kind`, server mặc định mọi lượt là `answer` | FE `assistant-transport.ts`, [assistant.py:22](../../app/services/assistant.py#L22) | Có thể hỏi lại nhiều lần liên tiếp **[🟡 server xong (PR2); app chưa gửi `kind`]** |
+| H5 | Bắt buộc đăng nhập, trong khi PRD F9 cho khách vãng lai dùng | [chat.py:84](../../app/api/chat.py#L84), PRD F9 AC 1 | Lệch PRD. Đây cũng là mâu thuẫn TF31 đã ghi ở v2 **[✅ PR1]** |
+| H6 | Không biết người dùng đang xem reel nào | `ChatRequest` | Không trả lời được "khách sạn trong video này còn phòng không" **[🟡 server xong; app chưa gửi `contextPostId`]** |
+| H7 | Chuyến bay cần LLM tự đoán mã sân bay IATA | prompt v2 | Người trẻ gõ "bay ra hn", không gõ "HAN". Core đã có `/api/suggest?types=airport` **[⬜]** |
+| H8 | Mỗi lượt tạo 3 `httpx.AsyncClient` mới (auth, LLM, core) | chat.py | Mỗi lượt bắt tay TCP/TLS lại, thêm độ trễ **[✅ PR1]** |
+| H9 | Chưa có hạn mức theo người, trần chi phí ngày, giới hạn số lượt chạy đồng thời | — | OWASP LLM10 (tiêu thụ không giới hạn) [NGUỒN 7] **[✅ PR1]** |
+| H10 | Chưa có bộ eval hội thoại | `evals/` chỉ có summary, moderation | Không có số đo cho TF14/TF40 **[✅ PR2]** |
+| H11 | `ai.usage.recorded` mới ghi log; core chưa có consumer nào cho sự kiện này | chat.py:158; grep `tripflix-be` | Đẩy lên stream lúc này cũng chưa ai đọc **[⬜ chờ analytics]** |
 
 `LlmClient.generate` là hàm **đồng bộ** (worker tóm tắt dùng), còn chat là async. Cách nhỏ nhất: gọi qua `asyncio.to_thread`, không viết thêm adapter async (mục 3.3).
 
@@ -229,6 +266,8 @@ FE mobile (assistant-transport.ts)
 
 ```mermaid
 flowchart LR
+classDef built fill:#b9f0c2,stroke:#0b6b2b,color:#053d17,stroke-width:3px
+classDef partbuilt fill:#e4f7d2,stroke:#0b6b2b,color:#053d17,stroke-width:2px,stroke-dasharray:4 2
 U["User message, recent turns, post in view"] --> G["Admission and input guard, code"]
 G --> C["Controller agent, LLM: understand and output a plan as JSON"]
 C --> PV["Plan checker, code: schema, allowed skills, slots, clarify once"]
@@ -240,6 +279,8 @@ subgraph SK["Skills, code, read only, one module each"]
   K3["Flight: airports, flights"]
   K4["Trip: post itinerary"]
   K5["Voices: stored comment summary"]
+  K6["Weather: forecast"]
+  K7["Packing rules"]
 end
 EX --> SK
 SK --> CORE["Core API"]
@@ -249,6 +290,8 @@ R --> V["Verifier, code: per sentence"]
 V -->|pass| OUT["Stream text, then cards from skill results"]
 V -->|nothing left or Responder down| TPL
 TPL --> OUT
+class G,C,TPL,EX,K1,K2,K4,K5,K6,K7,CORE,FACTS,R,V,OUT built
+class PV,K3 partbuilt
 ```
 
 **Mỗi vai làm gì:**
@@ -260,6 +303,10 @@ TPL --> OUT
 | **Executor + Skills** | Code | Tham số đã kiểm | Không gọi LLM; không ghi | Kết quả có cấu trúc + trạng thái `ok/empty/failed/disabled` |
 | **Responder** | Agent LLM cách ly | Câu hỏi đã che PII + **bảng dữ kiện rút gọn**: mã `r1…`, loại, tên, nơi, số ngày, lý do khớp, còn hay hết; không có giá | Không có tool; không được nhắc mã ngoài bảng | 1–4 câu tiếng Việt, nhắc kết quả bằng `[r1]` |
 | **Verifier** | Code | Từng câu của Responder + tập mã được phép | — | Câu đạt thì gửi; câu trượt thì bỏ |
+
+- **Trạng thái sơ đồ trên:** xanh đậm là đã xây.
+- Plan checker là xây một phần: nằm trong `planner.py` và `turn.py`, Controller không ra danh sách bước.
+- Skill chuyến bay là xây một phần: tìm sân bay theo tên chưa có.
 
 - **Vì sao Skill là code mà không phải agent LLM:** mỗi Skill chỉ là "tham số đã rõ → gọi 1–3 API → lọc". Không có gì cần LLM suy luận. Biến chúng thành agent LLM là thêm lần gọi, thêm chỗ hỏng (MAST), và thêm cửa cho chen lệnh.
 - **Khi nào nâng một Skill thành agent LLM:** khi eval chỉ ra có nghiệp vụ cần suy luận nhiều bước mà code không viết được. Ví dụ sau pilot: "sửa lộ trình cho rẻ hơn mà vẫn gần biển". Skill đó vẫn giữ cùng interface, nên Controller và Responder không phải sửa.
@@ -405,6 +452,8 @@ app/prompts/assistant-responder.v1.md
 
 ```mermaid
 flowchart TD
+classDef built fill:#b9f0c2,stroke:#0b6b2b,color:#053d17,stroke-width:3px
+classDef partbuilt fill:#e4f7d2,stroke:#0b6b2b,color:#053d17,stroke-width:2px,stroke-dasharray:4 2
 IN["Request"] --> A{"Admitted? quota, concurrency, length"}
 A -->|no| R0["Fixed reply, kind limit, no LLM"]
 A -->|yes| G["Mask PII, tag injection, keep last 6 turns"]
@@ -423,9 +472,13 @@ VF -->|some pass| RD["Cards from skill results, refs replaced by titles"]
 VF -->|none pass or Responder down| TP["Text template"]
 TP --> RD
 RD --> OUT["SSE: text, cards, done with kind, usage, degraded"]
+class IN,A,R0,U,FB,P,RF,ST,CL,PL,T,RS,VF,RD,TP,OUT built
+class G partbuilt
 ```
 
 (Nhánh "Understand" và "Policy" ở sơ đồ trên chính là Controller và Plan checker.)
+
+Xanh đậm: đã xây. Xanh nhạt viền đứt: xây một phần ("tag injection" chưa gắn vào luồng chat).
 
 - **Deadline:** tổng 12 giây như hiện tại [HIỆU CHỈNH]:
   - Controller tối đa 4 giây.
@@ -582,22 +635,22 @@ Mỗi bước là một commit nhỏ, build và test pass. Một nhánh mỗi ta
 
 | # | Việc | Xong khi | Ước tính |
 |---|---|---|---|
-| T1 | Tách package `app/services/assistant/` (schemas, render, skills) từ `assistant.py`, **không đổi hành vi** | 17+ test chat cũ pass nguyên vẹn | 2 giờ |
-| T2 | Khung eval `evals/assistant/` + 40 câu đầu; chạy live với đường hiện tại (điểm "trước") | `run.py --mode ci` in bảng chỉ số; có số live trong evidence | 3 giờ + tiền LLM |
-| T3 | Đưa `build_llm` ra dùng chung; schema `Plan`; `plan_check.py`; `executor.py` có biến `$sN.x`, chạy song song, Skill lỗi trả `failed` và `done.degraded` | Test thuần cho checker và executor; test "stay lỗi vẫn ra reel" | 4 giờ |
-| T4 | Controller: prompt `assistant-controller.v1.md`, `LlmController` qua `GuardedLlmClient` + `to_thread`; thay chuỗi `if` trong route; bỏ httpx gọi DeepSeek và bảng giá trong `ChatSettings` | Test với Controller giả; eval CI không tụt | 3 giờ |
-| T5 | Responder + Verifier: prompt `assistant-responder.v1.md`, luật G1–G6, câu mẫu dự phòng, thay `[rN]` bằng tên | Test Verifier từng luật; test Responder giả viết câu sai thì bị bỏ | 3 giờ |
-| T6 | Client HTTP dùng chung trong `lifespan`; deadline từng vai; chạy eval live (điểm "sau"), A và B bằng cờ Responder | Bảng A/B trong evidence (TF14) | 2 giờ + tiền LLM |
+| T1 **[✅]** | Tách package `app/services/assistant/` (schemas, render, skills) từ `assistant.py`, **không đổi hành vi** | 17+ test chat cũ pass nguyên vẹn | 2 giờ |
+| T2 **[✅]** | Khung eval `evals/assistant/` + 40 câu đầu; chạy live với đường hiện tại (điểm "trước") | `run.py --mode ci` in bảng chỉ số; có số live trong evidence | 3 giờ + tiền LLM |
+| T3 **[✅ (planner + turn thay cho plan_check + executor)]** | Đưa `build_llm` ra dùng chung; schema `Plan`; `plan_check.py`; `executor.py` có biến `$sN.x`, chạy song song, Skill lỗi trả `failed` và `done.degraded` | Test thuần cho checker và executor; test "stay lỗi vẫn ra reel" | 4 giờ |
+| T4 **[✅ (OpenAI, prompt v2)]** | Controller: prompt `assistant-controller.v1.md`, `LlmController` qua `GuardedLlmClient` + `to_thread`; thay chuỗi `if` trong route; bỏ httpx gọi DeepSeek và bảng giá trong `ChatSettings` | Test với Controller giả; eval CI không tụt | 3 giờ |
+| T5 **[✅ (V1–V7)]** | Responder + Verifier: prompt `assistant-responder.v1.md`, luật G1–G6, câu mẫu dự phòng, thay `[rN]` bằng tên | Test Verifier từng luật; test Responder giả viết câu sai thì bị bỏ | 3 giờ |
+| T6 **[🟡 (client dùng chung, deadline, eval live xong; chưa có bảng A/B vì chưa có cờ Responder)]** | Client HTTP dùng chung trong `lifespan`; deadline từng vai; chạy eval live (điểm "sau"), A và B bằng cờ Responder | Bảng A/B trong evidence (TF14) | 2 giờ + tiền LLM |
 
 **P1: nếu kịp trước 19/11, theo thứ tự**
 
 | # | Việc | Phụ thuộc |
 |---|---|---|
-| T7 | `contextPostId` + Skill `trip`, `voices`, `stay.hotel_offers` (ý định `post_detail`, `check_room`, `what_people_say`) | Kiểm `hotels/{id}`; FE gửi `contextPostId` (chị Trang) |
-| T8 | Sân bay qua `/api/suggest?types=airport` | — |
-| T9 | Hỏi lại một lần dựa vào `history[].kind` | FE gửi `kind` (1 dòng) |
-| T10 | Hạn mức Redis, trần ngày, `CHAT_MAX_INFLIGHT`, `CHAT_SKILLS_DISABLED` | Chốt với Dũng nơi đếm hạn mức |
-| T11 | Đăng nhập tùy chọn sau cờ `CHAT_REQUIRE_LOGIN` | Chốt với leader tuần |
+| T7 **[✅]** | `contextPostId` + Skill `trip`, `voices`, `stay.hotel_offers` (ý định `post_detail`, `check_room`, `what_people_say`) | Kiểm `hotels/{id}`; FE gửi `contextPostId` (chị Trang) |
+| T8 **[⬜]** | Sân bay qua `/api/suggest?types=airport` | — |
+| T9 **[🟡 (server xong, app chưa gửi)]** | Hỏi lại một lần dựa vào `history[].kind` | FE gửi `kind` (1 dòng) |
+| T10 **[🟡 (hạn mức, trần, giới hạn đồng thời xong; chưa có `CHAT_SKILLS_DISABLED`)]** | Hạn mức Redis, trần ngày, `CHAT_MAX_INFLIGHT`, `CHAT_SKILLS_DISABLED` | Chốt với Dũng nơi đếm hạn mức |
+| T11 **[✅]** | Đăng nhập tùy chọn sau cờ `CHAT_REQUIRE_LOGIN` | Chốt với leader tuần |
 
 - P0 dài khoảng 17 giờ, nhiều hơn bản v0.1 khoảng 5 giờ vì thêm Responder và Verifier. Với 3 ngày còn lại, P1 nhiều khả năng chỉ kịp T7.
 - Nếu trễ: cắt T5 (tắt Responder, quay về phương án A), giữ T7 vì đó là phần khác biệt của Tripflix.
