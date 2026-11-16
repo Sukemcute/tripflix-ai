@@ -173,6 +173,12 @@ def select_comments(
     )
 
 
+def count_people(candidates: Sequence[Candidate]) -> int:
+    """People with a view among all candidates, from rules only (no L8 copy, no asker): known
+    before any label, and never below Selection.people, which counts the sent ones."""
+    return len({c.author_id for c in candidates if not (c.is_suspect or _is_question(c.text))})
+
+
 def decide_summary_status(
     total_comments: int, selection: Selection
 ) -> Literal["no_comments", "insufficient_data", "ready"]:
