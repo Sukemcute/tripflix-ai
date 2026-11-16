@@ -132,6 +132,19 @@ def build_llm_json_schema() -> dict[str, Any]:
     return _strip(SummaryLlmOutput.model_json_schema())
 
 
+def strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """Same subset for another model (the chat Controller); defaults dropped as well."""
+    return _strip(_drop_defaults(model.model_json_schema()))
+
+
+def _drop_defaults(node: Any) -> Any:
+    if isinstance(node, dict):
+        return {k: _drop_defaults(v) for k, v in node.items() if k != "default"}
+    if isinstance(node, list):
+        return [_drop_defaults(v) for v in node]
+    return node
+
+
 def _strip(node: Any) -> Any:
     if isinstance(node, dict):
         cleaned = {

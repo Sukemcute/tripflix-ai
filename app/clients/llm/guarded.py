@@ -3,6 +3,7 @@ change). When the provider keeps failing, calls fail at once with LlmUnavailable
 worker can put the post back for later instead of waiting ~96 s of timeouts per post.
 """
 
+import asyncio
 from typing import Any
 
 from app.clients.llm.base import LlmClient, LlmResult
@@ -26,6 +27,24 @@ class GuardedLlmClient:
             raise LlmUnavailableError(self.breaker.seconds_left())
         try:
             result = self.inner.generate(system, user, schema)
+        except Exception:
+            self.breaker.record_failure()
+            raise
+        self.breaker.record_success()
+        return result
+
+    async def agenerate(self, system: str, user: str, schema: dict[str, Any]) -> LlmResult:
+        """Async twin for the chat route; an adapter without one runs in a worker thread."""
+        if self.breaker.is_open():
+            raise LlmUnavailableError(self.breaker.seconds_left())
+        native = getattr(self.inner, "agenerate", None)
+        try:
+            if native is not None:
+                result = await native(system, user, schema)
+            else:
+                result = await asyncio.to_thread(self.inner.generate, system, user, schema)
+        except asyncio.CancelledError:
+            raise  # the client left: not a provider failure
         except Exception:
             self.breaker.record_failure()
             raise

@@ -90,3 +90,55 @@ def test_client_error_is_raised_not_retried() -> None:
 def test_missing_key_stops_early() -> None:
     with pytest.raises(ValueError, match="DEEPSEEK_API_KEY"):
         DeepSeekClient(SecretStr(""))
+
+
+def test_chat_call_is_async_single_and_reports_a_cut_output() -> None:
+    import asyncio
+
+    calls = []
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "model": "deepseek-flash",
+                "choices": [{"message": {"content": '{"a":'}, "finish_reason": "length"}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+            },
+        )
+
+    client = DeepSeekClient(
+        SecretStr("sk-test"),
+        max_attempts=1,
+        async_http=httpx.AsyncClient(
+            base_url="https://x.test", transport=httpx.MockTransport(respond)
+        ),
+    )
+    result = asyncio.run(client.agenerate("system", "user", {"type": "object"}))
+    assert len(calls) == 1
+    assert result.finish_reason == "length"
+    assert result.input_tokens == 10
+
+
+def test_chat_does_not_retry_a_server_error() -> None:
+    import asyncio
+
+    import pytest
+
+    calls = []
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(503)
+
+    client = DeepSeekClient(
+        SecretStr("sk-test"),
+        max_attempts=1,
+        async_http=httpx.AsyncClient(
+            base_url="https://x.test", transport=httpx.MockTransport(respond)
+        ),
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(client.agenerate("system", "user", {"type": "object"}))
+    assert len(calls) == 1
