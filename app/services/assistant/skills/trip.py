@@ -24,6 +24,10 @@ async def fetch_post(core: httpx.AsyncClient, post_id: UUID) -> CorePost | None:
     return CorePost.model_validate(response.json()["post"])
 
 
+# Words that point at a reel without naming it ("reel này", "video vừa gợi ý").
+REEL_FILLER = {"reel", "video", "clip", "vua", "goi", "y", "cua", "nay", "do", "kia", "lo", "trinh"}
+
+
 def match_score(query: str, title: str) -> float:
     """Share of the user's words for a reel found in its title, without accents.
 
@@ -32,7 +36,7 @@ def match_score(query: str, title: str) -> float:
     """
     words = normalize_text(query).split()
     folded = f" {normalize_text(title)} "
-    useful = [w for w in words if w not in {"reel", "video", "clip", "vua", "goi", "y", "cua"}]
+    useful = [w for w in words if w not in REEL_FILLER]
     if not useful:
         return 0.0
     return sum(f" {w} " in folded for w in useful) / len(useful)
@@ -40,6 +44,11 @@ def match_score(query: str, title: str) -> float:
 
 def matches(query: str, title: str) -> bool:
     return match_score(query, title) >= 0.5
+
+
+def names_a_reel(query: str) -> bool:
+    """False for "reel này", "video đó": they point at the open reel, they name nothing."""
+    return any(w not in REEL_FILLER for w in normalize_text(query).split())
 
 
 def _stops(items, day: int) -> str:
@@ -65,7 +74,7 @@ async def post_itinerary(
     title = post.title or (trip.destination_name if trip else "") or "Lộ trình"
     # The user named another reel than the one in view: say so, never answer for the wrong
     # one (Expo Web report P15, R14).
-    if reel_query and not matches(reel_query, title):
+    if names_a_reel(reel_query) and not matches(reel_query, title):
         return Answer(
             kind="no_result",
             text=f"Reel đang mở là «{title[:80]}», không phải reel bạn vừa nhắc. "

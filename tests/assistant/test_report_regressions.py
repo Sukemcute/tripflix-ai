@@ -427,6 +427,28 @@ def test_guards_drop_what_the_message_does_not_say(message, said, has_reel, want
     assert {key: got[key] for key in want} == want
 
 
+@pytest.mark.parametrize("query", ["reel này", "lộ trình video này", "video đó"])
+def test_words_pointing_at_the_open_reel_are_not_a_name(query):
+    from app.services.assistant.skills.trip import matches, names_a_reel
+
+    assert not names_a_reel(query)  # points at the open reel: never "another reel"
+    assert names_a_reel(f"{query} săn mây") and matches(f"{query} săn mây", "Săn mây 4h sáng")
+    post = {
+        "post": {
+            "id": "p",
+            "authorId": "a",
+            "title": "Nha Trang 3N2Đ",
+            "tripAttachment": {"daysCount": 3, "items": [{"day": 1, "title": "Cáp treo"}]},
+        }
+    }
+    answer, _ = run_turn(
+        plan(intent="post_itinerary", reel_query=query, asks_days_count=True),
+        FakeCore({"/api/v1/posts/": post}),
+        context_post_id=uuid4(),
+    )
+    assert answer.cards and answer.lead == "Reel này đi 3 ngày."
+
+
 def test_reel_picked_by_name_from_cards_is_not_rejected_by_its_post_title():
     """Chain §6.1 turn 3: the model repeats "săn mây Đà Lạt"; the post's title differs."""
     reel = uuid4()
