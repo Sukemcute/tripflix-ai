@@ -137,17 +137,26 @@ async def post_itinerary(
 
 
 async def post_reviews(core: httpx.AsyncClient, post_id: UUID) -> Answer:
-    """The stored comment summary (TF44); never summarised again in chat."""
+    """The stored comment summary (TF44); never summarised again in chat.
+
+    ai-summary answers 404 both for "no summary yet" and for a post nobody may see (hidden,
+    removed, pending review, private, deleted). So the post is read first: only once it is
+    visible does 404 mean "no summary yet" (Thành, 2026-11-16).
+    """
+    if await fetch_post(core, post_id) is None:
+        return GONE
     response = await core.get(f"/api/v1/posts/{post_id}/ai-summary")
-    # 404 means no summary yet (live run 2026-11-16), not a hidden post.
-    summary = {} if response.status_code == httpx.codes.NOT_FOUND else response.json()
-    if response.status_code != httpx.codes.NOT_FOUND:
+    if response.status_code == httpx.codes.NOT_FOUND:
+        summary = {}
+    else:
         response.raise_for_status()
+        summary = response.json()
     takeaways = [str(t) for t in summary.get("keyTakeaways") or []][:5]
-    if summary.get("status") != "ready" or not takeaways:
-        return Answer(
-            kind="no_result", text="Reel này chưa đủ bình luận để Tripi tóm tắt ý kiến mọi người."
-        )
+    # 200 with summary/content null: core withheld it because a quoted comment was hidden.
+    is_withheld = summary.get("summary") is None and summary.get("content") is None
+    if summary.get("status") != "ready" or not takeaways or is_withheld:
+        # Not only too few comments: the AI may not have run yet, or failed.
+        return Answer(kind="no_result", text="Reel này chưa có tóm tắt ý kiến người xem.")
     return Answer(
         kind="answer",
         text="Đây là những điều người xem reel này nhắc nhiều nhất.",

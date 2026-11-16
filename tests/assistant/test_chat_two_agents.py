@@ -339,13 +339,37 @@ def test_responder_cut_output_falls_back_to_fixed_text(monkeypatch):
     assert responder.split_for_stream(VIDEO_ANSWER.text) == ["Tripi tìm được 1 video phù hợp."]
 
 
-def test_reel_without_a_summary_is_not_called_hidden():
+SUMMARY_READY = {
+    "status": "ready",
+    "summary": "Biển đẹp, đông cuối tuần",
+    "content": {},
+    "keyTakeaways": ["Biển trong", "Cuối tuần đông"],
+}
+SUMMARY_WITHHELD = {"status": "ready", "summary": None, "content": None, "keyTakeaways": []}
+
+
+@pytest.mark.parametrize(
+    ("post", "summary", "text"),
+    [
+        (None, SUMMARY_READY, "không còn hiển thị"),  # hidden post: ai-summary 404 too
+        (POST, None, "chưa có tóm tắt"),  # visible post, 404: no summary yet
+        (POST, SUMMARY_WITHHELD, "chưa có tóm tắt"),  # a quoted comment was hidden
+        (POST, SUMMARY_READY, "nhắc nhiều nhất"),
+    ],
+)
+def test_reel_reviews_read_the_post_before_the_summary(post, summary, text):
+    """ai-summary 404 means "no summary yet" only once the post is visible (Thành 2026-11-16)."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        body = summary if request.url.path.endswith("/ai-summary") else post
+        return httpx.Response(404) if body is None else httpx.Response(200, json=body)
+
     async def run():
-        async with core_with({}) as core:  # core answers 404: no summary yet
+        transport = httpx.MockTransport(handle)
+        async with httpx.AsyncClient(base_url="https://core.test", transport=transport) as core:
             return await trip.post_reviews(core, uuid4())
 
-    answer = asyncio.run(run())
-    assert answer.kind == "no_result" and "chưa đủ bình luận" in answer.text
+    assert text in asyncio.run(run()).text
 
 
 def test_placeholder_dates_from_strict_mode_mean_no_date():
