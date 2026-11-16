@@ -1,0 +1,22 @@
+# Intercity bus routes for Tripi (plan B4, Bảo 16/11: sample routes, labelled "for reference").
+#
+# Only the route, the two bus stations and the kind of coach. No prices, departure times or
+# operator names: there is no public operator API in Vietnam and AI travel answers get exactly
+# these wrong most often (DeepResearch trợ lý đầy đủ §3.4). Travel time is not stored here: code
+# estimates it from the two cities (route.py), so nothing below can go stale.
+# Reference data like packing.v2.yaml, not a business entity; move to Core when a real source
+# exists.
+attribution: Tham khảo, chưa đặt được trên Tripflix
+routes:
+  - {from: TP.HCM, to: Vũng Tàu, from_station: Bến xe Miền Đông, to_station: Bến xe Vũng Tàu, kind: xe khách, xe limousine}
+  - {from: TP.HCM, to: Đà Lạt, from_station: Bến xe Miền Đông mới, to_station: Bến xe Liên tỉnh Đà Lạt, kind: xe giường nằm}
+  - {from: TP.HCM, to: Nha Trang, from_station: Bến xe Miền Đông mới, to_station: Bến xe Phía Nam Nha Trang, kind: xe giường nằm}
+  - {from: TP.HCM, to: Phan Thiết, from_station: Bến xe Miền Đông, to_station: Bến xe Phan Thiết, kind: xe khách, xe limousine}
+  - {from: TP.HCM, to: Cần Thơ, from_station: Bến xe Miền Tây, to_station: Bến xe Trung tâm Cần Thơ, kind: xe khách, xe limousine}
+  - {from: Hà Nội, to: Sa Pa, from_station: Bến xe Mỹ Đình, to_station: Bến xe Sa Pa, kind: xe giường nằm}
+  - {from: Hà Nội, to: Hạ Long, from_station: Bến xe Mỹ Đình, to_station: Bến xe Bãi Cháy, kind: xe khách, xe limousine}
+  - {from: Hà Nội, to: Ninh Bình, from_station: Bến xe Giáp Bát, to_station: Bến xe Ninh Bình, kind: xe khách, xe limousine}
+  - {from: Hà Nội, to: Hà Giang, from_station: Bến xe Mỹ Đình, to_station: Bến xe Hà Giang, kind: xe giường nằm}
+  - {from: Hà Nội, to: Mộc Châu, from_station: Bến xe Mỹ Đình, to_station: Bến xe Mộc Châu, kind: xe khách, xe limousine}
+  - {from: Đà Nẵng, to: Hội An, from_station: Bến xe Trung tâm Đà Nẵng, to_station: Bến xe Hội An, kind: xe buýt, xe khách}
+  - {from: Đà Nẵng, to: Huế, from_station: Bến xe Trung tâm Đà Nẵng, to_station: Bến xe Phía Nam Huế, kind: xe khách}
