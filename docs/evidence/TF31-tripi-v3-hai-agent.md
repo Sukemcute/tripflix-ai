@@ -56,7 +56,7 @@
 
 - `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest`:
   - Ruff pass; Pyright 0 lỗi.
-  - Pytest **615 pass, 5 skip** (5 test Redis thật cần `REDIS_TEST_URL`).
+  - Pytest **619 pass, 5 skip** (5 test Redis thật cần `REDIS_TEST_URL`).
 - `uv run python -m evals.assistant.run` (ci): **40/40** câu khớp loại câu trả lời và thẻ đầu tiên.
 - `uv run python -m scripts.export_openapi`: hợp đồng không đổi; thẻ và sự kiện mới nằm trong SSE.
 
@@ -77,9 +77,35 @@
   - Core trả 404 khi bài chưa có tóm tắt; Tripi từng báo nhầm thành "reel không còn". Đã sửa và có test.
   - Mã thẻ lộ trình được đổi thành "thẻ bên dưới".
 
-**Chưa chạy:**
-- Eval live 3 lần mỗi câu (`--mode live`, ước khoảng 0,02 USD), chờ Bảo đồng ý.
-- Controller trên OpenAI: chờ `CHAT_CONTROLLER_MODEL` và giá trong `.env`.
+**Eval live trên OpenAI** (Bảo đã thêm `CHAT_CONTROLLER_MODEL=gpt-5-nano` và giá vào `.env`; 40 câu × 3 lần; `uv run python -m evals.assistant.run --mode live --runs 3`):
+
+| Lần | Độ đúng ý định | pass^3 | p50 / p95 | Chi phí 120 lần gọi |
+|---|---|---|---|---|
+| Trước: prompt Controller v1 | 99/120 = **82,5%** | 31/40 = **77,5%** | 1,58 s / 2,16 s | 0,0060 USD |
+| Sau: prompt v2 + luật code | 117/120 = **97,5%** | 39/40 = **97,5%** | 1,59 s / 1,93 s | 0,0061 USD |
+
+**Lỗi v1 và cách sửa:**
+- Câu ngoài du lịch (giải toán, viết code) bị hiểu thành `small_talk`/`clarify` (1/6). Thêm luật và ví dụ vào prompt v2: còn 6/6.
+- Strict mode của OpenAI bắt điền mọi trường, nên model viết `"checkIn": "0000-01-01"` cho "không có ngày", và `"Hanoi"` thay vì mã `HAN`. Hai lỗi này làm hỏng cả kế hoạch. Sửa ở ranh giới nhận dữ liệu: năm trước 2000 và mã không đúng dạng IATA coi như chưa có.
+- Vé khứ hồi có em bé vẫn bị đem đi tìm vé một chiều. Thêm luật code `UNSUPPORTED_FARES` để hỏi lại.
+- "reel này đi mấy ngày" bị hiểu thành tìm reel. Thêm ví dụ vào prompt v2.
+
+**Đổi nhãn eval** (các ca mà kết quả cuối vẫn đúng):
+- `stay-03`: chấp nhận `find_stay`, vì code vẫn hỏi lại ngày.
+- `search-07`: chấp nhận `refusal`, vì từ chối câu chen lệnh là an toàn.
+- `reel-02`: chấp nhận `search`, vì vẫn ra video.
+- `flight-03`: plan CI đổi sang `find_flight` để kiểm luật hỏi lại.
+
+**Còn sai:** `flight-02` "bay re nhat tu ha noi vao sai gon t7" bị hiểu thành `search` cả 3 lần.
+
+**Chạy thật với cấu hình cuối** (Controller OpenAI `gpt-5-nano`, Responder DeepSeek, core local; chạy lại hội thoại ở trên):
+- Cả 6 lượt đúng, mỗi lượt 1,7–5,5 s, 0,00005–0,00025 USD.
+- "ks trong reel t7 nay con phong k" từng bị hiểu thành hỏi lộ trình khi lượt trước đang nói lộ trình. Thêm luật code `ROOM_QUESTION`: đang xem reel mà hỏi "còn phòng" thì luôn kiểm phòng. Sau sửa: "Vinpearl Beach Nha Trang vẫn còn phòng cho 2 người đêm 21/11".
+- Trang demo local (`localhost:3100`, khách chưa đăng nhập) hỏi "thoi tiet vung tau t7 nay": 3,5 s, 3.395 token, 0,00031 USD, thẻ thời tiết có ghi nguồn Open-Meteo và 2 chip gợi ý.
+
+**Hiệu chỉnh hạn mức:**
+- Số đo thật: một lượt hai agent khoảng **3.500 token** (ước tính cũ là 2.500). Tài khoản test chạm trần 60.000 token sau khoảng 20 lượt và bị hạ cấp đúng thiết kế.
+- Mặc định mới: người đăng nhập 150.000 token (khoảng 40 lượt, khoảng 0,01 USD mỗi ngày); khách 20.000 token (khoảng 5 lượt).
 
 ## Cách kiểm lại
 
