@@ -17,9 +17,10 @@ from app.clients.llm.guarded import GuardedLlmClient
 from app.clients.llm.openai import OpenAILlmClient
 from app.core.breaker import CircuitBreaker
 from app.core.config import get_chat_settings
-from app.services.assistant.controller import ControllerOutput, to_understanding
+from app.services.assistant.controller import ControllerOutput, apply_guards, to_understanding
 from app.services.assistant.planner import today_in_vietnam
 from app.services.assistant.schemas import ChatRequest, Understanding
+from app.services.assistant.turn import REEL_KINDS
 from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
 
@@ -118,4 +119,10 @@ async def understand(request: ChatRequest, *, max_turns: int) -> tuple[Understan
     if result.finish_reason == "length":
         raise ValueError("controller output was cut")
     out = ControllerOutput.model_validate_json(result.output)
-    return to_understanding(out, request.trip, today_in_vietnam()), result
+    trip = request.trip
+    has_reel = bool(
+        request.context_post_id
+        or (trip and (trip.reel_id or any(c.kind in REEL_KINDS for c in trip.last_cards)))
+    )
+    out = apply_guards(out, request.message, has_reel=has_reel)
+    return to_understanding(out, trip, today_in_vietnam()), result

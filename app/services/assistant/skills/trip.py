@@ -24,12 +24,22 @@ async def fetch_post(core: httpx.AsyncClient, post_id: UUID) -> CorePost | None:
     return CorePost.model_validate(response.json()["post"])
 
 
-def matches(query: str, title: str) -> bool:
-    """Does the user's name for a reel fit this title? Every word of the query, no accents."""
+def match_score(query: str, title: str) -> float:
+    """Share of the user's words for a reel found in its title, without accents.
+
+    Not every word: users add the place ("reel săn mây Đà Lạt") that the title may not say
+    ("Săn mây 4h sáng"), and the chain of report §6.1 then lost the reel (live eval 2026-11-16).
+    """
     words = normalize_text(query).split()
     folded = f" {normalize_text(title)} "
     useful = [w for w in words if w not in {"reel", "video", "clip", "vua", "goi", "y", "cua"}]
-    return bool(useful) and all(f" {w} " in folded for w in useful)
+    if not useful:
+        return 0.0
+    return sum(f" {w} " in folded for w in useful) / len(useful)
+
+
+def matches(query: str, title: str) -> bool:
+    return match_score(query, title) >= 0.5
 
 
 def _stops(items, day: int) -> str:

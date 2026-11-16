@@ -81,6 +81,7 @@ class Turn:
         self.is_asked = planner.has_asked_before(request)
         self.memory = request.trip or TripContext()
         self.reel_id: UUID | None = None
+        self.is_reel_from_cards = False
 
     async def answer(self) -> Answer:
         parsed = self.parsed
@@ -259,10 +260,14 @@ class Turn:
         """The reel the user means; a question when two cards fit; None when unknown."""
         cards = [c for c in self.memory.last_cards if c.kind in REEL_KINDS]
         if parsed.card_ordinal and len(cards) >= parsed.card_ordinal:
+            self.is_reel_from_cards = True
             return _as_uuid(cards[parsed.card_ordinal - 1].id)
         if parsed.reel_query:
-            fits = [c for c in cards if trip_skill.matches(parsed.reel_query, c.title)]
+            scores = {c.ref: trip_skill.match_score(parsed.reel_query, c.title) for c in cards}
+            best = max(scores.values(), default=0.0)
+            fits = [c for c in cards if best >= 0.5 and scores[c.ref] == best]
             if len(fits) == 1:
+                self.is_reel_from_cards = True
                 return _as_uuid(fits[0].id)
             if len(fits) > 1:
                 names = " hay ".join(f"«{c.title[:50]}»" for c in fits[:3])
@@ -279,8 +284,9 @@ class Turn:
         if parsed.intent == "post_reviews":
             return await self._run("trip", trip_skill.post_reviews(self.core, picked))
         if parsed.intent == "post_itinerary":
-            # A name given with the reel in view is checked against it (P15, R14).
-            query = "" if parsed.card_ordinal else parsed.reel_query
+            # A name given with the reel in view is checked against it (P15, R14); a reel just
+            # picked by that name from the last cards is not checked twice (chain §6.1, turn 3).
+            query = "" if self.is_reel_from_cards else parsed.reel_query
             return await self._run(
                 "trip",
                 trip_skill.post_itinerary(
