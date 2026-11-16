@@ -16,6 +16,7 @@ from uuid import UUID
 import httpx
 from pydantic import ValidationError
 
+from app.clients.places import CorePlaces, PlacesClient
 from app.clients.weather import WeatherClient
 from app.services.assistant import planner
 from app.services.assistant.schemas import (
@@ -29,6 +30,7 @@ from app.services.assistant.skills import trip as trip_skill
 from app.services.assistant.skills import weather as weather_skill
 from app.services.assistant.skills.content import search
 from app.services.assistant.skills.flight import search_flights
+from app.services.assistant.skills.plan import TripPlanner
 from app.services.assistant.skills.stay import search_stays
 from app.services.summary.pii import mask_pii
 from app.services.summary.vi_text import normalize_text
@@ -45,6 +47,16 @@ LABELS = {
     "flight": "chuyến bay",
     "trip": "reel",
     "weather": "thời tiết",
+    "plan": "lộ trình",
+}
+# Stage B (plan B7): the whole trip and its edits, run by TripPlanner.
+PLAN_INTENTS = {
+    "plan_trip",
+    "change_stay",
+    "change_transport",
+    "remove_stop",
+    "undo",
+    "select_option",
 }
 REEL_KINDS = {"video", "plan", "post"}
 DISCOVERY_SUGGESTIONS = ["Thời tiết ở đó", "Cần mang gì?", "Tìm chỗ ở"]
@@ -72,6 +84,7 @@ class Turn:
         core: httpx.AsyncClient,
         weather: WeatherClient,
         today: date,
+        places: PlacesClient | None = None,
     ) -> None:
         self.request = request
         self.parsed = parsed
@@ -94,8 +107,12 @@ class Turn:
         self.short_stay_dates = planner.short_stay_dates(request, today) if is_chat else None
         self.reel_id: UUID | None = None
         self.is_reel_from_cards = False
+        self.places = places or CorePlaces(core)
+        self.planned_trip: TripContext | None = None
 
     async def answer(self) -> Answer:
+        if self.request.action is not None:  # a button: no LLM was called
+            return await self._plan_step(None)
         if self.cancel_destination:
             return Answer(kind="clarify", text="Được nha. Bạn muốn đổi sang điểm đến nào?")
         if isinstance(self.short_stay_dates, planner.DateProblem):
@@ -122,6 +139,8 @@ class Turn:
         if fixed is not None:
             return fixed
         intent = parsed.intent
+        if intent in PLAN_INTENTS:
+            return await self._plan_step(parsed)
         if intent in {"post_itinerary", "post_reviews"} or (
             intent == "check_room" and not parsed.hotel_name
         ):
@@ -144,11 +163,15 @@ class Turn:
             return TripContext()
         if isinstance(self.short_stay_dates, planner.DateProblem):
             return self.memory
-        memory = self.memory.model_copy(deep=True)
+        # A Stage B step already wrote the plan it changed.
+        memory = (self.planned_trip or self.memory).model_copy(deep=True)
         parsed = self.parsed
         if parsed is not None and parsed.intent not in SOCIAL:
             if parsed.place and parsed.place != memory.place:
                 memory.place, memory.date_from, memory.date_to = parsed.place, None, None
+                # The plan belonged to the old place.
+                memory.stay, memory.transport, memory.days = None, None, []
+                memory.pending, memory.ops = [], []
             start = planner.start_day(parsed, self.today)
             if start is not None and start >= self.today:
                 window = planner.day_window(parsed, self.today)
@@ -368,6 +391,39 @@ class Turn:
             parsed.nights if parsed.nights is not None else max(0, (window.end - window.start).days)
         )
         return weather_skill.packing(parsed, place, found, nights)
+
+    # ---- Stage B: plan the whole trip and edit it (plan B6, B7)
+
+    async def _plan_step(self, parsed: Understanding | None) -> Answer:
+        trip_planner = TripPlanner(
+            core=self.core,
+            places=self.places,
+            weather=self.weather,
+            today=self.today,
+            trip=self.memory.model_copy(deep=True),
+        )
+        action = self.request.action
+        if action is not None:
+            step = {
+                "select": lambda: trip_planner.select(ref=action.ref),
+                "remove_stop": lambda: trip_planner.remove_stop(stop_id=action.stop_id),
+                "undo": trip_planner.undo,
+            }[action.type]()
+        else:
+            assert parsed is not None
+            step = {
+                "plan_trip": lambda: trip_planner.plan(parsed),
+                "change_stay": lambda: trip_planner.stay_options(parsed),
+                "select_option": lambda: trip_planner.select(ordinal=parsed.card_ordinal),
+                "remove_stop": lambda: trip_planner.remove_stop(name=parsed.stop_name),
+                "undo": trip_planner.undo,
+                "change_transport": lambda: trip_planner.transport(parsed),
+            }[parsed.intent]()
+        answer = await self._run_value("plan", step)
+        if answer is None:
+            return self._failed("plan")
+        self.planned_trip = trip_planner.trip
+        return answer
 
     # ---- running Skills with their own deadline
 

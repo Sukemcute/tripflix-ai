@@ -215,7 +215,9 @@ async def run_turn(
         async with asyncio.timeout_at(deadline):
             parsed = None
             llm_status = "quota" if "quota" in degraded else "disabled"
-            if is_llm_on:
+            if request.action is not None:
+                llm_status = "action"  # a button on a card runs as code: no LLM, no tokens
+            elif is_llm_on:
                 yield event("status", {"step": "llm", "outcome": "calling"})
                 try:
                     parsed, _ = await understand(

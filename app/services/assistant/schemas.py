@@ -28,14 +28,60 @@ class CardRef(WireModel):
     title: str = Field(default="", max_length=200)
 
 
+class DraftStop(WireModel):
+    """A stop of the planned itinerary; coordinates kept so edits need no new lookup."""
+
+    id: str = Field(max_length=100)
+    name: str = Field(max_length=120)
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    slot: Literal["sáng", "chiều", "tối"] = "sáng"
+
+
+class DraftChoice(WireModel):
+    """A stay the user picked or may pick: on Tripflix (bookable) or outside (for reference)."""
+
+    ref: str = Field(default="", max_length=4)  # o1, o2… on the comparison card
+    source: Literal["tripflix", "external"]
+    id: str = Field(max_length=100)
+    name: str = Field(max_length=120)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+
+
+class DraftTransport(WireModel):
+    mode: Literal["flight", "bus"]
+    summary: str = Field(max_length=160)
+
+
+class DraftOp(WireModel):
+    """One edit, kept so "hoàn tác" can undo it; only what is needed to put things back."""
+
+    op: Literal["set_stay", "remove_stop"]
+    stay: DraftChoice | None = None  # the stay before set_stay
+    stop: DraftStop | None = None  # the stop remove_stop took out
+    day: int | None = Field(default=None, ge=0, le=13)
+    position: int | None = Field(default=None, ge=0, le=12)
+
+
+class DraftAction(WireModel):
+    """A button the user tapped: run as a draft edit without the LLM (DeepResearch §5.2)."""
+
+    type: Literal["select", "remove_stop", "undo"]
+    ref: str = Field(default="", max_length=4)
+    stop_id: str = Field(default="", max_length=100)
+
+
 class TripContext(WireModel):
     """What Tripi remembers of the trip being planned (trip memory, v3 "Trip Draft" lite).
 
     The app keeps it and sends it back each turn; the server re-checks everything against
     Core before use, so an edited copy only spoils its own answers (DeepResearch §5.1).
+    v2 (Stage B) adds the plan itself: origin city, stay, way there, stops per day, the
+    options on screen and the last edits. Kept small: the app stores the whole chat in 2 KB.
     """
 
-    v: Literal[1] = 1
+    v: Literal[1, 2] = 2
     place: str = Field(default="", max_length=100)
     date_from: date | None = None
     date_to: date | None = None
@@ -47,6 +93,14 @@ class TripContext(WireModel):
     last_cards: list[CardRef] = Field(default_factory=list, max_length=5)
     # A clarifying question was already asked: works even when the app sends no kind.
     asked: bool = False
+    # v2: the trip plan (Stage B). City level only: no coordinates of the user (X5).
+    origin_city: str = Field(default="", max_length=60)
+    interests: list[str] = Field(default_factory=list, max_length=5)
+    stay: DraftChoice | None = None
+    transport: DraftTransport | None = None
+    days: list[list[DraftStop]] = Field(default_factory=list, max_length=7)
+    pending: list[DraftChoice] = Field(default_factory=list, max_length=4)
+    ops: list[DraftOp] = Field(default_factory=list, max_length=5)
 
 
 class ChatRequest(WireModel):
@@ -57,6 +111,8 @@ class ChatRequest(WireModel):
     # The reel the chat was opened from; Skills read it, the LLM never sees the id.
     context_post_id: UUID | None = None
     trip: TripContext | None = None
+    # A button on a card (Chọn, Bỏ, Hoàn tác): code runs it, the LLM is not called.
+    action: DraftAction | None = None
 
 
 class Understanding(WireModel):
@@ -82,6 +138,13 @@ class Understanding(WireModel):
         "thanks",
         "ack",
         "goodbye",
+        # Stage B (plan B7): plan the whole trip and edit it
+        "plan_trip",
+        "change_stay",
+        "change_transport",
+        "remove_stop",
+        "undo",
+        "select_option",
     ]
     query: str = Field(default="", max_length=200)
     missing: Literal["place", "dates", "none"] = "none"
@@ -126,6 +189,10 @@ class Understanding(WireModel):
     packing_only: list[str] = Field(default_factory=list, max_length=5)
     packing_limit: int | None = Field(default=None, ge=1, le=20)
     is_beach_trip: bool | None = None
+    # Stage B: what the trip should favour, the stop to drop, how full the days are.
+    interests: list[str] = Field(default_factory=list, max_length=5)
+    stop_name: str = Field(default="", max_length=120)
+    pace: Literal["relaxed", "packed"] | None = None
     # Set by code when a date the user gave is in the past (no weather history yet).
     is_past: bool = False
 
@@ -170,6 +237,8 @@ class SearchResponse(BaseModel):
 class CardLine(WireModel):
     label: str
     detail: str = ""
+    # An option the user can pick with a button (comparison card); sent back as action.ref.
+    ref: str | None = None
 
 
 class Card(WireModel):
