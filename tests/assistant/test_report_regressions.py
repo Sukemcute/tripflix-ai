@@ -16,7 +16,12 @@ import pytest
 from app.clients.llm.base import LlmResult
 from app.clients.weather import DayWeather, Place, describe_sky
 from app.services.assistant import planner, responder
-from app.services.assistant.controller import ControllerOutput, DayMonth, to_understanding
+from app.services.assistant.controller import (
+    ControllerOutput,
+    DayMonth,
+    apply_guards,
+    to_understanding,
+)
 from app.services.assistant.schemas import (
     Answer,
     Card,
@@ -383,3 +388,67 @@ def test_reel_named_from_last_cards_is_the_one_opened():
     _, turn = run_turn(plan(intent="post_itinerary", reel_query="san may"), core, trip=trip)
     assert turn.reel_id == second
     assert core.paths() == [f"/api/v1/posts/{second}"]
+
+
+# ---- guards after the Controller: what the message does not say is not believed
+# (live eval 2026-11-16 of Controller v3)
+
+
+@pytest.mark.parametrize(
+    ("message", "said", "has_reel", "want"),
+    [
+        ("thoi tiet hom do sao", {"intent": "weather", "day_ref": "today"}, False,
+         {"day_ref": "none"}),
+        ("bay HAN DAD 21/11 1 em be", {"intent": "find_flight", "children": 1, "round_trip": True},
+         False, {"infants": 1, "children": None, "round_trip": False}),
+        ("ks vung tau dem 21/11 con phong k",
+         {"intent": "check_room", "hotel_name": "Vinpearl hoặc khách sạn trong khu vực"}, False,
+         {"intent": "find_stay", "hotel_name": ""}),
+        ("ks trong reel t7 nay con phong k", {"intent": "check_room"}, True,
+         {"intent": "check_room"}),
+        ("nguoi di roi noi gi ve cho nay", {"intent": "ack"}, True, {"intent": "search"}),
+        ("homestay da lat cuoi tuan sau", {"intent": "search", "place": "Đà Lạt"}, False,
+         {"intent": "find_stay"}),
+        ("mai da lat co mua k", {"intent": "packing", "day_ref": "tomorrow"}, False,
+         {"intent": "weather", "day_ref": "tomorrow"}),
+        ("mai da lat mang ao gi", {"intent": "packing"}, False, {"intent": "packing"}),
+        ("ngay 2 di dau", {"intent": "post_itinerary", "start": {"day": 2, "month": 11}}, True,
+         {"itinerary_day": 2, "start": None}),
+        ("vay du roi", {"intent": "ack"}, False, {"intent": "ack"}),
+        ("ban lam duoc gi", {"intent": "refusal"}, False, {"intent": "identity"}),
+        ("bay re nhat tu ha noi vao sai gon t7",
+         {"intent": "refusal", "from_airport": "HAN", "to_airport": "SGN"}, False,
+         {"intent": "find_flight"}),
+        ("giai giup bai toan dao ham", {"intent": "refusal"}, False, {"intent": "refusal"}),
+    ],
+)  # fmt: skip
+def test_guards_drop_what_the_message_does_not_say(message, said, has_reel, want):
+    got = apply_guards(plan(**said), message, has_reel=has_reel).model_dump()
+    assert {key: got[key] for key in want} == want
+
+
+def test_reel_picked_by_name_from_cards_is_not_rejected_by_its_post_title():
+    """Chain §6.1 turn 3: the model repeats "săn mây Đà Lạt"; the post's title differs."""
+    reel = uuid4()
+    post = {
+        "post": {
+            "id": str(reel),
+            "authorId": "a",
+            "title": "Đà Lạt 3N2Đ",
+            "tripAttachment": {
+                "destinationName": "Đà Lạt",
+                "daysCount": 3,
+                "items": [{"day": 2, "title": "Cầu Đất", "location": "Trại Mát"}],
+            },
+        }
+    }
+    trip = TripContext(
+        reel_id=reel,
+        last_cards=[CardRef(ref="r1", kind="video", id=str(reel), title="Săn mây 4h sáng")],
+    )
+    answer, _ = run_turn(
+        plan(intent="post_itinerary", reel_query="săn mây Đà Lạt", itinerary_day=2),
+        FakeCore({"/api/v1/posts/": post}),
+        trip=trip,
+    )
+    assert answer.cards[0].kind == "itinerary" and "Cầu Đất" in (answer.lead or "")
