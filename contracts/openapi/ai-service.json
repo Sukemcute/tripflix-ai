@@ -4,6 +4,18 @@
       "ChatRequest": {
         "additionalProperties": false,
         "properties": {
+          "contextPostId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contextpostid"
+          },
           "conversationId": {
             "format": "uuid",
             "title": "Conversationid",
@@ -276,6 +288,9 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "description": "TURN_IN_PROGRESS"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -285,6 +300,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "RATE_LIMITED or GUEST_LIMIT_REACHED (loginRequired)"
+          },
+          "503": {
+            "description": "CHAT_BUSY"
           }
         },
         "security": [

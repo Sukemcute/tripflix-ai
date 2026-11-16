@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.chat import get_core_client, get_gate
 from app.api.chat import router as chat_router
 from app.api.health import router as health_router
 from app.api.moderation import get_visobert_client
@@ -18,6 +19,11 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        # Chat pools are created on first use; close only what exists.
+        if get_core_client.cache_info().currsize:
+            await get_core_client().aclose()
+        if get_gate.cache_info().currsize:
+            await get_gate().aclose()
         if local is not None:
             await asyncio.to_thread(local.close)
             get_visobert_client.cache_clear()

@@ -23,6 +23,8 @@ class ChatRequest(WireModel):
     message: str = Field(min_length=1, max_length=500, pattern=r"\S")
     history: list[Turn] = Field(default_factory=list, max_length=10)
     search_mode: Literal["reel"] | None = None
+    # The reel the chat was opened from; Skills read it, the LLM never sees the id.
+    context_post_id: UUID | None = None
 
 
 class Understanding(WireModel):

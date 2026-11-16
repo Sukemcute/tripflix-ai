@@ -1,58 +1,53 @@
-"""Authenticated TF31 SSE entry point, with bounded calls and fail-closed session checks."""
+"""POST /chat for Tripi on the mobile reel app (TF31): SSE, bounded calls, budgets per user.
+
+Guests may chat on a small budget (Bảo, 2026-11-16); a bad or expired token is still a 401 so
+the app refreshes it instead of silently dropping to the guest budget.
+"""
 
 import asyncio
 import json
 import logging
 import re
 from functools import cache
-from pathlib import Path
 from typing import Annotated
 
+import anyio
 import httpx
 import jwt
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import Field, SecretStr, ValidationError
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import ValidationError
+from redis import asyncio as aioredis
 from starlette.concurrency import run_in_threadpool
 
+from app.clients.llm.base import LlmResult
+from app.clients.llm.guarded import LlmUnavailableError
+from app.core.config import ChatSettings, get_chat_settings
 from app.services.assistant import (
     Answer,
     ChatRequest,
-    Understanding,
-    build_understanding_input,
     search,
     search_flights,
     search_stays,
 )
+from app.services.assistant.admission import (
+    ChatRejectedError,
+    Identity,
+    RedisCounters,
+    Ticket,
+    TurnGate,
+    guest_identity,
+    user_identity,
+)
+from app.services.assistant.understand import LlmNotConfiguredError, understand
 from app.services.summary.pii import mask_pii
+
+__all__ = ["ChatSettings", "get_chat_settings", "router"]
 
 router = APIRouter()
 bearer = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
-
-
-class ChatSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-    core_api_url: str = "http://localhost:3000"
-    jwks_url: str = ""
-    auth_jwt_issuer: str = "tripflix-core"
-    auth_jwt_audience: str = "tripflix"
-    chat_llm_enabled: bool = False
-    deepseek_api_key: SecretStr = SecretStr("")
-    deepseek_base_url: str = "https://api.deepseek.com"
-    chat_model: str = "deepseek-flash"
-    chat_timeout_seconds: float = Field(default=12, gt=0, le=60)
-    # Set from the provider price sheet for the selected model before live evaluation.
-    chat_input_usd_per_million: float = Field(default=0.3, ge=0)
-    chat_cached_usd_per_million: float = Field(default=0.006, ge=0)
-    chat_output_usd_per_million: float = Field(default=1.2, ge=0)
-
-
-@cache
-def get_chat_settings() -> ChatSettings:
-    return ChatSettings()
 
 
 @cache
@@ -60,11 +55,28 @@ def get_jwks(url: str) -> jwt.PyJWKClient:
     return jwt.PyJWKClient(url, timeout=3)
 
 
+@cache
+def get_core_client() -> httpx.AsyncClient:
+    """One pool to Core per process: no TCP and TLS handshake per call."""
+    settings = get_chat_settings()
+    return httpx.AsyncClient(
+        base_url=settings.core_api_url,
+        timeout=3,
+        limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+    )
+
+
+@cache
+def get_gate() -> TurnGate:
+    settings = get_chat_settings()
+    store = aioredis.Redis.from_url(settings.redis_url, decode_responses=True)
+    return TurnGate(settings, RedisCounters(store))
+
+
 def verify_user_token(token: str, settings: ChatSettings) -> str:
-    url = settings.jwks_url or f"{settings.core_api_url.rstrip('/')}/.well-known/jwks.json"
     claims = jwt.decode(
         token,
-        get_jwks(url).get_signing_key_from_jwt(token).key,
+        get_jwks(settings.resolved_jwks_url).get_signing_key_from_jwt(token).key,
         algorithms=["ES256"],
         issuer=settings.auth_jwt_issuer,
         audience=settings.auth_jwt_audience,
@@ -81,25 +93,29 @@ def verify_user_token(token: str, settings: ChatSettings) -> str:
     return str(claims["sub"])
 
 
-async def require_chat_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
-    settings: Annotated[ChatSettings, Depends(get_chat_settings)],
-) -> str:
+async def resolve_identity(
+    http_request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+    settings: ChatSettings,
+) -> Identity:
     if credentials is None:
-        raise HTTPException(
-            401, "Bạn cần đăng nhập để dùng trợ lý.", headers={"WWW-Authenticate": "Bearer"}
-        )
+        if settings.chat_require_login:
+            raise HTTPException(
+                401, "Bạn cần đăng nhập để dùng trợ lý.", headers={"WWW-Authenticate": "Bearer"}
+            )
+        # Behind the gateway this is the forwarded client IP (uvicorn FORWARDED_ALLOW_IPS).
+        ip = http_request.client.host if http_request.client else "unknown"
+        return guest_identity(ip, settings.chat_identity_salt.get_secret_value())
     try:
         user_id = await run_in_threadpool(verify_user_token, credentials.credentials, settings)
-        # Core owns revocation/account locks. Do not retain or send its profile to the LLM.
-        async with httpx.AsyncClient(base_url=settings.core_api_url, timeout=3) as core:
-            response = await core.get(
-                "/api/auth/me", headers={"Authorization": f"Bearer {credentials.credentials}"}
-            )
+        # Core owns revocation and account locks. Do not retain or send its profile to the LLM.
+        response = await get_core_client().get(
+            "/api/auth/me", headers={"Authorization": f"Bearer {credentials.credentials}"}
+        )
         if response.status_code in {401, 403}:
             raise HTTPException(401, "Phiên đăng nhập không còn hiệu lực.")
         response.raise_for_status()
-        return user_id
+        return user_identity(user_id)
     except jwt.PyJWKClientConnectionError as exc:
         raise HTTPException(503, "Chưa thể kiểm tra phiên đăng nhập.") from exc
     except jwt.PyJWTError as exc:
@@ -114,171 +130,173 @@ def event(name: str, payload: dict) -> str:
     return f"event: {name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-async def understand(request: ChatRequest, settings: ChatSettings, usage: dict) -> Understanding:
-    prompt = (Path(__file__).parents[1] / "prompts" / "assistant-understand.v2.md").read_text(
-        encoding="utf-8"
+def rejected(error: ChatRejectedError) -> JSONResponse:
+    return JSONResponse(
+        status_code=error.status,
+        content={
+            "code": error.code,
+            "message": error.message,
+            "retryAfterSeconds": error.retry_after,
+            "loginRequired": error.is_login_required,
+        },
+        headers={"Retry-After": str(error.retry_after)},
     )
-    async with httpx.AsyncClient(base_url=settings.deepseek_base_url, timeout=5) as llm:
-        response = await llm.post(
-            "/chat/completions",
-            headers={"Authorization": f"Bearer {settings.deepseek_api_key.get_secret_value()}"},
-            json={
-                "model": settings.chat_model,
-                "thinking": {"type": "disabled"},
-                "temperature": 0,
-                "max_tokens": 350,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": prompt + json.dumps(Understanding.model_json_schema()),
-                    },
-                    {"role": "user", "content": build_understanding_input(request)},
-                ],
-            },
-        )
-        response.raise_for_status()
-        payload = response.json()
-        billed = payload.get("usage", {})
-        incoming = max(0, int(billed.get("prompt_tokens", 0)))
-        cached = min(incoming, max(0, int(billed.get("prompt_cache_hit_tokens", 0))))
-        outgoing = max(0, int(billed.get("completion_tokens", 0)))
-        usage.update(
-            inputTokens=incoming,
-            outputTokens=outgoing,
-            costUsd=(
-                (incoming - cached) * settings.chat_input_usd_per_million
-                + cached * settings.chat_cached_usd_per_million
-                + outgoing * settings.chat_output_usd_per_million
-            )
-            / 1_000_000,
-            estimated=True,
-        )
-        logger.info(
-            "ai.usage.recorded",
-            extra={
-                "feature": "chat",
-                "conversation_id": str(request.conversation_id),
-                "step": "understand",
-                "model": settings.chat_model,
-                "usage": usage.copy(),
-            },
-        )
-        return Understanding.model_validate_json(payload["choices"][0]["message"]["content"])
+
+
+def record_usage(identity: Identity, role: str, result: LlmResult) -> None:
+    # shortcut: structured log until analytics consumes the ai.usage.recorded stream (O3).
+    logger.info(
+        "ai.usage.recorded",
+        extra={
+            "feature": "chat",
+            "identity": identity.key,  # user id or salted IP hash; never the message
+            "role": role,
+            "model": result.model_name,
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+            "cost_usd": result.cost_usd,
+        },
+    )
 
 
 @router.post(
     "/chat",
     tags=["assistant"],
     response_class=StreamingResponse,
-    responses={200: {"content": {"text/event-stream": {}}}},
+    responses={
+        200: {"content": {"text/event-stream": {}}},
+        409: {"description": "TURN_IN_PROGRESS"},
+        429: {"description": "RATE_LIMITED or GUEST_LIMIT_REACHED (loginRequired)"},
+        503: {"description": "CHAT_BUSY"},
+    },
 )
 async def chat(
     request: ChatRequest,
-    user: Annotated[str, Depends(require_chat_user)],
+    http_request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
     settings: Annotated[ChatSettings, Depends(get_chat_settings)],
+    gate: Annotated[TurnGate, Depends(get_gate)],
 ):
-    async def stream():
-        usage = {"inputTokens": 0, "outputTokens": 0, "costUsd": 0.0, "estimated": True}
-        yield event("status", {"step": "understanding"})
-        try:
-            async with asyncio.timeout(settings.chat_timeout_seconds):
-                parsed = None
-                llm_status = "disabled"
-                if settings.chat_llm_enabled and settings.deepseek_api_key.get_secret_value():
-                    yield event("status", {"step": "llm", "outcome": "calling"})
-                    try:
-                        parsed = await understand(request, settings, usage)
-                        llm_status = "ok"
-                    except httpx.HTTPStatusError as exc:
-                        llm_status = f"http_{exc.response.status_code}"
-                    except httpx.HTTPError:
-                        llm_status = "connection_error"
-                    except (ValueError, KeyError, IndexError, TypeError):
-                        llm_status = "invalid_response"
-                elif settings.chat_llm_enabled:
-                    llm_status = "missing_key"
-                yield event("status", {"step": "llm", "outcome": llm_status})
-                if parsed and (
-                    parsed.intent == "refusal"
-                    or (request.search_mode is None and parsed.intent in {"small_talk", "clarify"})
-                ):
-                    if parsed.intent == "refusal":
-                        answer = Answer(
-                            kind="refusal",
-                            text="Mình hỗ trợ du lịch an toàn. Bạn muốn khám phá nơi nào?",
-                        )
-                    elif parsed.intent == "small_talk":
-                        answer = Answer(
-                            kind="answer",
-                            text="Mình là Tripi, trợ lý du lịch của Tripflix. "
-                            "Mình có thể giúp bạn tìm Reel, lộ trình, khách sạn và chuyến bay.",
-                        )
-                    else:
-                        place = parsed.place.strip()
-                        if parsed.missing == "dates":
-                            destination = f" {place}" if place else ""
-                            question = f"Bạn dự định đi{destination} vào ngày nào?"
-                        elif place:
-                            question = f"Bạn muốn tìm lộ trình, chỗ ở hay chuyến bay đến {place}?"
-                        elif parsed.missing == "place":
-                            question = "Bạn muốn đi đâu?"
-                        else:
-                            question = "Bạn muốn mình tìm gì cho chuyến đi này?"
-                        answer = Answer(kind="clarify", text=question)
-                else:
-                    yield event("status", {"step": "searching"})
-                    query = parsed.query if parsed else mask_pii(request.message)
-                    async with httpx.AsyncClient(base_url=settings.core_api_url, timeout=3) as core:
-                        if request.search_mode == "reel":
-                            answer = await search(
-                                core,
-                                mask_pii(request.message.strip()),
-                                reels_only=True,
-                                fallback=parsed is None,
-                            )
-                        elif parsed and parsed.intent == "find_stay":
-                            answer = await search_stays(core, parsed)
-                        elif parsed and parsed.intent == "find_flight":
-                            if re.search(
-                                r"\b(?:rẻ nhất|re nhat|cheapest)\b", request.message, re.I
-                            ):
-                                parsed.cheapest_only = True
-                            answer = await search_flights(core, parsed)
-                        else:
-                            reel_request = re.match(
-                                r"^(?:(?:tìm|tim|cho mình xem)\s+)?(?:reels?|video)\b\s*",
-                                request.message.strip(),
-                                re.IGNORECASE,
-                            )
-                            if reel_request and parsed is None:
-                                query = mask_pii(request.message.strip()[reel_request.end() :])
-                            answer = await search(
-                                core,
-                                query,
-                                fallback=parsed is None,
-                                reels_only=bool(
-                                    reel_request or (parsed and parsed.intent == "find_reel")
-                                ),
-                            )
-                yield event("text", {"delta": answer.text})
-                yield event(
-                    "cards",
-                    {
-                        "items": [
-                            card.model_dump(mode="json", by_alias=True) for card in answer.cards
-                        ]
-                    },
-                )
-                yield event("done", {"kind": answer.kind, "usage": usage})
-        except (TimeoutError, httpx.HTTPError, ValidationError, ValueError):
-            yield event("error", {"code": "DEPENDENCY_UNAVAILABLE", "usage": usage})
-
+    # The deadline counts from arrival, so the session check is part of the user's wait.
+    deadline = asyncio.get_running_loop().time() + settings.chat_timeout_seconds
+    identity = await resolve_identity(http_request, credentials, settings)
+    try:
+        ticket = await gate.enter(identity)
+    except ChatRejectedError as error:
+        return rejected(error)
     return StreamingResponse(
-        stream(),
+        run_turn(request, settings, gate, ticket, deadline),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def run_turn(
+    request: ChatRequest, settings: ChatSettings, gate: TurnGate, ticket: Ticket, deadline: float
+):
+    usage = {"inputTokens": 0, "outputTokens": 0, "costUsd": 0.0, "estimated": True}
+    try:
+        yield event("status", {"step": "understanding"})
+        async with asyncio.timeout_at(deadline):
+            parsed = None
+            llm_status = "disabled"
+            if "quota" in ticket.degraded:
+                llm_status = "quota"
+            elif settings.chat_llm_enabled:
+                yield event("status", {"step": "llm", "outcome": "calling"})
+                try:
+                    parsed, result = await understand(
+                        request, max_turns=gate.history_turns(ticket.identity)
+                    )
+                    record_usage(ticket.identity, "controller", result)
+                    usage.update(
+                        inputTokens=result.input_tokens,
+                        outputTokens=result.output_tokens,
+                        costUsd=result.cost_usd,
+                    )
+                    llm_status = "ok"
+                except LlmNotConfiguredError:
+                    llm_status = "missing_config"
+                except LlmUnavailableError:
+                    llm_status = "breaker_open"
+                except httpx.HTTPStatusError as exc:
+                    llm_status = f"http_{exc.response.status_code}"
+                except httpx.HTTPError:
+                    llm_status = "connection_error"
+                except (ValueError, KeyError, IndexError, TypeError):
+                    llm_status = "invalid_response"
+            yield event("status", {"step": "llm", "outcome": llm_status})
+            answer = await answer_from(request, parsed)
+            yield event("text", {"delta": answer.text})
+            yield event(
+                "cards",
+                {"items": [card.model_dump(mode="json", by_alias=True) for card in answer.cards]},
+            )
+            yield event("done", {"kind": answer.kind, "usage": usage, "degraded": ticket.degraded})
+    except (TimeoutError, httpx.HTTPError, ValidationError, ValueError):
+        yield event("error", {"code": "DEPENDENCY_UNAVAILABLE", "usage": usage})
+    finally:
+        # Shielded: a client that leaves mid-stream cancels us, yet tokens were already spent
+        # and the lock must be freed for the next turn.
+        with anyio.CancelScope(shield=True):
+            try:
+                await gate.settle(
+                    ticket,
+                    tokens=usage["inputTokens"] + usage["outputTokens"],
+                    cost_usd=usage["costUsd"],
+                )
+            finally:
+                await gate.leave(ticket)
+
+
+async def answer_from(request: ChatRequest, parsed) -> Answer:
+    if parsed and (
+        parsed.intent == "refusal"
+        or (request.search_mode is None and parsed.intent in {"small_talk", "clarify"})
+    ):
+        if parsed.intent == "refusal":
+            return Answer(
+                kind="refusal", text="Mình hỗ trợ du lịch an toàn. Bạn muốn khám phá nơi nào?"
+            )
+        if parsed.intent == "small_talk":
+            return Answer(
+                kind="answer",
+                text="Mình là Tripi, trợ lý du lịch của Tripflix. "
+                "Mình có thể giúp bạn tìm Reel, lộ trình, khách sạn và chuyến bay.",
+            )
+        place = parsed.place.strip()
+        if parsed.missing == "dates":
+            destination = f" {place}" if place else ""
+            question = f"Bạn dự định đi{destination} vào ngày nào?"
+        elif place:
+            question = f"Bạn muốn tìm lộ trình, chỗ ở hay chuyến bay đến {place}?"
+        elif parsed.missing == "place":
+            question = "Bạn muốn đi đâu?"
+        else:
+            question = "Bạn muốn mình tìm gì cho chuyến đi này?"
+        return Answer(kind="clarify", text=question)
+    core = get_core_client()
+    query = parsed.query if parsed else mask_pii(request.message)
+    if request.search_mode == "reel":
+        return await search(
+            core, mask_pii(request.message.strip()), reels_only=True, fallback=parsed is None
+        )
+    if parsed and parsed.intent == "find_stay":
+        return await search_stays(core, parsed)
+    if parsed and parsed.intent == "find_flight":
+        if re.search(r"\b(?:rẻ nhất|re nhat|cheapest)\b", request.message, re.I):
+            parsed.cheapest_only = True
+        return await search_flights(core, parsed)
+    reel_request = re.match(
+        r"^(?:(?:tìm|tim|cho mình xem)\s+)?(?:reels?|video)\b\s*",
+        request.message.strip(),
+        re.IGNORECASE,
+    )
+    if reel_request and parsed is None:
+        query = mask_pii(request.message.strip()[reel_request.end() :])
+    return await search(
+        core,
+        query,
+        fallback=parsed is None,
+        reels_only=bool(reel_request or (parsed and parsed.intent == "find_reel")),
     )

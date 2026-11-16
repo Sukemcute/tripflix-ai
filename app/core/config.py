@@ -101,3 +101,64 @@ class ModerationSettings(BaseSettings):
 @cache
 def get_moderation_settings() -> ModerationSettings:
     return ModerationSettings()
+
+
+class ChatSettings(BaseSettings):
+    """Settings of POST /chat (Tripi, TF31). Separate from Settings for the same reason as
+    ModerationSettings: the API container gets no LLM_PROVIDER. Limits are [HIỆU CHỈNH]."""
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    core_api_url: str = "http://localhost:3000"
+    jwks_url: str = ""
+    auth_jwt_issuer: str = "tripflix-core"
+    auth_jwt_audience: str = "tripflix"
+    redis_url: str = "redis://localhost:6379/0"
+
+    # Kill switch: false means every turn uses Core's own search, no LLM.
+    chat_llm_enabled: bool = False
+    # Controller on OpenAI, Responder on DeepSeek (Bảo, 2026-11-16). OpenAI has no default
+    # model or price in its adapter, so both must be set; cost is recorded for every call.
+    chat_controller_provider: Literal["openai", "deepseek", "fake"] = "openai"
+    chat_controller_model: str = ""
+    chat_controller_price_input: float | None = None
+    chat_controller_price_cached_input: float | None = None
+    chat_controller_price_output: float | None = None
+    chat_responder_provider: Literal["openai", "deepseek", "fake"] = "deepseek"
+    chat_responder_model: str = ""  # empty: the adapter's default (deepseek-flash)
+    chat_responder_price_input: float | None = None
+    chat_responder_price_cached_input: float | None = None
+    chat_responder_price_output: float | None = None
+    openai_api_key: SecretStr = SecretStr("")
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_reasoning_effort: str = "minimal"
+    deepseek_api_key: SecretStr = SecretStr("")
+    deepseek_base_url: str = "https://api.deepseek.com"
+    chat_llm_timeout_seconds: float = Field(default=5, gt=0, le=30)
+    chat_max_output_tokens: int = Field(default=350, ge=50, le=2000)
+    # Whole turn, counted from the moment the request arrives (auth included).
+    chat_timeout_seconds: float = Field(default=12, gt=0, le=60)
+
+    # Guests may chat (Bảo, 2026-11-16) on a much smaller budget; true restores login-only.
+    chat_require_login: bool = False
+    # Hashes the guest's IP into a counter key; set a long random value in every environment.
+    chat_identity_salt: SecretStr = SecretStr("")
+    chat_max_inflight: int = Field(default=30, ge=1)
+    chat_user_turns_per_minute: int = Field(default=6, ge=1)
+    chat_guest_turns_per_minute: int = Field(default=3, ge=1)
+    chat_user_daily_turns: int = Field(default=40, ge=1)
+    chat_user_daily_tokens: int = Field(default=60_000, ge=1)
+    chat_guest_daily_turns: int = Field(default=5, ge=1)
+    chat_guest_daily_tokens: int = Field(default=8_000, ge=1)
+    chat_system_daily_usd: float = Field(default=3.0, gt=0)
+    chat_user_history_turns: int = Field(default=6, ge=0, le=10)
+    chat_guest_history_turns: int = Field(default=4, ge=0, le=10)
+
+    @property
+    def resolved_jwks_url(self) -> str:
+        return self.jwks_url or f"{self.core_api_url.rstrip('/')}/.well-known/jwks.json"
+
+
+@cache
+def get_chat_settings() -> ChatSettings:
+    return ChatSettings()

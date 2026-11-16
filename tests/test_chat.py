@@ -10,14 +10,24 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 
 from app.api import chat as chat_api
-from app.api.chat import ChatSettings, get_chat_settings, require_chat_user, verify_user_token
+from app.api.chat import ChatSettings, get_chat_settings, get_gate, verify_user_token
+from app.clients.llm.base import LlmResult
 from app.main import app
 from app.services.assistant import ChatRequest, search
+from app.services.assistant.admission import TurnGate
 
 
-def test_chat_requires_login():
-    with TestClient(app) as client:
-        response = client.post("/chat", json={"conversationId": str(uuid4()), "message": "Đà Lạt"})
+def test_chat_requires_login_when_guests_are_switched_off():
+    settings = ChatSettings.model_construct(chat_require_login=True)
+    app.dependency_overrides[get_chat_settings] = lambda: settings
+    app.dependency_overrides[get_gate] = lambda: TurnGate(settings, None)
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/chat", json={"conversationId": str(uuid4()), "message": "Đà Lạt"}
+            )
+    finally:
+        app.dependency_overrides.clear()
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
 
@@ -164,16 +174,14 @@ def test_long_fallback_asks_without_truncating():
 def test_sse_refusal_uses_fixed_text(monkeypatch):
     from app.services.assistant import Understanding
 
-    async def refuse(request, settings, usage):
-        return Understanding(intent="refusal")
+    async def refuse(request, *, max_turns):
+        result = LlmResult(output="", model_name="test", input_tokens=10, output_tokens=5)
+        return Understanding(intent="refusal"), result
 
     monkeypatch.setattr(chat_api, "understand", refuse)
-    app.dependency_overrides[require_chat_user] = lambda: "user"
-    from pydantic import SecretStr
-
-    app.dependency_overrides[get_chat_settings] = lambda: ChatSettings.model_construct(
-        chat_llm_enabled=True, deepseek_api_key=SecretStr("test")
-    )
+    settings = ChatSettings.model_construct(chat_llm_enabled=True)
+    app.dependency_overrides[get_chat_settings] = lambda: settings
+    app.dependency_overrides[get_gate] = lambda: TurnGate(settings, None)
     try:
         with TestClient(app) as client:
             response = client.post(
