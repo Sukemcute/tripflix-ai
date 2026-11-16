@@ -357,7 +357,8 @@ def test_the_summary_says_who_labelled_the_comments() -> None:
     assert labeler(_run(_comments(), _llm(pros=PROS), classifier=FakeClassifier())) == "model"
     assert labeler(_run(_comments(), _llm(pros=PROS), classifier=BrokenClassifier())) == "rules"
     assert labeler(capped) == "mixed"
-    assert labeler(_run(_comments(3), _llm(), classifier=FakeClassifier())) == "model"
+    # 3 people fail the gate whatever the labels say: the model is not run for them
+    assert labeler(_run(_comments(3), _llm(), classifier=FakeClassifier())) == "rules"
 
 
 def test_stored_labels_are_reused_and_only_new_ones_come_back() -> None:
@@ -670,3 +671,27 @@ def test_a_part_rules_run_hashes_apart_from_a_model_run() -> None:
 
     some = {"cmt_0": NO_LABEL}
     assert hashed(Broken(), some) != hashed(FakeClassifier(), some)
+
+
+def test_below_the_gate_only_safety_hits_go_to_the_classifier() -> None:
+    """3 people cannot pass the 5-person gate whatever their labels say: no model for them."""
+    poisoned = "Ăn buffet ở đây bị ngộ độc cả nhà"
+    comments = [*_comments(3), _comment(9, poisoned)]
+    classifier = FakeClassifier({poisoned: FIRST_HAND})
+    llm = _llm(pros=PROS)
+
+    run = _run(comments, llm, classifier=classifier)
+
+    assert [text for text, _ in classifier.seen] == [poisoned]
+    assert run.request is not None and run.request.status == "insufficient_data"
+    assert run.request.safety is not None
+    assert run.request.safety.warnings  # own visit, from the model label: public
+    assert llm.calls == 0
+
+
+def test_at_the_gate_every_candidate_is_labelled() -> None:
+    classifier = FakeClassifier()
+
+    _run(_comments(5), _llm(pros=PROS), classifier=classifier)
+
+    assert len(classifier.seen) == 5

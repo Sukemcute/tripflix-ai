@@ -77,7 +77,7 @@ tripflix-be/
 │  │  ├─ src/
 │  │  │  ├─ consumers/             # consumer group "notification"
 │  │  │  ├─ inbox/                 # in-app: bảng inbox + WebSocket (Socket.IO, adapter Redis)
-│  │  │  ├─ delivery/              # out-app: hàng đợi push, email (BullMQ), thử lại, dead-letter
+│  │  │  ├─ outapp/                # out-app: email (Nodemailer); push + BullMQ chưa làm
 │  │  │  ├─ preferences/           # tắt từng loại, giờ im lặng, giới hạn mỗi giờ
 │  │  │  ├─ grouping/              # gom "Lan và 11 người khác…"
 │  │  │  └─ db/                    # schema, migrations của database notification
@@ -89,7 +89,8 @@ tripflix-be/
 │     │  ├─ transcode/             # thang chất lượng 360p/540p/720p, đoạn 2 giây, ảnh bìa
 │     │  └─ storage/               # đọc file gốc, ghi HLS vào thư mục r{n}/ trên S3
 │     ├─ Dockerfile                # base image có sẵn FFmpeg
-│     └─ package.json
+│     └─ package.json          # bản Node, chỉ dùng ở dev local
+│  └─ video-worker-go/             # bản Go chạy trên staging: cmd/, internal/, cùng sự kiện và bố cục S3
 ├─ libs/
 │  ├─ contracts/                   # zod: phong bì sự kiện + payload theo version; enum vai trò; xuất JSON Schema
 │  ├─ event-bus/                   # interface EventBus + adapter Redis Streams (XADD, XREADGROUP, XAUTOCLAIM, dead-letter)
@@ -233,7 +234,7 @@ Vì mỗi module là một kết nối riêng, một use case của `content` **
 | `APP_ROLE` | Chạy gì | Dùng khi |
 |---|---|---|
 | `api` | Controller HTTP, `/events` (nhận sự kiện hành vi từ app), Swagger | Deploy, scale theo request |
-| `worker` | Outbox relay của 5 module, consumer `core-discovery`, `core-analytics`, BullMQ processor, job định kỳ (hết hạn đơn, mở lịch trống, đối soát, làm mới `mart_*`, tạo partition) | Deploy, 1–2 replica |
+| `worker` | Outbox relay của 5 module, consumer `core-discovery`, `core-analytics`, job định kỳ (hết hạn đơn, mở lịch trống, đối soát, làm mới `mart_*`, tạo partition) | Deploy, 1–2 replica |
 | `all` | Cả hai | Dev local, demo |
 
 Cùng một Docker image, chỉ khác biến môi trường.
@@ -396,7 +397,7 @@ Cần GitHub username của từng người để điền file thật.
 
 | Repo | Khi mở PR | Khi merge vào `develop` (deploy staging); khi merge vào `main` (bản demo) |
 |---|---|---|
-| BE | `turbo run lint typecheck test build --affected`; integration test có Testcontainers; kiểm `contracts/` | Build và đẩy image `core-api`, `notification-service`, `video-worker` lên GHCR; deploy staging |
+| BE | `turbo run lint typecheck test build --affected`; integration test có Testcontainers; kiểm `contracts/` | Build và đẩy image `core-api`, `notification-service`, `video-worker`, `video-worker-go` lên GHCR; deploy staging |
 | FE | `turbo run lint typecheck test build --affected` | Build web, admin; mobile build APK bằng EAS khi gắn tag `mobile-v*` |
 | AI | `ruff check`, `ruff format --check`, `pyright`, `pytest`; kiểm `contracts/` | Build image lên GHCR; chạy `evals/` và lưu kết quả |
 
@@ -428,7 +429,7 @@ Kết hợp được: chạy `pnpm stack:up`, rồi `docker compose stop core-ap
 | `migrate` | be | — | `postgres` healthy | Chạy một lần: migrate mọi module + `notification`, seed nếu database trống |
 | `core-api` | be | 3000 | `migrate` xong, `redis` healthy | `APP_ROLE=all` |
 | `notification-service` | be | 3001 | `migrate` xong | |
-| `video-worker` | be | — | `redis` sẵn sàng | Image có FFmpeg; đọc file gốc, ghi HLS lên bucket S3 dev |
+| `video-worker` | be | — | `redis` sẵn sàng | Bản Node (`apps/video-worker`); image có FFmpeg; đọc file gốc, ghi HLS lên bucket S3 dev. Staging dùng bản Go |
 | `ai-service` | ai | 8000 | `core-api` healthy | Build từ `../tripflix-ai` |
 | `web`, `admin` | fe | 3100, 3200 | — | Build từ `../tripflix-fe` |
 | `traefik` | gateway | 8080, 8081 (dashboard) | — | Một địa chỉ cho FE và mobile |
@@ -457,7 +458,7 @@ x-be-env: &be-env
   NODE_ENV: development
   PG_HOST: postgres
   REDIS_URL: redis://redis:6379
-  AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+  AWS_REGION: ${AWS_REGION:-ap-southeast-2}
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}          # key riêng từng người, chỉ ghi được dev/<tên>/
   AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
   S3_MEDIA_BUCKET: tripflix-media-dev
@@ -528,7 +529,8 @@ Mỗi app một Dockerfile. App TypeScript build với context là gốc repo, �
 | App | Base image | Các stage |
 |---|---|---|
 | `core-api`, `notification-service` | `node:24-slim` | `prune` (`turbo prune <app> --docker`, chỉ lấy phần monorepo app cần) → `deps` (`pnpm install --frozen-lockfile`, cache pnpm store) → **`dev`** (toàn bộ mã nguồn, chạy chế độ watch) → `build` → **`prod`** (chỉ `dist` + dependency production, chạy bằng user không phải root) |
-| `video-worker` | `node:24-slim` + FFmpeg | Như trên |
+| `video-worker` | `node:24-slim` + FFmpeg | Như trên (bản Node, dev local) |
+| `video-worker-go` | `golang:1.27-bookworm` → `debian:bookworm-slim` + FFmpeg | `build` (biên dịch một file chạy) → `prod` (file chạy + FFmpeg) |
 | `web`, `admin` | `node:24-slim` | `prune` → `deps` → **`dev`** (`next dev`) → `build` (`next build`, output `standalone`) → **`prod`** (chỉ thư mục `standalone` + static) |
 | `ai-service` | `python:3.13-slim` + `uv` | `deps` (`uv sync --locked --no-install-project`, cache uv) → **`dev`** (`fastapi dev`, tự reload) → **`prod`** (`uv sync --no-dev`, `fastapi run`) |
 
