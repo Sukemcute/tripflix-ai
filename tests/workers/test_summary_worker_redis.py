@@ -9,14 +9,23 @@ import json
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import Any, cast
 
 import pytest
 import redis
 
-from app.clients.core_api import CoreApiClient, CoreComment, CorePost, CoreSummary
+from app.clients.core_api import (
+    CoreApiClient,
+    CoreComment,
+    CoreCommentSample,
+    CorePost,
+    CoreSummary,
+    SampleUnavailableError,
+)
 from app.clients.llm.fake import FakeLlmClient
 from app.services.summary.schemas import SaveSummaryRequest
+from app.services.usage_events import USAGE_STREAM, UsageEvent, publish_worker_usage
 from app.workers import summary_worker as sw
 
 REDIS_URL = os.environ.get("REDIS_TEST_URL")
@@ -44,6 +53,17 @@ class FakeCore:
 
     def fetch_summary(self, post_id: str) -> CoreSummary | None:
         return self.previous
+
+    def iter_held_summaries(self) -> Iterator[str]:
+        return iter(())
+
+    def fetch_comment_sample(self, post_id: str, size: int, seed: str) -> CoreCommentSample:
+        raise SampleUnavailableError("core answered 404")
+
+    def mark_checked(
+        self, post_id: str, input_hash: str, checked_at: datetime, comment_count: int
+    ) -> bool:
+        return True
 
     def fetch_comments(self, post_id: str) -> list[CoreComment]:
         now = datetime.now(UTC)
@@ -104,7 +124,14 @@ def _worker(r: "redis.Redis", core: FakeCore, clock: Clock, name: str = "a") -> 
             }
         )
     )
-    return sw.SummaryWorker(r, cast(CoreApiClient, core), llm, consumer_name=name, clock_ms=clock)
+    return sw.SummaryWorker(
+        r,
+        cast(CoreApiClient, core),
+        llm,
+        consumer_name=name,
+        clock_ms=clock,
+        on_usage=partial(publish_worker_usage, r),
+    )
 
 
 def _pending(r: "redis.Redis") -> int:
@@ -127,6 +154,9 @@ def test_event_to_saved_summary_then_gap_then_same_hash(client: "redis.Redis") -
     [saved] = core.saved
     assert saved.status == "ready" and saved.summary == "Khen: View biển đẹp."
     assert saved.safety is not None and saved.safety.warnings[0].comment_ids == ["c-5"]
+    [(_, fields)] = cast(list[tuple[str, dict[str, str]]], client.xrange(USAGE_STREAM))
+    usage = UsageEvent.model_validate_json(fields["event"])
+    assert usage.payload.feature == "summary" and usage.payload.model == "fake"
     run_at = clock.ms
 
     client.xadd(sw.STREAM, {"event": _envelope("e2", "content.comment.updated")})
@@ -141,6 +171,7 @@ def test_event_to_saved_summary_then_gap_then_same_hash(client: "redis.Redis") -
     clock.ms = run_at + sw.MIN_GAP_MS
     worker.poll_once()
     assert len(core.saved) == 1  # same input hash: nothing new saved
+    assert client.xlen(USAGE_STREAM) == 1
 
 
 def test_bad_event_goes_to_dead_letter(client: "redis.Redis") -> None:

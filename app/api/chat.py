@@ -6,9 +6,10 @@ the app refreshes it instead of silently dropping to the guest budget.
 
 import asyncio
 import json
-import logging
-from functools import cache
-from typing import Annotated
+from contextlib import suppress
+from functools import cache, partial
+from typing import Annotated, Literal
+from uuid import UUID
 
 import anyio
 import httpx
@@ -38,12 +39,12 @@ from app.services.assistant.planner import today_in_vietnam
 from app.services.assistant.responder import respond, split_for_stream
 from app.services.assistant.turn import Turn
 from app.services.assistant.understand import LlmNotConfiguredError, understand
+from app.services.usage_events import ChatUsage, UsageEvent, publish_usage
 
 __all__ = ["ChatSettings", "get_chat_settings", "router"]
 
 router = APIRouter()
 bearer = HTTPBearer(auto_error=False)
-logger = logging.getLogger(__name__)
 RESPONDER_SECONDS = 4.0
 RESPONDER_MIN_SECONDS = 3.0  # less time left than this: keep the fixed text
 
@@ -146,22 +147,6 @@ def rejected(error: ChatRejectedError) -> JSONResponse:
     )
 
 
-def record_usage(identity: Identity, role: str, result: LlmResult) -> None:
-    # shortcut: structured log until analytics consumes the ai.usage.recorded stream (O3).
-    logger.info(
-        "ai.usage.recorded",
-        extra={
-            "feature": "chat",
-            "identity": identity.key,  # user id or salted IP hash; never the message
-            "role": role,
-            "model": result.model_name,
-            "input_tokens": result.input_tokens,
-            "output_tokens": result.output_tokens,
-            "cost_usd": result.cost_usd,
-        },
-    )
-
-
 @router.post(
     "/chat",
     tags=["assistant"],
@@ -199,14 +184,31 @@ async def run_turn(
 ):
     loop = asyncio.get_running_loop()
     usage = {"inputTokens": 0, "outputTokens": 0, "costUsd": 0.0, "estimated": True}
+    events: list[UsageEvent] = []
+    user_id = None
+    if not ticket.identity.is_guest:
+        with suppress(ValueError):
+            user_id = UUID(ticket.identity.key.removeprefix("user:"))
     degraded = list(ticket.degraded)
     is_llm_on = settings.chat_llm_enabled and "quota" not in degraded
 
-    def add_usage(role: str, result: LlmResult) -> None:
-        record_usage(ticket.identity, role, result)
+    def add_usage(step: Literal["controller", "responder"], result: LlmResult) -> None:
         usage["inputTokens"] += result.input_tokens
         usage["outputTokens"] += result.output_tokens
         usage["costUsd"] += result.cost_usd
+        events.append(
+            UsageEvent(
+                user_id=user_id,
+                payload=ChatUsage(
+                    conversation_id=request.conversation_id,
+                    step=step,
+                    model=result.model_name,
+                    input_tokens=result.input_tokens,
+                    output_tokens=result.output_tokens,
+                    cost_usd=result.cost_usd,
+                ),
+            )
+        )
 
     try:
         yield event("status", {"step": "understanding"})
@@ -216,10 +218,11 @@ async def run_turn(
             if is_llm_on:
                 yield event("status", {"step": "llm", "outcome": "calling"})
                 try:
-                    parsed, result = await understand(
-                        request, max_turns=gate.history_turns(ticket.identity)
+                    parsed, _ = await understand(
+                        request,
+                        max_turns=gate.history_turns(ticket.identity),
+                        on_usage=partial(add_usage, "controller"),
                     )
-                    add_usage("controller", result)
                     llm_status = "ok"
                 except LlmNotConfiguredError:
                     llm_status = "missing_config"
@@ -254,8 +257,12 @@ async def run_turn(
                 yield event("status", {"step": "writing"})
                 try:
                     async with asyncio.timeout(min(RESPONDER_SECONDS, remaining - 0.5)):
-                        sentences, result = await respond(request, answer, today=turn.today)
-                    add_usage("responder", result)
+                        sentences, _ = await respond(
+                            request,
+                            answer,
+                            today=turn.today,
+                            on_usage=partial(add_usage, "responder"),
+                        )
                 except (
                     TimeoutError,
                     LlmNotConfiguredError,
@@ -291,4 +298,7 @@ async def run_turn(
                     cost_usd=usage["costUsd"],
                 )
             finally:
-                await gate.leave(ticket)
+                try:
+                    await gate.leave(ticket)
+                finally:
+                    await publish_usage(events)

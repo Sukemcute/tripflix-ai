@@ -5,6 +5,7 @@ own adapter and breaker (Bảo, 2026-11-16: Controller on OpenAI, Responder on D
 """
 
 import json
+from collections.abc import Callable
 from datetime import date
 from functools import cache
 from pathlib import Path
@@ -108,13 +109,17 @@ def get_role_llm(role: Role) -> GuardedLlmClient:
     return GuardedLlmClient(inner, CircuitBreaker(f"chat-{role}"))
 
 
-async def understand(request: ChatRequest, *, max_turns: int) -> tuple[Understanding, LlmResult]:
+async def understand(
+    request: ChatRequest, *, max_turns: int, on_usage: Callable[[LlmResult], None] | None = None
+) -> tuple[Understanding, LlmResult]:
     """Raises on provider errors, cut output or invalid JSON: the caller falls back."""
     result = await get_role_llm("controller").agenerate(
         PROMPT.read_text(encoding="utf-8"),
         build_understanding_input(request, max_turns=max_turns),
         strict_json_schema(ControllerOutput),
     )
+    if on_usage is not None:
+        on_usage(result)
     # A cut JSON can still parse into something wrong; never trust it.
     if result.finish_reason == "length":
         raise ValueError("controller output was cut")

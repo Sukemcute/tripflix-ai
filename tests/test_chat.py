@@ -15,6 +15,7 @@ from app.clients.llm.base import LlmResult
 from app.main import app
 from app.services.assistant import ChatRequest, search
 from app.services.assistant.admission import TurnGate
+from app.services.usage_events import UsageEvent
 
 
 def test_chat_requires_login_when_guests_are_switched_off():
@@ -174,11 +175,19 @@ def test_long_fallback_asks_without_truncating():
 def test_sse_refusal_uses_fixed_text(monkeypatch):
     from app.services.assistant import Understanding
 
-    async def refuse(request, *, max_turns):
+    published: list[UsageEvent] = []
+    conversation_id = uuid4()
+
+    async def refuse(request, *, max_turns, on_usage):
         result = LlmResult(output="", model_name="test", input_tokens=10, output_tokens=5)
+        on_usage(result)
         return Understanding(intent="refusal"), result
 
+    async def publish(events):
+        published.extend(events)
+
     monkeypatch.setattr(chat_api, "understand", refuse)
+    monkeypatch.setattr(chat_api, "publish_usage", publish)
     settings = ChatSettings.model_construct(chat_llm_enabled=True)
     app.dependency_overrides[get_chat_settings] = lambda: settings
     app.dependency_overrides[get_gate] = lambda: TurnGate(settings, None)
@@ -187,7 +196,7 @@ def test_sse_refusal_uses_fixed_text(monkeypatch):
             response = client.post(
                 "/chat",
                 json={
-                    "conversationId": str(uuid4()),
+                    "conversationId": str(conversation_id),
                     "message": "outside travel",
                 },
             )
@@ -205,6 +214,18 @@ def test_sse_refusal_uses_fixed_text(monkeypatch):
         )
         assert "Mình hỗ trợ du lịch an toàn" in text
         assert json.loads(events[-1].split("data: ")[1])["kind"] == "refusal"
+        [usage] = published
+        assert usage.user_id is None
+        assert usage.model_dump(mode="json", by_alias=True)["payload"] == {
+            "feature": "chat",
+            "step": "controller",
+            "conversationId": str(conversation_id),
+            "model": "test",
+            "inputTokens": 10,
+            "outputTokens": 5,
+            "costUsd": 0.0,
+            "estimated": True,
+        }
     finally:
         app.dependency_overrides.clear()
 
