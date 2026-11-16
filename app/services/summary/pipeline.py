@@ -60,6 +60,7 @@ from app.services.summary.validator import (
     validate_summary,
 )
 from app.services.summary.vi_text import normalize_text
+from app.services.usage_events import SummaryUsage, UsageEvent
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ def run_summary(
     post_stats: PostStats | None = None,
     known_safety: Sequence[StoredSafety] = (),
     keep_labels: Callable[[Mapping[str, CommentLabels]], None] | None = None,
+    on_usage: Callable[[UsageEvent], None] | None = None,
 ) -> SummaryRun:
     """known_labels: still-true labels of this classifier version from the label store; only
     the comments without one are classified, so a rerun of a big post is cheap.
@@ -199,18 +201,18 @@ def run_summary(
         return SummaryRun(failed, new_labels=new)
 
     result = llm.generate(system, build_user_message(prompt, claims), build_llm_json_schema())
-    # shortcut: structured log until the ai.usage.recorded stream exists (CHECKLIST P9/P12).
-    logger.info(
-        "ai.usage.recorded",
-        extra={
-            "model": result.model_name,
-            "input_tokens": result.input_tokens,
-            "output_tokens": result.output_tokens,
-            "cost_usd": result.cost_usd,
-            # compare with input_tokens to refit CHARS_PER_TOKEN for a new provider
-            "estimated_comment_tokens": selection.tokens,
-        },
-    )
+    if on_usage is not None:
+        on_usage(
+            UsageEvent(
+                payload=SummaryUsage(
+                    model=result.model_name,
+                    input_tokens=result.input_tokens,
+                    output_tokens=result.output_tokens,
+                    cost_usd=result.cost_usd,
+                    estimated_comment_tokens=selection.tokens,
+                )
+            )
+        )
     try:
         validated = validate_summary(
             result.output, dict(zip(codes, selection.items, strict=True)), claims

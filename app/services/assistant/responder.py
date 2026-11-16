@@ -10,6 +10,7 @@ the answer (V05, V08, W13, T25).
 import json
 import logging
 import re
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
@@ -46,7 +47,11 @@ def _is_call_to_action(sentence: str) -> bool:
 
 
 async def respond(
-    request: ChatRequest, answer: Answer, *, today: date | None = None
+    request: ChatRequest,
+    answer: Answer,
+    *,
+    today: date | None = None,
+    on_usage: Callable[[LlmResult], None] | None = None,
 ) -> tuple[list[str] | None, LlmResult]:
     """Sentences ready to show, or None to keep the fixed text. Raises on provider errors."""
     facts = build_facts(answer)
@@ -57,6 +62,8 @@ async def respond(
         json.dumps(payload, ensure_ascii=False),
         strict_json_schema(ResponderOutput),
     )
+    if on_usage is not None:
+        on_usage(result)
     if result.finish_reason == "length":
         return None, result
     sentences = ResponderOutput.model_validate_json(result.output).sentences

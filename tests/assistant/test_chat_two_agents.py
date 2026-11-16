@@ -10,7 +10,7 @@ import pytest
 
 from app.clients.llm.base import LlmResult
 from app.clients.weather import DayWeather, Place, describe_sky
-from app.services.assistant import planner, responder
+from app.services.assistant import planner, responder, understand
 from app.services.assistant.schemas import Answer, Card, ChatRequest, Turn, Understanding
 from app.services.assistant.skills import trip
 from app.services.assistant.skills import weather as weather_skill
@@ -334,9 +334,22 @@ def test_responder_cut_output_falls_back_to_fixed_text(monkeypatch):
     llm = ScriptedLlm(["Xem [r1] nè"], finish_reason="length")
     monkeypatch.setattr(responder, "get_role_llm", lambda role: llm)
     request = ChatRequest(conversation_id=uuid4(), message="san may da lat")
-    sentences, _ = asyncio.run(responder.respond(request, VIDEO_ANSWER))
+    usage: list[LlmResult] = []
+    sentences, result = asyncio.run(responder.respond(request, VIDEO_ANSWER, on_usage=usage.append))
     assert sentences is None
+    assert usage == [result]
     assert responder.split_for_stream(VIDEO_ANSWER.text) == ["Tripi tìm được 1 video phù hợp."]
+
+
+def test_controller_records_usage_even_when_output_is_invalid(monkeypatch):
+    llm = ScriptedLlm([])
+    monkeypatch.setattr(understand, "get_role_llm", lambda role: llm)
+    request = ChatRequest(conversation_id=uuid4(), message="san may da lat")
+    usage: list[LlmResult] = []
+    with pytest.raises(ValueError):
+        asyncio.run(understand.understand(request, max_turns=0, on_usage=usage.append))
+    [result] = usage
+    assert result.input_tokens == 900 and result.output_tokens == 60
 
 
 SUMMARY_READY = {

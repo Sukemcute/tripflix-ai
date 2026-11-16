@@ -23,6 +23,7 @@ from app.clients.moderation.visobert import VisobertModeration, load_visobert
 from app.core.config import ModerationSettings, get_moderation_settings
 from app.services.moderation import ModerationItem, moderate_items
 from app.services.moderation_shadow import log_safety_shadow
+from app.services.usage_events import ModerationUsage, UsageEvent, publish_usage
 
 MAX_ITEMS = 20
 MAX_TEXT_CHARS = 10_000  # core caps comments at 2,000; posts are longer
@@ -120,6 +121,13 @@ async def moderate(
         raise HTTPException(status.HTTP_504_GATEWAY_TIMEOUT, "moderation timed out") from e
     except ModerationUpstreamError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "moderation provider failed") from e
+    model = pairs[0][1].model
+    usage = UsageEvent(
+        payload=ModerationUsage(
+            model=model, items=len(items), images=sum(len(item.image_urls) for item in items)
+        )
+    )
+    background_tasks.add_task(publish_usage, [usage])
     if settings.is_moderation_safety_shadow_enabled:
         background_tasks.add_task(log_safety_shadow, items, pairs)
     return ModerateResponse(
@@ -127,5 +135,5 @@ async def moderate(
             ModerateResult(id=item_id, flagged=r.flagged, categories=r.categories, scores=r.scores)
             for item_id, r in pairs
         ],
-        model=pairs[0][1].model,
+        model=model,
     )

@@ -7,15 +7,12 @@ LLM); spam with phone numbers is core's regex job.
 """
 
 import asyncio
-import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.clients.moderation.base import ModerationClient, ModerationResult, ModerationTimeoutError
 from app.clients.moderation.visobert import VisobertModeration
 from app.services.summary.pii import mask_pii
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -58,15 +55,4 @@ async def moderate_items(
                     ]
     except TimeoutError as e:
         raise ModerationTimeoutError("moderation took longer than the deadline") from e
-    # shortcut: structured log until the ai.usage.recorded stream exists (as in the summary).
-    logger.info(
-        "ai.usage.recorded",
-        extra={
-            "feature": "moderation",
-            "model": results[0].model if results else "",
-            "items": len(items),
-            "images": sum(len(i.image_urls) for i in items),
-            "cost_usd": 0.0,  # OpenAI moderation is free
-        },
-    )
     return [(item.id, result) for item, result in zip(items, results, strict=True)]

@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -170,12 +171,14 @@ def test_guest_ip_is_never_kept_in_clear():
 def chat_client(monkeypatch):
     seen: dict[str, int] = {}
 
-    async def classify(request, *, max_turns):
+    async def classify(request, *, max_turns, on_usage):
         seen["turns"] = max_turns
         result = LlmResult(output="", model_name="test", input_tokens=300, output_tokens=50)
+        on_usage(result)
         return Understanding(intent="small_talk"), result
 
     monkeypatch.setattr(chat_api, "understand", classify)
+    monkeypatch.setattr(chat_api, "publish_usage", AsyncMock())
     settings = ChatSettings.model_construct(chat_llm_enabled=True, chat_guest_daily_turns=1)
     gate = TurnGate(settings, None)
     app.dependency_overrides[get_chat_settings] = lambda: settings

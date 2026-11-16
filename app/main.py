@@ -10,6 +10,7 @@ from app.api.chat import router as chat_router
 from app.api.health import router as health_router
 from app.api.moderation import get_visobert_client
 from app.api.moderation import router as moderation_router
+from app.services.usage_events import close_usage_redis
 
 
 @asynccontextmanager
@@ -24,6 +25,7 @@ async def lifespan(_app: FastAPI):
             await get_core_client().aclose()
         if get_gate.cache_info().currsize:
             await get_gate().aclose()
+        await close_usage_redis()
         if local is not None:
             await asyncio.to_thread(local.close)
             get_visobert_client.cache_clear()

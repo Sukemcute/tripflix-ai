@@ -3,12 +3,14 @@ import logging
 import time
 from collections.abc import Iterator, Sequence
 from typing import Any
+from unittest.mock import AsyncMock
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 
+from app.api import moderation as moderation_api
 from app.api.auth import ServiceTokenVerifier, get_service_verifier
 from app.api.moderation import get_moderation_client, get_visobert_client
 from app.clients.moderation.base import ModerationResult, ModerationUpstreamError
@@ -16,6 +18,7 @@ from app.clients.moderation.fake import FAKE_MODEL, FakeModerationClient
 from app.clients.moderation.visobert import VisobertModeration
 from app.core.config import ModerationSettings, get_moderation_settings
 from app.main import app
+from app.services.usage_events import UsageEvent
 
 KEY = ec.generate_private_key(ec.SECP256R1())
 OTHER_KEY = ec.generate_private_key(ec.SECP256R1())
@@ -47,8 +50,9 @@ class SlowClient:
 
 
 @pytest.fixture
-def fake() -> Iterator[FakeModerationClient]:
+def fake(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeModerationClient]:
     client = FakeModerationClient()
+    monkeypatch.setattr(moderation_api, "publish_usage", AsyncMock())
     app.dependency_overrides[get_service_verifier] = lambda: ServiceTokenVerifier(
         lambda _t: KEY.public_key(), issuer=ISSUER, audience=AUDIENCE, callers=("core-api",)
     )
@@ -102,6 +106,31 @@ def test_images_are_passed_and_pii_is_masked_before_the_provider(
     [(sent_text, sent_images)] = fake.calls
     assert "0912345678" not in sent_text and "Cường" not in sent_text
     assert sent_images == ("https://cdn.example/a.jpg",)
+
+
+def test_successful_moderation_publishes_counts_without_item_data(
+    fake: FakeModerationClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    events: list[UsageEvent] = []
+
+    async def publish(batch: list[UsageEvent]) -> None:
+        events.extend(batch)
+
+    monkeypatch.setattr(moderation_api, "publish_usage", publish)
+    body = {"items": [*BODY["items"], {"id": "p", "imageUrls": ["https://cdn.example/a.jpg"]}]}
+    assert http.post("/moderate", json=body, headers=auth()).status_code == 200
+    [event] = events
+    assert event.user_id is None
+    assert event.model_dump(mode="json", by_alias=True)["payload"] == {
+        "feature": "moderation",
+        "model": FAKE_MODEL,
+        "inputTokens": None,
+        "outputTokens": None,
+        "costUsd": 0,
+        "estimated": False,
+        "items": 3,
+        "images": 1,
+    }
 
 
 @pytest.mark.parametrize(

@@ -43,6 +43,7 @@ import time
 import zlib
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any, cast
 
 import httpx
@@ -82,6 +83,7 @@ from app.services.summary.label_store import (
 )
 from app.services.summary.pipeline import CLASSIFIER_MAX_COMMENTS, CheckedInput, run_summary
 from app.services.summary.schemas import CommentIn
+from app.services.usage_events import UsageEvent, create_worker_usage_redis, publish_worker_usage
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +289,7 @@ class SummaryWorker:
         label_store: LabelStore | None = None,
         consumer_name: str | None = None,
         clock_ms: Callable[[], int] | None = None,
+        on_usage: Callable[[UsageEvent], None] | None = None,
     ) -> None:
         self.redis = client
         self.scheduler = SummaryScheduler(client)
@@ -298,6 +301,7 @@ class SummaryWorker:
         self.label_store = label_store
         self.consumer = consumer_name or f"{socket.gethostname()}-{os.getpid()}"
         self.clock_ms = clock_ms or read_clock_ms
+        self.on_usage = on_usage
         self._next_reconcile_check_ms = 0
 
     def ensure_group(self) -> None:
@@ -457,6 +461,7 @@ class SummaryWorker:
             known_safety=self._kept_safety(post_id),
             # before the LLM call: a run the LLM fails or defers keeps the classifier's work
             keep_labels=lambda labels: self._keep_labels(post_id, comments, labels),
+            on_usage=self.on_usage,
         )
         if run.request is None:
             logger.info("post %s: same input as last summary, LLM not called", post_id)
@@ -647,19 +652,21 @@ def main() -> None:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
     client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
-    worker = SummaryWorker(
-        client,
-        CoreApiClient(
-            settings.core_api_url, settings.service_client_id, settings.service_client_secret
-        ),
-        GuardedLlmClient(build_llm(settings), CircuitBreaker("llm")),
-        is_llm_killed=settings.is_summary_llm_killed,
-        classifier=build_classifier(settings),
-        classifier_max_comments=settings.classifier_max_comments,
-        label_store=RedisLabelStore(client),
-        consumer_name=settings.summary_worker_consumer_name or None,
-    )
-    worker.run_forever()
+    with create_worker_usage_redis(settings.redis_url) as usage_redis:
+        worker = SummaryWorker(
+            client,
+            CoreApiClient(
+                settings.core_api_url, settings.service_client_id, settings.service_client_secret
+            ),
+            GuardedLlmClient(build_llm(settings), CircuitBreaker("llm")),
+            is_llm_killed=settings.is_summary_llm_killed,
+            classifier=build_classifier(settings),
+            classifier_max_comments=settings.classifier_max_comments,
+            label_store=RedisLabelStore(client),
+            consumer_name=settings.summary_worker_consumer_name or None,
+            on_usage=partial(publish_worker_usage, usage_redis),
+        )
+        worker.run_forever()
 
 
 if __name__ == "__main__":
