@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import Settings
+from app.core.config import ChatSettings, Settings
 
 
 def load() -> Settings:
@@ -86,6 +86,20 @@ def test_deepseek_provider_reads_its_key(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.llm_provider == "deepseek"
     assert settings.deepseek_api_key.get_secret_value() == "sk-test"
     assert "sk-test" not in repr(settings)  # SecretStr keeps it out of logs
+
+
+def test_empty_chat_lines_mean_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CHAT_CONTROLLER_PRICE_INPUT= as copied from .env.example must not stop the service."""
+    for name in ("INPUT", "CACHED_INPUT", "OUTPUT"):
+        monkeypatch.setenv(f"CHAT_CONTROLLER_PRICE_{name}", "")
+    monkeypatch.setenv("CHAT_MAX_INFLIGHT", "")
+
+    settings = ChatSettings()
+
+    assert settings.chat_controller_price_input is None
+    assert settings.chat_controller_price_cached_input is None
+    assert settings.chat_controller_price_output is None
+    assert settings.chat_max_inflight == 30  # the default, not a parse error
 
 
 def test_worker_consumer_names_are_empty_unless_set(monkeypatch: pytest.MonkeyPatch) -> None:
