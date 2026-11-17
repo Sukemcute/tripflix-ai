@@ -361,7 +361,12 @@ def apply_guards(
     pick = re.search(PICK_CUE, text)
     # Vũng Tàu report (17/11): "chuyển thành 2n1d thôi" after a 3-day plan and "Vũng tàu" after
     # "Bạn muốn đi đâu?" were right as plan_trip, then the keyword check below sent them to search.
-    plans_already = in_plan or (awaiting is not None and awaiting.intent == "plan_trip")
+    # A plan on screen only shields plan_trip when the message edits it: "Đi ăn ở đâu thì
+    # ngon" after a Đà Nẵng plan was plan_trip 2/3 and re-planned the trip (Bảo, 17/11).
+    edits_plan = in_plan and bool(
+        re.search(EDIT_CUE, text) or re.fullmatch(DURATION_ONLY, text) or re.search(MEALS_CUE, text)
+    )
+    plans_already = edits_plan or (awaiting is not None and awaiting.intent == "plan_trip")
     is_short = len(text.split()) <= AWAIT_MAX_WORDS
     if awaiting and is_short and intent in {"search", "clarify", "find_stay", "find_reel"}:
         fills = {
