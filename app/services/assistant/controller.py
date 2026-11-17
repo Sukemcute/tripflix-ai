@@ -45,6 +45,16 @@ DAY_WORDS = {
 SOCIAL_INTENTS = {"greeting", "thanks", "ack", "goodbye"}
 MAX_SOCIAL_WORDS = 6
 IDENTITY_CUE = r"\b(la ai|(lam|giup) (duoc )?(gi|nhung gi)|biet lam gi)\b"
+# Live eval of v4 (16/11): slots the message states plainly but the model sometimes missed.
+FLIGHT_CUE = r"\b(bay|may bay|ve bay|chuyen bay|flight|san bay)\b"  # after "thu bay" is removed
+ACK_ONLY = (
+    r"(ok|oke|okie|okay|duoc|duoc roi|du roi|vay du roi|chot|chot vay|minh chot vay|the thoi|"
+    r"vay nhe|thoi du roi)( nha| nhe)?"
+)
+DEPART_TIME = r"\b(sau|truoc) (\d{1,2}) ?(?:h|g|gio)( chieu| toi)?\b"
+DAYS_COUNT_CUE = r"\b(may|bao nhieu) ngay\b"
+ALREADY_HAVE = r"\bco (?:san )?([a-z ]{2,30}?) roi\b"
+ITEM_LIMIT = r"\b(\d{1,2}) mon\b"
 
 
 class DayMonth(BaseModel):
@@ -94,6 +104,8 @@ class ControllerOutput(BaseModel):
     infants: int | None
     from_airport: str | None
     to_airport: str | None
+    from_city: str
+    to_city: str
     cheapest_only: bool
     round_trip: bool
     price_max_per_night: int | None
@@ -187,6 +199,8 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         infants=trip.infants if out.infants is None else (_count(out.infants, 0, 9) or 0),
         from_airport=out.from_airport,
         to_airport=out.to_airport,
+        from_city=out.from_city.strip()[:60],
+        to_city=out.to_city.strip()[:60],
         cheapest_only=out.cheapest_only,
         round_trip=out.round_trip,
         day_ref=out.day_ref,
@@ -211,7 +225,7 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         is_past=(start is not None and start < today) or out.day_ref == "yesterday",
     )
     if out.missing == "origin":
-        understood.from_airport = None
+        understood.from_airport, understood.from_city = None, ""
     return understood
 
 
@@ -220,6 +234,8 @@ def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> Cont
     text = normalize_text(message)
     if re.fullmatch(GREETING, text):
         return out.model_copy(update={"intent": "greeting"})
+    if re.fullmatch(ACK_ONLY, text):  # "mình chốt vậy" after a checklist was read as packing
+        return out.model_copy(update={"intent": "ack"})
     fixed: dict = {}
     if out.day_ref in DAY_CUES and not re.search(DAY_CUES[out.day_ref], text):
         fixed["day_ref"] = "none"
@@ -234,10 +250,20 @@ def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> Cont
     intent = out.intent
     if intent == "refusal" and re.search(IDENTITY_CUE, text):
         intent = "identity"  # "ban lam duoc gi" was refused 3/3
-    elif intent == "refusal" and out.from_airport and out.to_airport:
+    elif (
+        intent == "refusal"
+        and (out.from_airport or out.from_city)
+        and (out.to_airport or out.to_city)
+    ):
         intent = "find_flight"  # flight-02: both airports read, then refused
     elif intent == "check_room" and not hotel_name and not has_reel:
         intent = "find_stay"  # no reel to read a hotel from: the user means stays there
+    elif (
+        intent == "find_flight"
+        and re.search(STAY_CUE, text)
+        and not re.search(FLIGHT_CUE, re.sub(r"\bthu bay\b", " ", text))
+    ):
+        intent = "find_stay"  # "ks da nang t7 nay" was read as a flight 3/3 with v4
     elif intent in SOCIAL_INTENTS and len(text.split()) > MAX_SOCIAL_WORDS:
         intent = "search"  # a long message is never only "ok" (review-02)
     elif intent in {"search", "clarify"} and out.place and re.search(STAY_CUE, text):
@@ -270,4 +296,22 @@ def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> Cont
     if intent == "post_itinerary":
         # A reel's days are numbered from 1; a date here would only be "ngay 2" misread.
         fixed |= {"start": None, "end": None, "day_ref": "none"}
+        if re.search(DAYS_COUNT_CUE, text):
+            fixed["asks_days_count"] = True
+    if intent == "find_flight":
+        said: dict[str, str] = {}
+        for word, hour, part in re.findall(DEPART_TIME, text):
+            clock = int(hour) + (12 if part and int(hour) < 12 else 0)
+            if clock < 24:
+                said["depart_after" if word == "sau" else "depart_before"] = f"{clock:02d}:00"
+        if said:  # the message names the time window: it wins over the model's reading
+            fixed |= {"depart_after": None, "depart_before": None} | said
+    if intent == "packing":
+        if not out.packing_have and (have := re.search(ALREADY_HAVE, text)):
+            fixed["packing_have"] = [have.group(1).strip()]
+        if out.packing_limit is None and (limit := re.search(ITEM_LIMIT, text)):
+            fixed["packing_limit"] = int(limit.group(1))
+        only = [o for o in out.packing_only if not re.fullmatch(ITEM_LIMIT, normalize_text(o))]
+        if only != out.packing_only:
+            fixed["packing_only"] = only
     return out.model_copy(update=fixed) if fixed else out

@@ -91,6 +91,9 @@ class Understanding(WireModel):
     adults: int = Field(default=2, ge=1, le=99)
     from_airport: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     to_airport: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    # City names as the user wrote them; code finds the airport code (Core /api/suggest).
+    from_city: str = Field(default="", max_length=60)
+    to_city: str = Field(default="", max_length=60)
     flight_date: date | None = None
     cheapest_only: bool = False
     # Relative days are resolved by code in Vietnam time, never computed by the LLM.

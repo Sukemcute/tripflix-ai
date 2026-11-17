@@ -5,8 +5,38 @@ import httpx
 from app.services.assistant.schemas import Answer, Card, FlightOffer, Flights, Understanding
 
 
+async def find_airport(core: httpx.AsyncClient, city: str) -> list[dict]:
+    """Airports Core knows for a city name ("ha noi", "hcm", "Đà Nẵng"); empty when none."""
+    response = await core.get("/api/suggest", params={"q": city, "types": "airport"})
+    response.raise_for_status()
+    return [item for item in response.json().get("items") or [] if item.get("type") == "airport"]
+
+
+async def _airport_or_answer(core: httpx.AsyncClient, code: str | None, city: str) -> str | Answer:
+    """The code the Controller gave, else the single airport Core finds for the city."""
+    if code or not city:
+        return code or ""
+    airports = await find_airport(core, city)
+    if not airports:
+        return Answer(
+            kind="no_result",
+            text=f"Tripflix chưa có chuyến bay tới hoặc đi từ {city}. "
+            "Bạn chọn thành phố có sân bay gần đó nha.",
+        )
+    if len(airports) > 1:
+        names = " hay ".join(f"{a.get('name')} ({a.get('refId')})" for a in airports[:3])
+        return Answer(kind="clarify", text=f"Bạn muốn bay {names}?")
+    return str(airports[0]["refId"])
+
+
 async def search_flights(core: httpx.AsyncClient, understood: Understanding) -> Answer:
-    origin, destination = understood.from_airport, understood.to_airport
+    # The LLM guesses codes badly for "bay ra hn"; Core knows each city's airport (T8).
+    origin = await _airport_or_answer(core, understood.from_airport, understood.from_city)
+    if isinstance(origin, Answer):
+        return origin
+    destination = await _airport_or_answer(core, understood.to_airport, understood.to_city)
+    if isinstance(destination, Answer):
+        return destination
     if destination and not origin:  # ask only what is missing (Expo Web report I11)
         return Answer(kind="clarify", text="Bạn bay từ thành phố nào đi?")
     if not origin or not destination or origin == destination:
@@ -89,6 +119,8 @@ async def search_flights(core: httpx.AsyncClient, understood: Understanding) -> 
                 flight_date=travel_date,
                 from_airport=origin,
                 to_airport=destination,
+                # The app opens its flight screen with these; without it a party of 2 became 1.
+                passengers=understood.adults,
             )
             for i, offer in enumerate(offers[:5], 1)
         ],

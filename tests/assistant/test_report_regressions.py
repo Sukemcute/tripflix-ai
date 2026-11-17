@@ -488,6 +488,21 @@ def test_reel_named_from_last_cards_is_the_one_opened():
         ("ngay 2 di dau", {"intent": "post_itinerary", "start": {"day": 2, "month": 11}}, True,
          {"itinerary_day": 2, "start": None}),
         ("vay du roi", {"intent": "ack"}, False, {"intent": "ack"}),
+        # live eval of Controller v4 (16/11)
+        ("ks da nang t7 nay 2 nguoi", {"intent": "find_flight", "day_ref": "saturday"}, False,
+         {"intent": "find_stay"}),
+        ("bay da nang thu bay nay", {"intent": "find_flight"}, False, {"intent": "find_flight"}),
+        ("chuyen bay ha noi da nang 21/11 sau 3h chieu",
+         {"intent": "find_flight", "depart_before": "15:00"}, False,
+         {"depart_after": "15:00", "depart_before": None}),
+        ("bay sg ra hn truoc 9h sang", {"intent": "find_flight"}, False,
+         {"depart_before": "09:00"}),
+        ("reel nay di may ngay", {"intent": "post_itinerary"}, True, {"asks_days_count": True}),
+        ("mình chốt vậy", {"intent": "packing"}, False, {"intent": "ack"}),
+        ("Đi Đà Lạt mang gì, có áo khoác rồi", {"intent": "packing"}, False,
+         {"packing_have": ["ao khoac"]}),
+        ("chi can 2 mon thoi", {"intent": "packing", "packing_only": ["2 món"]}, False,
+         {"packing_limit": 2, "packing_only": []}),
         ("Hii 😄", {"intent": "packing"}, True, {"intent": "greeting"}),
         ("Hiiii!!!", {"intent": "packing"}, False, {"intent": "greeting"}),
         ("Hi, tìm khách sạn Đà Lạt", {"intent": "search", "place": "Đà Lạt"}, False,
@@ -569,3 +584,75 @@ def test_reel_picked_by_name_from_cards_is_not_rejected_by_its_post_title():
         trip=trip,
     )
     assert answer.cards[0].kind == "itinerary" and "Cầu Đất" in (answer.lead or "")
+
+
+# ---- airports from city names (plan A2, T8): Core knows the code, the LLM does not guess it
+
+
+def airports(*codes: str) -> dict:
+    return {"items": [{"type": "airport", "refId": c, "name": f"Sân bay {c}"} for c in codes]}
+
+
+class AirportCore(FakeCore):
+    """Answers /api/suggest by the city asked; everything else by path like FakeCore."""
+
+    def __init__(self, by_city: dict[str, dict], routes: Mapping[str, object]):
+        super().__init__(routes)
+        self.by_city = by_city
+
+    def client(self) -> httpx.AsyncClient:
+        def handle(request: httpx.Request) -> httpx.Response:
+            self.calls.append((request.url.path, dict(request.url.params)))
+            if request.url.path == "/api/suggest":
+                body = self.by_city.get(request.url.params["q"], {"items": []})
+                return httpx.Response(200, json=body)
+            for prefix, body in self.routes.items():
+                if request.url.path.startswith(prefix):
+                    return httpx.Response(200, json=body)
+            return httpx.Response(404)
+
+        return httpx.AsyncClient(
+            base_url="https://core.test", transport=httpx.MockTransport(handle)
+        )
+
+
+def test_city_names_become_airport_codes_through_core():
+    core = AirportCore(
+        {"TP.HCM": airports("SGN"), "Hà Nội": airports("HAN")},
+        {"/api/flights": {"flights": [flight("VN1", "09:00", 900_000)]}},
+    )
+    answer, _ = run_turn(
+        plan(intent="find_flight", from_city="TP.HCM", to_city="Hà Nội", start=dm(IN_5)), core
+    )
+    params = dict(core.calls)["/api/flights"]
+    assert (params["from"], params["to"]) == ("SGN", "HAN")
+    card = answer.cards[0]
+    # Everything the app needs to open its own flight screen for the same search.
+    assert (card.kind, card.from_airport, card.to_airport, card.passengers) == (
+        "flight",
+        "SGN",
+        "HAN",
+        2,
+    )
+
+
+def test_a_city_without_an_airport_is_said_not_searched():
+    core = AirportCore({"TP.HCM": airports("SGN")}, {})
+    answer, _ = run_turn(
+        plan(intent="find_flight", from_city="TP.HCM", to_city="Vũng Tàu", start=dm(IN_5)), core
+    )
+    assert answer.kind == "no_result" and "Vũng Tàu" in answer.text
+    assert "/api/flights" not in core.paths()
+
+
+def test_two_airports_for_one_name_are_asked_about():
+    core = AirportCore({"Miền Bắc": airports("HAN", "HPH")}, {})
+    answer, _ = run_turn(
+        plan(intent="find_flight", from_city="Miền Bắc", to_airport="DAD", start=dm(IN_5)), core
+    )
+    assert answer.kind == "clarify" and "HAN" in answer.text and "HPH" in answer.text
+
+
+def test_only_the_destination_city_asks_for_the_origin():
+    answer, _ = run_turn(plan(intent="clarify", missing="origin", to_city="Đà Lạt"), FakeCore({}))
+    assert answer.text == "Bạn bay từ thành phố nào đi?"
