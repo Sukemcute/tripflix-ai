@@ -119,6 +119,10 @@ class ChatSettings(BaseSettings):
 
     # Kill switch: false means every turn uses Core's own search, no LLM.
     chat_llm_enabled: bool = False
+    # Turn off one role or some Skills without a deploy (v3 §3.3). Responder off = one agent
+    # with fixed text (the A side of the TF14 comparison). Skills: comma list, e.g. "flight,stay".
+    chat_responder_enabled: bool = True
+    chat_skills_disabled: str = ""
     # Controller on OpenAI, Responder on DeepSeek (Bảo, 2026-11-16). OpenAI has no default
     # model or price in its adapter, so both must be set; cost is recorded for every call.
     chat_controller_provider: Literal["openai", "deepseek", "fake"] = "openai"
