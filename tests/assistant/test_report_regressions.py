@@ -488,6 +488,45 @@ def test_reel_named_from_last_cards_is_the_one_opened():
         ("ngay 2 di dau", {"intent": "post_itinerary", "start": {"day": 2, "month": 11}}, True,
          {"itinerary_day": 2, "start": None}),
         ("vay du roi", {"intent": "ack"}, False, {"intent": "ack"}),
+        # live eval of Controller v5 (16/11)
+        ("muon di vung tau 2n1d", {"intent": "plan_trip", "place": "Vũng Tàu"}, False,
+         {"intent": "search"}),
+        ("đặt phòng giúp mình", {"intent": "plan_trip"}, False, {"intent": "find_stay"}),
+        ("mình muốn đi chơi 3 ngày", {"intent": "plan_trip"}, False,
+         {"intent": "clarify", "missing": "place"}),
+        ("xếp chuyến vũng tàu 2n1đ cho mình", {"intent": "plan_trip", "place": "Vũng Tàu"},
+         False, {"intent": "plan_trip"}),
+        ("mình ở sài gòn", {"intent": "change_transport", "to_city": "Vũng Tàu"}, False,
+         {"from_city": "TP.HCM"}),
+        ("đi đà nẵng từ hà nội bằng gì", {"intent": "change_transport", "to_city": "Đà Nẵng"},
+         False, {"from_city": "Hà Nội"}),
+        ("lộ trình video này", {"intent": "find_reel"}, True, {"intent": "post_itinerary"}),
+        ("lộ trình video này", {"intent": "find_reel"}, False, {"intent": "post_itinerary"}),
+        ("ks trong video này còn phòng cuối tuần không",
+         {"intent": "check_room", "hotel_name": "ks trong video này còn phòng cuối tuần không"},
+         True, {"hotel_name": ""}),
+        ("làm giúp bài văn tả cảnh biển", {"intent": "search"}, False, {"intent": "refusal"}),
+        ("mình ở sài gòn", {"intent": "plan_trip", "place": "Vũng Tàu"}, False,
+         {"intent": "change_transport", "from_city": "TP.HCM"}),
+        # live eval of Controller v5, second run (17/11)
+        ("mình ở sài gòn",
+         {"intent": "change_transport", "to_city": "Vũng Tàu", "missing": "origin"},
+         False, {"from_city": "TP.HCM", "missing": "none"}),
+        ("tối 21/11 ở vũng tàu chỗ nào ok", {"intent": "find_stay", "place": "Vũng Tàu"}, False,
+         {"intent": "find_stay", "from_city": ""}),
+        ("ăn gì ở Huế cho đúng vị", {"intent": "search", "place": "Huế"}, False,
+         {"intent": "search", "from_city": ""}),
+        ("đi đà nẵng từ hà nội bằng gì", {"intent": "find_flight", "to_city": "Đà Nẵng"}, False,
+         {"from_city": "Hà Nội"}),
+        ("mình ở sài gòn",
+         {"intent": "change_transport", "from_airport": "SGN", "missing": "origin"},
+         False, {"from_city": "TP.HCM", "missing": "none"}),
+        ("lên lịch trình đà Lạt 3 ngày đi nhiều chỗ", {"intent": "plan_trip", "place": "Đà Lạt"},
+         False, {"pace": "packed"}),
+        ("xếp lịch vũng tàu thong thả thôi", {"intent": "plan_trip", "place": "Vũng Tàu"},
+         False, {"pace": "relaxed"}),
+        ("Thời tiết Đà Lạt thứ Bảy thế nào?", {"intent": "post_itinerary"}, True,
+         {"intent": "weather"}),
         # live eval of Controller v4 (16/11)
         ("ks da nang t7 nay 2 nguoi", {"intent": "find_flight", "day_ref": "saturday"}, False,
          {"intent": "find_stay"}),
@@ -656,3 +695,14 @@ def test_two_airports_for_one_name_are_asked_about():
 def test_only_the_destination_city_asks_for_the_origin():
     answer, _ = run_turn(plan(intent="clarify", missing="origin", to_city="Đà Lạt"), FakeCore({}))
     assert answer.text == "Bạn bay từ thành phố nào đi?"
+
+
+@pytest.mark.parametrize(
+    ("message", "ordinal"),
+    [("lấy cái thứ 1", 1), ("chọn chỗ thứ hai nha", 2), ("lay cai dau tien", 1)],
+)
+def test_picking_an_option_on_screen_is_a_selection(message, ordinal):
+    said = plan(intent="change_stay")
+    got = apply_guards(said, message, has_reel=False, has_options=True)
+    assert (got.intent, got.card_ordinal) == ("select_option", ordinal)
+    assert apply_guards(said, message, has_reel=False).intent == "change_stay"  # nothing shown

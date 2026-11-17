@@ -29,7 +29,7 @@ from app.services.summary.schemas import strict_json_schema
 
 logger = logging.getLogger(__name__)
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v4.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v5.md"
 
 
 class LlmNotConfiguredError(Exception):
@@ -60,6 +60,11 @@ def build_understanding_input(
                 "priceMaxPerNight": trip.price_max_per_night,
                 "hasReel": trip.reel_id is not None,
                 "lastCards": [{"ref": c.ref, "kind": c.kind} for c in trip.last_cards],
+                # Stage B plan: names from Core and OSM, never ids or user-written titles.
+                "originCity": trip.origin_city,
+                "stay": trip.stay.name if trip.stay else None,
+                "planStops": [stop.name for day in trip.days for stop in day][:20],
+                "pendingCount": len(trip.pending),
             },
             # Rules that caught injection in comments (TF44) tag the message; the Controller
             # still only names an intent, so the tag is a hint plus a log line, not a block.
@@ -138,5 +143,7 @@ async def understand(
         request.context_post_id
         or (trip and (trip.reel_id or any(c.kind in REEL_KINDS for c in trip.last_cards)))
     )
-    out = apply_guards(out, request.message, has_reel=has_reel)
+    out = apply_guards(
+        out, request.message, has_reel=has_reel, has_options=bool(trip and trip.pending)
+    )
     return to_understanding(out, trip, today_in_vietnam()), result

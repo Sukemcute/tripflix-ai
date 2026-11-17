@@ -55,6 +55,29 @@ DEPART_TIME = r"\b(sau|truoc) (\d{1,2}) ?(?:h|g|gio)( chieu| toi)?\b"
 DAYS_COUNT_CUE = r"\b(may|bao nhieu) ngay\b"
 ALREADY_HAVE = r"\bco (?:san )?([a-z ]{2,30}?) roi\b"
 ITEM_LIMIT = r"\b(\d{1,2}) mon\b"
+# Live eval of Controller v5 (16/11).
+PLAN_CUE = r"\b(xep|sap xep|len lich|len ke hoach|lap ke hoach|len lo trinh|plan|lich trinh giup)\b"
+THIS_REEL = r"\b(video|reel|clip) (nay|do)\b"
+OFF_TOPIC = r"\b(bai van|viet code|lap trinh|giai toan|bai tap|co phieu|chung khoan|crypto)\b"
+# "ở X" alone is also where you stay or eat ("ăn gì ở huế"): it needs a subject.
+ORIGIN_CUE = (
+    r"\b(?:(?:minh|em|toi|tui|tao|nha|nha minh)\s+(?:dang\s+)?o|tu|xuat phat tu|di tu)"
+    r"\s+({cities})\b"
+)
+PICK_CUE = r"\b(?:lay|chon)\b(?:\s+\w+){0,2}?\s+(?:thu\s+)?(\d|mot|nhat|hai|ba|bon|dau tien)\b"
+PICK_WORDS = {"mot": 1, "nhat": 1, "dau tien": 1, "hai": 2, "ba": 3, "bon": 4}
+# v5 left pace null for "đi nhiều chỗ" 3/3 (17/11) although the prompt has that very example.
+PACE_CUES = {
+    "packed": r"\b(di nhieu cho|nhieu cho|nhieu diem|day lich|kin lich|di het)\b",
+    "relaxed": r"\b(thong tha|nhe nhang|cham rai|khong voi|chill)\b",
+}
+# Cities people name as a starting point, folded; the value is the name Core and the catalog know.
+CITY_NAMES = {
+    "sai gon": "TP.HCM", "sg": "TP.HCM", "hcm": "TP.HCM", "tp hcm": "TP.HCM", "tphcm": "TP.HCM",
+    "ho chi minh": "TP.HCM", "ha noi": "Hà Nội", "hn": "Hà Nội", "da nang": "Đà Nẵng",
+    "dn": "Đà Nẵng", "hai phong": "Hải Phòng", "can tho": "Cần Thơ", "hue": "Huế",
+    "nha trang": "Nha Trang", "da lat": "Đà Lạt", "vung tau": "Vũng Tàu",
+}  # fmt: skip
 
 
 class DayMonth(BaseModel):
@@ -82,6 +105,13 @@ class ControllerOutput(BaseModel):
         "thanks",
         "ack",
         "goodbye",
+        # Stage B (plan B7): plan the whole trip and edit it
+        "plan_trip",
+        "change_stay",
+        "change_transport",
+        "remove_stop",
+        "undo",
+        "select_option",
     ]
     query: str
     missing: Literal["place", "dates", "origin", "none"]
@@ -121,6 +151,9 @@ class ControllerOutput(BaseModel):
     packing_only: list[str]
     packing_limit: int | None
     is_beach_trip: bool | None
+    interests: list[str]
+    stop_name: str
+    pace: Literal["relaxed", "packed"] | None
 
 
 def build_date(day_month: DayMonth | None, today: date) -> date | None:
@@ -222,6 +255,9 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         packing_only=[s[:60] for s in out.packing_only[:5]],
         packing_limit=_count(out.packing_limit, 1, 20),
         is_beach_trip=out.is_beach_trip,
+        interests=[s[:30] for s in out.interests[:5]],
+        stop_name=out.stop_name.strip()[:120],
+        pace=out.pace,
         is_past=(start is not None and start < today) or out.day_ref == "yesterday",
     )
     if out.missing == "origin":
@@ -229,7 +265,9 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
     return understood
 
 
-def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> ControllerOutput:
+def apply_guards(
+    out: ControllerOutput, message: str, *, has_reel: bool, has_options: bool = False
+) -> ControllerOutput:
     """Drop or fix what the model said that the message does not support [ĐỀ XUẤT]."""
     text = normalize_text(message)
     if re.fullmatch(GREETING, text):
@@ -246,9 +284,30 @@ def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> Cont
     name_words = [w for w in normalize_text(out.hotel_name).split() if len(w) > 1]
     if name_words and not all(re.search(rf"\b{re.escape(w)}\b", text) for w in name_words):
         fixed["hotel_name"] = ""
+    if out.hotel_name and re.search(THIS_REEL, normalize_text(out.hotel_name)):
+        fixed["hotel_name"] = ""  # "ks trong video này…" is the reel's hotel, not a name
     hotel_name = fixed.get("hotel_name", out.hotel_name)
     intent = out.intent
-    if intent == "refusal" and re.search(IDENTITY_CUE, text):
+    cities = "|".join(sorted(CITY_NAMES, key=len, reverse=True))
+    origin = re.search(ORIGIN_CUE.format(cities=cities), text)
+    destination = normalize_text(out.to_city or out.place)
+    if origin and destination and normalize_text(CITY_NAMES[origin.group(1)]) == destination:
+        origin = None  # where you go is not where you start
+    pick = re.search(PICK_CUE, text)
+    if has_options and pick and intent != "select_option":
+        intent = "select_option"  # "lấy cái thứ 1" with options on screen was change_stay 3/3
+        word = pick.group(1)
+        fixed["card_ordinal"] = int(word) if word.isdigit() else PICK_WORDS[word]
+    elif (
+        intent in {"plan_trip", "search", "find_stay", "clarify"}
+        and origin
+        and not re.search(STAY_CUE, text)
+        and not re.search(PLAN_CUE, text)
+    ):
+        intent = "change_transport"  # "mình ở sài gòn" after a plan was plan_trip 3/3 (v5)
+    elif intent == "post_itinerary" and re.search(r"\bthoi tiet\b", text):
+        intent = "weather"  # "Thời tiết Đà Lạt thứ Bảy" while a reel is open
+    elif intent == "refusal" and re.search(IDENTITY_CUE, text):
         intent = "identity"  # "ban lam duoc gi" was refused 3/3
     elif (
         intent == "refusal"
@@ -256,6 +315,19 @@ def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> Cont
         and (out.to_airport or out.to_city)
     ):
         intent = "find_flight"  # flight-02: both airports read, then refused
+    elif intent in {"search", "find_reel"} and re.search(OFF_TOPIC, text):
+        intent = "refusal"  # "làm giúp bài văn tả cảnh biển" was a search 2/3 (v5)
+    elif intent == "plan_trip" and not re.search(PLAN_CUE, text):
+        # "muốn đi vũng tàu 2n1đ", "đặt phòng giúp mình" are not "plan it for me" (v5).
+        intent = "find_stay" if re.search(STAY_CUE, text) else "search" if out.place else "clarify"
+        if intent == "clarify":
+            fixed["missing"] = "place"
+    elif intent in {"find_reel", "search"} and (
+        (has_reel and out.uses_context_post) or re.search(THIS_REEL, text)
+    ):
+        # "video này ở đâu vậy" in a reel was find_reel 3/3. "Video này" names one reel even
+        # when none is open (trip-03, 0/3 on 17/11): the itinerary step then asks to open it.
+        intent = "post_itinerary"
     elif intent == "check_room" and not hotel_name and not has_reel:
         intent = "find_stay"  # no reel to read a hotel from: the user means stays there
     elif (
@@ -293,6 +365,15 @@ def apply_guards(out: ControllerOutput, message: str, *, has_reel: bool) -> Cont
         if found:
             word = found.group(1)
             fixed["itinerary_day"] = int(word) if word.isdigit() else DAY_WORDS[word]
+    is_trip_leg = intent in {"change_transport", "find_flight"}
+    if is_trip_leg and origin:
+        if not out.from_city:
+            fixed["from_city"] = CITY_NAMES[origin.group(1)]  # "mình ở sài gòn": 0/3 with v5
+        if out.missing == "origin":
+            # The origin was said; else to_understanding drops it (v5 gave SGN + missing=origin).
+            fixed["missing"] = "none"
+    if intent == "plan_trip" and out.pace is None:
+        fixed["pace"] = next((p for p, cue in PACE_CUES.items() if re.search(cue, text)), None)
     if intent == "post_itinerary":
         # A reel's days are numbered from 1; a date here would only be "ngay 2" misread.
         fixed |= {"start": None, "end": None, "day_ref": "none"}
