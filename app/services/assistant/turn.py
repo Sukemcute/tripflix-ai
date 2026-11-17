@@ -9,7 +9,7 @@ the trip memory, social turns that call no Skill, and the fixes of the Expo Web 
 import asyncio
 import logging
 import re
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Coroutine
 from datetime import date
 from uuid import UUID
 
@@ -85,12 +85,14 @@ class Turn:
         weather: WeatherClient,
         today: date,
         places: PlacesClient | None = None,
+        disabled_skills: frozenset[str] = frozenset(),
     ) -> None:
         self.request = request
         self.parsed = parsed
         self.core = core
         self.weather = weather
         self.today = today
+        self.disabled_skills = disabled_skills
         self.degraded: list[str] = []
         self.is_asked = planner.has_asked_before(request)
         self.memory = request.trip or TripContext()
@@ -432,6 +434,12 @@ class Turn:
         return answer if answer is not None else self._failed(name)
 
     async def _run_value(self, name: str, call: Awaitable):
+        if name in self.disabled_skills:
+            if isinstance(call, Coroutine):
+                call.close()  # never started: close it so Python does not warn
+            if name not in self.degraded:
+                self.degraded.append(name)
+            return None
         try:
             async with asyncio.timeout(SKILL_SECONDS_BY_NAME.get(name, SKILL_SECONDS)):
                 return await call

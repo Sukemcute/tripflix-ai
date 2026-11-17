@@ -244,6 +244,11 @@ async def run_turn(
                 core=get_core_client(),
                 weather=get_weather(),
                 today=today_in_vietnam(),
+                disabled_skills=frozenset(
+                    name.strip()
+                    for name in settings.chat_skills_disabled.split(",")
+                    if name.strip()
+                ),
             )
             answer = await turn.answer()
             degraded += turn.degraded
@@ -251,6 +256,7 @@ async def run_turn(
             remaining = deadline - loop.time()
             if (
                 is_llm_on
+                and settings.chat_responder_enabled
                 and parsed is not None
                 and answer.kind in {"answer", "no_result"}
                 and (answer.cards or answer.facts)
