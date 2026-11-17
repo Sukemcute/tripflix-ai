@@ -15,5 +15,5 @@ def test_every_labelled_case_matches_in_ci_mode(version, count):
 
 
 def test_chains_are_well_formed():
-    for chain in read_jsonl("chains.v1.jsonl") + read_jsonl("chains.v2.jsonl"):
+    for chain in [c for n in (1, 2, 3) for c in read_jsonl(f"chains.v{n}.jsonl")]:
         assert chain["turns"] and all("intent" in t["expect"] for t in chain["turns"])

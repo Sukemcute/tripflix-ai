@@ -1,0 +1,42 @@
+# Profanity and insults in a Tripi chat message: Tripi answers with a light reminder.
+# Kept outside app/lexicons/ on purpose: summary input_hash reads every lexicon in that
+# folder, and a chat word list must not re-summarize every post.
+# "folded" runs on vi_text.normalize_text (no diacritics); only words that stay unambiguous
+# without accents go there. "accented" runs on lowercase NFC text, for words whose accent-free
+# form is a normal word: lồn/lon (lon bia), cặc/các, buồi/buổi, đéo/đeo, đĩ/đi, óc chó (hạt).
+# v1: drafted by Claude 2026-11-17 from common Vietnamese chat profanity [HIỆU CHỈNH],
+# pending review by Bảo. Not a moderation list: missing a word only skips the reminder.
+name: abuse
+version: 1
+folded:
+  patterns:
+    - '\b(dm|dmm|dcm|dkm|dmcs|vcl|vkl|vcc|cmn|cmm|clmm)\b'
+    - '\b(dit|du) (me|ma|cha|con me)\b'
+    - '\b(fuck|fck|fking|fucking|shit|bitch|asshole)\b'
+    - '\b(bot|tripi|may|thang|do|con) (ngu|dot|oc cho|khon nan|mat day)\b'
+    - '\bngu (vl|vcl|vai|qua vay|the|nhu cho|nhu bo)\b'
+  match:
+    - 'dm tripi tra loi cham vl'
+    - 'vcl gi vay'
+    - 'bot ngu qua'
+    - 'fuck this'
+    - 'tripi oc cho'
+  no_match:
+    - 'cho minh di dam sen'
+    - 'mang hat oc cho di an vat'
+    - 'ngu o dau re'
+    - 'tim cho ngu gan bien'
+accented:
+  patterns:
+    - '(?<!\w)(địt|đụ|lồn|cặc|buồi|đéo|đĩ|đcm|đmm|đkm|vãi lồn|vãi l)(?!\w)'
+    - '(?<!\w)(mẹ mày|bố mày|con mẹ mày)(?!\w)'
+  match:
+    - 'đéo hiểu gì luôn'
+    - 'trả lời như lồn'
+    - 'mẹ mày bot'
+  no_match:
+    - 'đeo kính râm đi biển'
+    - 'mua lon bia ở bãi sau'
+    - 'buổi sáng đi đâu'
+    - 'các quán ăn gần biển'
+    - 'đi đà lạt'

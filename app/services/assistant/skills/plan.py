@@ -5,6 +5,7 @@ operations on the trip memory the app keeps (DeepResearch trợ lý đầy đủ
 drop a stop, undo. Coordinates of the user never go anywhere: the origin is a city name.
 """
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -14,7 +15,7 @@ import httpx
 from app.clients.places import ATTRIBUTION, PlacesClient, PointOfInterest
 from app.clients.weather import WeatherClient
 from app.services.assistant import planner
-from app.services.assistant.itinerary import Slot, build_itinerary
+from app.services.assistant.itinerary import Slot, build_itinerary, build_meal_plan
 from app.services.assistant.route import estimate_leg
 from app.services.assistant.schemas import (
     Answer,
@@ -33,6 +34,8 @@ from app.services.assistant.skills.stay import search_stays, vnd
 from app.services.assistant.transport import attribution, bus_routes
 from app.services.summary.vi_text import normalize_text
 
+# The forecast only reorders stops for rain: a slow one is skipped, not waited for.
+RAIN_SECONDS = 2.5
 DEFAULT_DAYS = 2  # "đi Vũng Tàu" alone: plan 2 days and say so [HIỆU CHỈNH]
 MAX_DAYS = 7
 TRIPFLIX_OPTIONS = 3
@@ -83,6 +86,13 @@ class TripPlanner:
             return None
         return (centre.latitude, centre.longitude), f"trung tâm {self.trip.place}"
 
+    async def _rain_capped(self, days: int) -> list[int | None]:
+        try:
+            async with asyncio.timeout(RAIN_SECONDS):
+                return await self._rain_by_day(days)
+        except (TimeoutError, httpx.HTTPError):
+            return []
+
     async def _rain_by_day(self, days: int) -> list[int | None]:
         start = self.trip.date_from
         if start is None or start < self.today:
@@ -100,6 +110,13 @@ class TripPlanner:
             return Answer(kind="clarify", text="Bạn muốn đi đâu nè? Mình xếp lộ trình luôn cho.")
         if place != self.trip.place:
             self.trip = TripContext(origin_city=self.trip.origin_city, place=place)
+        if understood.from_city:
+            # "Lên lịch Vũng Tàu, xuất phát từ TP.HCM": keep the origin for the way there (P2).
+            self.trip.origin_city = understood.from_city
+        if understood.meals_only:
+            self.trip.meals_only = True
+        elif understood.interests or understood.pace:
+            self.trip.meals_only = False  # a new kind of plan was asked for
         if understood.interests:
             self.trip.interests = [t for t in understood.interests if t in INTEREST_TAGS][:5]
         days = self._days(understood)
@@ -121,19 +138,24 @@ class TripPlanner:
         if base is None:
             return Answer(kind="no_result", text=f"Tripi chưa định vị được {self.trip.place}.")
         point, base_name = base
-        candidates = await self.places.search(
-            city=self.trip.place, kinds=["see", "food", "cafe"], limit=60
+        kinds = ["food", "cafe"] if self.trip.meals_only else ["see", "food", "cafe"]
+        # Points and forecast at once: both waited in turn took the plan step past its deadline.
+        candidates, rain = await asyncio.gather(
+            self.places.search(city=self.trip.place, kinds=kinds, limit=60),
+            self._rain_capped(days),
         )
-        rain = await self._rain_by_day(days)
-        plan = build_itinerary(
-            candidates,
-            base=point,
-            days=days,
-            start=self.trip.date_from,
-            interests=self.trip.interests,
-            pace="packed" if pace == "packed" else "relaxed",
-            rain_by_day=rain,
-        )
+        if self.trip.meals_only:
+            plan = build_meal_plan(candidates, base=point, days=days, start=self.trip.date_from)
+        else:
+            plan = build_itinerary(
+                candidates,
+                base=point,
+                days=days,
+                start=self.trip.date_from,
+                interests=self.trip.interests,
+                pace="packed" if pace == "packed" else "relaxed",
+                rain_by_day=rain,
+            )
         if not any(day.stops for day in plan.days):
             self.trip.days = []
             return Answer(

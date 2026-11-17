@@ -33,7 +33,7 @@ EVENING_TAGS = {"sunset", "night_market", "nightlife"}
 @dataclass(frozen=True)
 class Stop:
     place: PointOfInterest
-    slot: Literal["sáng", "chiều", "tối"]
+    slot: Literal["sáng", "trưa", "chiều", "tối"]
     leg: Leg  # from the stop before (the stay for the first one)
 
 
@@ -95,7 +95,7 @@ def _by_time_of_day(stops: list[PointOfInterest], *, is_rainy: bool) -> list[Poi
     return sorted(stops, key=rank)  # stable: keeps the shortest order inside each rank
 
 
-Slot = Literal["sáng", "chiều", "tối"]
+Slot = Literal["sáng", "trưa", "chiều", "tối"]
 
 
 def _slots(count: int) -> list[Slot]:
@@ -186,6 +186,47 @@ def build_itinerary(
     assumptions = ["Quãng đường và thời gian là ước tính, chưa tính kẹt xe."]
     if not sights:
         assumptions.append("Chưa có điểm tham quan có tọa độ cho nơi này.")
+    return Itinerary(tuple(plan_days), tuple(assumptions))
+
+
+MEALS: tuple[tuple[Slot, str], ...] = (("sáng", "ăn sáng"), ("trưa", "ăn trưa"), ("tối", "ăn tối"))
+
+
+def build_meal_plan(
+    candidates: Sequence[PointOfInterest],
+    *,
+    base: tuple[float, float],
+    days: int,
+    start: date | None = None,
+) -> Itinerary:
+    """A food-only plan (Vũng Tàu report P1): breakfast, lunch, dinner a day, each the
+    closest place not used yet, so the day stays short. Missing meals are said, not invented.
+    """
+    unique = list({p.id: p for p in candidates if p.kind in MEAL_KINDS}.values())
+    unique.sort(key=lambda p: -p.popularity)  # ties on distance go to the better known place
+    used: set[str] = set()
+    plan_days: list[ItineraryDay] = []
+    for index in range(1, days + 1):
+        stops: list[Stop] = []
+        missing: list[str] = []
+        previous = base
+        for slot, label in MEALS:
+            place = min(
+                (p for p in unique if p.id not in used),
+                key=lambda p: estimate_leg(previous, _point(p)).km,
+                default=None,
+            )
+            if place is None:
+                missing.append(label)
+                continue
+            used.add(place.id)
+            stops.append(Stop(place, slot, estimate_leg(previous, _point(place))))
+            previous = _point(place)
+        km = sum(s.leg.km for s in stops) + (estimate_leg(previous, base).km if stops else 0)
+        notes = (f"Chưa đủ quán cho bữa {', '.join(missing)}.",) if missing and stops else ()
+        day = start + timedelta(days=index - 1) if start else None
+        plan_days.append(ItineraryDay(index, day, tuple(stops), round(km, 1), notes))
+    assumptions = ["Chỉ gồm quán ăn, cà phê theo bữa; quãng đường là ước tính."]
     return Itinerary(tuple(plan_days), tuple(assumptions))
 
 

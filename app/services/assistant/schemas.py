@@ -35,7 +35,7 @@ class DraftStop(WireModel):
     name: str = Field(max_length=120)
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
-    slot: Literal["sáng", "chiều", "tối"] = "sáng"
+    slot: Literal["sáng", "trưa", "chiều", "tối"] = "sáng"
 
 
 class DraftChoice(WireModel):
@@ -72,6 +72,16 @@ class DraftAction(WireModel):
     stop_id: str = Field(default="", max_length=100)
 
 
+class Awaiting(WireModel):
+    """The request Tripi asked a question about and still has to finish."""
+
+    intent: Literal[
+        "search", "find_stay", "find_flight", "plan_trip", "weather", "packing", "find_reel"
+    ]
+    missing: Literal["place", "dates", "origin"] = "place"
+    nights: int | None = Field(default=None, ge=0, le=30)
+
+
 class TripContext(WireModel):
     """What Tripi remembers of the trip being planned (trip memory, v3 "Trip Draft" lite).
 
@@ -101,12 +111,16 @@ class TripContext(WireModel):
     days: list[list[DraftStop]] = Field(default_factory=list, max_length=7)
     pending: list[DraftChoice] = Field(default_factory=list, max_length=4)
     ops: list[DraftOp] = Field(default_factory=list, max_length=5)
+    # v2.1 (2026-11-17, Vũng Tàu report): what Tripi just asked for, so a short answer
+    # ("Vũng tàu") finishes that request; and a plan of food stops only.
+    awaiting: Awaiting | None = None
+    meals_only: bool = False
 
 
 class ChatRequest(WireModel):
     conversation_id: UUID
     message: str = Field(min_length=1, max_length=500, pattern=r"\S")
-    history: list[Turn] = Field(default_factory=list, max_length=10)
+    history: list[Turn] = Field(default_factory=list, max_length=30)
     search_mode: Literal["reel"] | None = None
     # The reel the chat was opened from; Skills read it, the LLM never sees the id.
     context_post_id: UUID | None = None
@@ -145,6 +159,9 @@ class Understanding(WireModel):
         "remove_stop",
         "undo",
         "select_option",
+        # v2.1 (2026-11-17): harmless chit-chat outside travel, "why" about the last reply
+        "off_topic",
+        "ask_why",
     ]
     query: str = Field(default="", max_length=200)
     missing: Literal["place", "dates", "none"] = "none"
@@ -193,6 +210,8 @@ class Understanding(WireModel):
     interests: list[str] = Field(default_factory=list, max_length=5)
     stop_name: str = Field(default="", max_length=120)
     pace: Literal["relaxed", "packed"] | None = None
+    # "lộ trình ăn uống", "chỉ quán ăn": food and drink stops only, by meal.
+    meals_only: bool = False
     # Set by code when a date the user gave is in the past (no weather history yet).
     is_past: bool = False
 

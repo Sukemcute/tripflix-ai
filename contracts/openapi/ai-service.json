@@ -1,6 +1,53 @@
 {
   "components": {
     "schemas": {
+      "Awaiting": {
+        "additionalProperties": false,
+        "description": "The request Tripi asked a question about and still has to finish.",
+        "properties": {
+          "intent": {
+            "enum": [
+              "search",
+              "find_stay",
+              "find_flight",
+              "plan_trip",
+              "weather",
+              "packing",
+              "find_reel"
+            ],
+            "title": "Intent",
+            "type": "string"
+          },
+          "missing": {
+            "default": "place",
+            "enum": [
+              "place",
+              "dates",
+              "origin"
+            ],
+            "title": "Missing",
+            "type": "string"
+          },
+          "nights": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nights"
+          }
+        },
+        "required": [
+          "intent"
+        ],
+        "title": "Awaiting",
+        "type": "object"
+      },
       "CardRef": {
         "additionalProperties": false,
         "description": "A card shown in the last answer, so \"the second video\" can be found again.",
@@ -69,7 +116,7 @@
             "items": {
               "$ref": "#/components/schemas/Turn"
             },
-            "maxItems": 10,
+            "maxItems": 30,
             "title": "History",
             "type": "array"
           },
@@ -300,6 +347,7 @@
             "default": "s\u00e1ng",
             "enum": [
               "s\u00e1ng",
+              "tr\u01b0a",
               "chi\u1ec1u",
               "t\u1ed1i"
             ],
@@ -477,6 +525,16 @@
             "title": "Asked",
             "type": "boolean"
           },
+          "awaiting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Awaiting"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "children": {
             "default": 0,
             "maximum": 9.0,
@@ -541,6 +599,11 @@
             "maxItems": 5,
             "title": "Lastcards",
             "type": "array"
+          },
+          "mealsOnly": {
+            "default": false,
+            "title": "Mealsonly",
+            "type": "boolean"
           },
           "ops": {
             "items": {

@@ -29,7 +29,7 @@ from app.services.summary.schemas import strict_json_schema
 
 logger = logging.getLogger(__name__)
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v6.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v7.md"
 
 
 class LlmNotConfiguredError(Exception):
@@ -63,8 +63,15 @@ def build_understanding_input(
                 # Stage B plan: names from Core and OSM, never ids or user-written titles.
                 "originCity": trip.origin_city,
                 "stay": trip.stay.name if trip.stay else None,
+                "planDays": len(trip.days),
                 "planStops": [stop.name for day in trip.days for stop in day][:20],
+                "interests": trip.interests,
+                "mealsOnly": trip.meals_only,
                 "pendingCount": len(trip.pending),
+                # What Tripi just asked for: a short reply ("Vũng tàu") finishes this request.
+                "awaiting": trip.awaiting.model_dump(mode="json", by_alias=True)
+                if trip.awaiting
+                else None,
             },
             # Rules that caught injection in comments (TF44) tag the message; the Controller
             # still only names an intent, so the tag is a hint plus a log line, not a block.
@@ -146,6 +153,11 @@ async def understand(
         or (trip and (trip.reel_id or any(c.kind in REEL_KINDS for c in trip.last_cards)))
     )
     out = apply_guards(
-        out, request.message, has_reel=has_reel, has_options=bool(trip and trip.pending)
+        out,
+        request.message,
+        has_reel=has_reel,
+        has_options=bool(trip and trip.pending),
+        in_plan=bool(trip and trip.days),
+        awaiting=trip.awaiting if trip else None,
     )
     return to_understanding(out, trip, today_in_vietnam()), result
