@@ -1,6 +1,12 @@
 # Tripi v3: nghiên cứu, kiến trúc, kế hoạch và trạng thái triển khai
 
-- **Ngày** 2026-11-16 · **Người viết** Bảo (dùng AI) · **Trạng thái v0.8**. Code AI, Mobile và Gateway của Giai đoạn A đã merge vào `develop`.
+- **Ngày** 2026-11-17 · **Người viết** Bảo (dùng AI) · **Trạng thái v1.0**. Giai đoạn A và B đã merge vào `develop` ở cả 3 repo.
+- **v1.0 (17/11).**
+  - Giai đoạn A còn lại: cờ tắt Responder và từng Skill, gắn cờ nghi prompt injection, bảng A/B một hay hai agent ([AI #36](https://github.com/Sukemcute/tripflix-ai/pull/36)); tìm sân bay theo tên thành phố, Controller v4 ([AI #37](https://github.com/Sukemcute/tripflix-ai/pull/37)); bấm thẻ chuyến bay mở màn chọn vé ([FE #170](https://github.com/Sukemcute/tripflix-fe/pull/170)); đủ 100 kịch bản trợ lý và 50 câu tìm kiếm ([AI #38](https://github.com/Sukemcute/tripflix-ai/pull/38)).
+  - Giai đoạn B: điểm tham quan có toạ độ từ OpenStreetMap ([BE #227](https://github.com/Sukemcute/tripflix-be/pull/227)); khách sạn Vũng Tàu ([BE #222](https://github.com/Sukemcute/tripflix-be/pull/222)); Itinerary Engine, bản nháp chuyến đi (`trip` v2), nút Chọn/Bỏ/Hoàn tác chạy không cần LLM, Controller v5 ([AI #39](https://github.com/Sukemcute/tripflix-ai/pull/39)); thẻ kế hoạch trên mobile ([FE #175](https://github.com/Sukemcute/tripflix-fe/pull/175)).
+  - Chi phí AI: consumer `stream:ai` và API báo cáo ([BE #228](https://github.com/Sukemcute/tripflix-be/pull/228)); trang admin Chi phí AI ([FE #176](https://github.com/Sukemcute/tripflix-fe/pull/176)).
+  - **Tripi chỉ có trên app mobile** (Bảo chốt 17/11). Không làm khung trợ lý trên web.
+  - Chưa làm so với thiết kế Giai đoạn B: Responder v3 và Verifier v4 (dung sai làm tròn km/phút), hạn chót riêng 15 giây cho lượt dựng lộ trình, nhà cung cấp bản đồ (đang ước tính bằng code).
 - **v0.9 (16/11).**
   - AI #34: câu trả lời ngày như "Ngày 17 18" sau câu hỏi nhận và trả phòng được đọc theo tháng hiện tại; khoảng ngày chưa rõ thì hỏi lại trước khi gọi core. Người dùng nói không đi điểm đến đang nhớ thì xóa `trip` và hỏi điểm đến mới.
   - Mobile: vuốt từ giữa danh sách đóng được chat AI (`aad75ee`); bản EAS preview gọi AI staging (`258d0fe`).
@@ -76,11 +82,11 @@
 | Đọc câu trả lời ngày "17 18" sau câu hỏi lại; bỏ điểm đến đang nhớ khi người dùng đổi ý | ✅ | AI #34 (`planner.py`, `turn.py`). Core nhận đúng 17–18/11 thay vì 21–22/11 |
 | Producer `ai.usage.recorded` v1 | ✅ | AI #33 phát vào `stream:ai` từ chat, tóm tắt và kiểm duyệt. Schema camelCase trong `contracts/events/` |
 | Preflight Web trên staging | ✅ | Anh Phong đã nạp cấu hình BE #214. Kiểm lại `OPTIONS /ai/chat` trả `200`, cho phép `https://tripflix.io.vn` |
-| Consumer usage, số liệu Admin và kiểm thử chat Web sau bản sửa CORS | 🟡 | Chờ consumer TF95/TF60 và kiểm chat khách, chat sau đăng nhập trên staging |
-| Cờ `CHAT_RESPONDER_ENABLED`, `CHAT_SKILLS_DISABLED` | ⬜ | Chưa làm; hiện chỉ có kill switch `CHAT_LLM_ENABLED` |
-| Gắn cờ injection (`match_injection`) vào luồng chat | ⬜ | Chưa làm; an toàn hiện dựa vào cấu trúc (mục 3.7) |
-| Sân bay theo tên qua `/api/suggest?types=airport` (T8) | ⬜ | Chưa làm |
-| Giai đoạn B: Itinerary Engine, Trip Draft, chỉ đường, xe khách, chỗ ở ngoài | ⬜ | Sau Giai đoạn A |
+| Consumer usage và số liệu Admin | ✅ | BE #228 (`analytics.ai_usage_events`, `GET /api/analytics/ai-usage`), FE #176 (trang Chi phí AI). Chat trên web không làm |
+| Cờ `CHAT_RESPONDER_ENABLED`, `CHAT_SKILLS_DISABLED` | ✅ | AI #36. Skill bị tắt ghi vào `done.degraded` |
+| Gắn cờ injection (`match_injection`) vào luồng chat | ✅ | AI #36: đánh dấu `suspectedInjection` cho Controller và ghi log; không chặn cứng, an toàn chính vẫn dựa vào cấu trúc (mục 3.7) |
+| Sân bay theo tên qua `/api/suggest?types=airport` (T8) | ✅ | AI #37 (Controller v4). Thành phố không có sân bay thì nói rõ; nhiều sân bay thì hỏi lại |
+| Giai đoạn B: Itinerary Engine, Trip Draft, chỉ đường, xe khách, chỗ ở ngoài | ✅ | AI #39, BE #227, FE #175. Quãng đường và xe khách là ước tính/tham khảo. Eval live v5: 97,6%, pass^3 94,6% |
 
 **Khác thiết kế** (đã ghi trong evidence):
 - **Controller ra ý định và thông tin, không ra danh sách bước.**
@@ -94,6 +100,8 @@
 - **`gpt-5-nano` đã bị OpenAI đánh dấu deprecated** trên trang model. Giá hiện tại: 0,05 / 0,005 / 0,40 USD mỗi 1M token (input / cached / output). Bản kế nhiệm `gpt-5.4-nano` đắt hơn (0,20 / 0,02 / 1,25). Đổi model thì phải chạy lại eval live.
 
 Màu xanh đậm viền dày trong các sơ đồ dưới đây là phần **đã xây**.
+
+**Kiểm tra v1.0 (17/11).** AI sau #39: ruff, pyright sạch, 729 test pass, 6 skip, eval CI 112/112; live 112 ca × 3: 97,6% ý định + thông tin, pass^3 94,6%; chain 91,8% lượt (3/6 lượt trượt do timeout mạng, `reel-6.1` lùi so với v4). BE #227, #228: 49/49 tác vụ lint, typecheck, test. FE #175, #176: 17/17 tác vụ.
 
 **Kiểm tra v0.9 (16/11, trên `develop`).** AI `20e0a9d`: ruff, pyright sạch, 674 test pass, 7 skip, eval CI 70/70. FE `088f412`: mobile, api-client, app-core, i18n 11/11 tác vụ lint, typecheck, test. BE `51c2c97`: `rate-limit-chat` có ở cả `dynamic.yml` và `server.yml`.
 
@@ -117,7 +125,7 @@ Màu xanh đậm viền dày trong các sơ đồ dưới đây là phần **đ�
 |---|---|---|
 | D1 | **Hai agent LLM có vai trò cách ly** (mục 2A). **Controller** đọc câu và lập kế hoạch dưới dạng JSON, không bao giờ thấy kết quả core. **Responder** đọc kết quả rồi viết câu trả lời, không có tool. Giữa hai agent là **các Skill chuyên trách** viết bằng code (reel, chỗ ở, chuyến bay, lộ trình, tóm tắt) và một **Verifier** bằng code **[✅ PR2]** | Đây là mẫu Dual LLM / plan-then-execute [NGUỒN 3, 4, 12]. Đổi Skill thành agent LLM riêng thì hỏng nặng hơn với việc tuần tự và nặng tool (−39 đến −70%) [NGUỒN 14], tốn token hơn [NGUỒN 15, 17] |
 | D2 | **Tối đa hai lần gọi LLM mỗi lượt**. Chỉ gọi Responder khi có dữ kiện và còn thời gian. Dùng câu mẫu nếu Responder lỗi hoặc các câu bị Verifier lọc hết **[✅ PR2]** | Verifier kiểm văn bản dựa trên dữ kiện trước khi trả người dùng |
-| D3 | **Mỗi vai là một cổng (port)**: Controller, Plan checker, Skill, Responder, Verifier. Mỗi cổng có bản thật và bản giả; mỗi agent và mỗi Skill tắt được bằng cờ **[🟡 Skill lỗi chỉ hỏng phần của nó; chưa có cờ tắt từng vai, từng Skill]** | Báo cáo 11/11 mục 3, seam "Chạy một lượt Tripi" |
+| D3 | **Mỗi vai là một cổng (port)**: Controller, Plan checker, Skill, Responder, Verifier. Mỗi cổng có bản thật và bản giả; mỗi agent và mỗi Skill tắt được bằng cờ **[✅ Skill lỗi chỉ hỏng phần của nó; cờ tắt Responder và từng Skill có từ AI #36]** | Báo cáo 11/11 mục 3, seam "Chạy một lượt Tripi" |
 | D4 | **Gọi LLM qua `LlmClient` + `GuardedLlmClient` có sẵn**, không gọi DeepSeek trực tiếp trong route **[✅ PR1]** | Bỏ bảng giá trùng, có circuit breaker, đổi được nhà cung cấp |
 | D5 | **Thêm ba ý định** `post_itinerary`, `check_room` và `post_reviews` **[✅ đã xong]** | Đọc lộ trình, kiểm phòng và xem tóm tắt bình luận của Reel |
 | D6 | **Client gửi thêm `contextPostId`, `kind` và `trip`** **[✅ AI #30 và FE #164–#165]** | Xác định Reel đang xem và giữ các thông tin cần cho lượt hỏi tiếp |
@@ -147,14 +155,14 @@ Ghi lại theo lời Bảo; ví dụ là của Bảo. Phần này **mở rộng*
 | R2 | **Không phải câu nào cũng hiện 3 thẻ video**: loại thẻ và số thẻ theo câu hỏi | hỏi thời tiết thì không cần thẻ video | ✅ Xong (PR2) |
 | R3 | Trả lời các câu hỏi tiếp theo về chuyến đi | "lộ trình như nào", "ở đâu", "thời tiết sắp tới", "cần mang gì" | ✅ Xong (PR2): thời tiết, đồ mang theo, lộ trình reel, chỗ ở |
 | R4 | Đọc lộ trình của video đang nói tới | "lộ trình của video này" | ✅ Chọn theo Reel đang xem, theo thẻ hoặc theo tên. Hỏi được ngày N và số ngày. Mobile gửi `contextPostId` |
-| R5 | **Tự đề xuất lộ trình** | Vũng Tàu 2N1Đ | ⬜ Giai đoạn B |
+| R5 | **Tự đề xuất lộ trình** | Vũng Tàu 2N1Đ | ✅ AI #39 (Itinerary Engine) |
 | R6 | Đề xuất vé máy bay, chỗ ở **từ kho dữ liệu** của Tripflix | | ✅ Có; ngày tương đối do code đổi (PR2) |
-| R7 | Thêm các điểm đi chơi nổi tiếng | Ngọn Hải Đăng, Mũi Nghinh Phong, bãi biển | ⬜ Giai đoạn B |
-| R8 | Hỏi người dùng đang ở đâu, rồi **hướng dẫn cách đi** tới nơi đến | ở TP.HCM → Vũng Tàu | ⬜ Giai đoạn B |
-| R9 | Có chuyến bay thì đề xuất vé; không có thì đề xuất **nhà xe** | | ⬜ Giai đoạn B |
-| R10 | Đề xuất nơi ở (khách sạn, nhà nghỉ, resort): **ưu tiên dịch vụ Tripflix có bán trước, ngoài hệ thống sau** | | 🟡 Tripflix có (PR2); chỗ ngoài: Giai đoạn B |
-| R11 | Xếp lộ trình thuận đường **tính từ nơi ở** | resort → Hải Đăng → Mũi Nghinh Phong → biển | ⬜ Giai đoạn B |
-| R12 | **Sửa kế hoạch theo yêu cầu**, agent tự gợi ý phương án thay | đổi máy bay sang xe, đổi hãng bay, đổi nơi ở | ⬜ Giai đoạn B |
+| R7 | Thêm các điểm đi chơi nổi tiếng | Ngọn Hải Đăng, Mũi Nghinh Phong, bãi biển | ✅ BE #227 (điểm từ OSM), AI #39 |
+| R8 | Hỏi người dùng đang ở đâu, rồi **hướng dẫn cách đi** tới nơi đến | ở TP.HCM → Vũng Tàu | ✅ AI #39; quãng đường, thời gian là ước tính |
+| R9 | Có chuyến bay thì đề xuất vé; không có thì đề xuất **nhà xe** | | ✅ AI #39; xe khách là tuyến mẫu, nhãn "Tham khảo", không giá, không tên nhà xe |
+| R10 | Đề xuất nơi ở (khách sạn, nhà nghỉ, resort): **ưu tiên dịch vụ Tripflix có bán trước, ngoài hệ thống sau** | | ✅ AI #39; chỗ ngoài có nhãn "Ngoài Tripflix", không giá |
+| R11 | Xếp lộ trình thuận đường **tính từ nơi ở** | resort → Hải Đăng → Mũi Nghinh Phong → biển | ✅ AI #39 (vòng ngắn nhất từ nơi ở, ≤ 40 km/ngày) |
+| R12 | **Sửa kế hoạch theo yêu cầu**, agent tự gợi ý phương án thay | đổi máy bay sang xe, đổi hãng bay, đổi nơi ở | ✅ AI #39, FE #175: đổi chỗ ở (nút Chọn), bỏ điểm, hoàn tác. 🟡 Đổi hãng bay chưa có |
 | R13 | Responder diễn đạt theo giọng Tripi | | ✅ Responder và Verifier đã merge. Kiểm thử live còn gặp câu phụ lệch trọng tâm khi đổi Reel |
 
 **Giả định của Bảo:** có API bản đồ (kiểu Google Maps: tìm địa điểm, khoảng cách, chỉ đường) và API thời tiết.
@@ -223,11 +231,11 @@ Nút «Đặt theo lộ trình» mở màn bài viết. App tạo checkout khi n
 | H4 | Bản đầu thiếu `kind` trong lịch sử FE | FE `assistant-transport.ts`, AI `planner.py` | **[✅ đã xong]**. App gửi `kind`, planner dùng cùng `trip.asked` |
 | H5 | Bắt buộc đăng nhập, trong khi PRD F9 cho khách vãng lai dùng | [chat.py:84](../../app/api/chat.py#L84), PRD F9 AC 1 | Lệch PRD. Đây cũng là mâu thuẫn TF31 đã ghi ở v2 **[✅ PR1]** |
 | H6 | Bản đầu thiếu ngữ cảnh Reel đang xem | `ChatRequest` | **[✅ đã xong]**. FE gửi `contextPostId` khi mở từ Reel, AI tra đúng bài với core |
-| H7 | Chuyến bay cần LLM tự đoán mã sân bay IATA | prompt v2 | Người trẻ gõ "bay ra hn", không gõ "HAN". Core đã có `/api/suggest?types=airport` **[⬜]** |
+| H7 | Chuyến bay cần LLM tự đoán mã sân bay IATA | prompt v2 | Người trẻ gõ "bay ra hn", không gõ "HAN". Core đã có `/api/suggest?types=airport` **[✅ AI #37]** |
 | H8 | Mỗi lượt tạo 3 `httpx.AsyncClient` mới (auth, LLM, core) | chat.py | Mỗi lượt bắt tay TCP/TLS lại, thêm độ trễ **[✅ PR1]** |
 | H9 | Chưa có hạn mức theo người, trần chi phí ngày, giới hạn số lượt chạy đồng thời | — | OWASP LLM10 (tiêu thụ không giới hạn) [NGUỒN 7] **[✅ PR1]** |
 | H10 | Chưa có bộ eval hội thoại | `evals/` chỉ có summary, moderation | Không có số đo cho TF14/TF40 **[✅ PR2]** |
-| H11 | Bản đầu chỉ ghi usage vào log | AI `app/services/usage_events.py`, BE module `analytics` | **[✅ producer đã xong]**. AI #33 phát sự kiện v1. **[⬜ consumer và số liệu Admin]** |
+| H11 | Bản đầu chỉ ghi usage vào log | AI `app/services/usage_events.py`, BE module `analytics` | **[✅ producer đã xong]**. AI #33 phát sự kiện v1. **[✅ consumer và số liệu Admin: BE #228, FE #176]** |
 
 Chat v3 gọi adapter LLM bất đồng bộ theo vai. Worker tóm tắt vẫn dùng adapter đồng bộ.
 
@@ -631,7 +639,7 @@ Lượt chat có tối đa hai lần gọi LLM, tùy kết quả Skill và thờ
 **Ghi nhận chi phí (TF95/SCRUM-123)**
 - ✅ `done.usage` trả tổng theo lượt chat. AI #33 phát `ai.usage.recorded` v1 cho chat, tóm tắt và kiểm duyệt qua `stream:ai`.
 - ✅ Producer giữ `eventId` khi phát lại một envelope. Khi Redis lỗi, log `ai.usage.publish_failed` giữ envelope để đối soát.
-- ⬜ Consumer, kiểm thử chống cộng trùng và số liệu Admin còn thuộc TF60/TF95. [Schema v1](https://github.com/Sukemcute/tripflix-ai/blob/4e9bb7d/contracts/events/ai.usage.recorded.v1.schema.json) · [SCRUM-123](https://tripflix.atlassian.net/browse/SCRUM-123)
+- ✅ Consumer chống cộng trùng theo `eventId` (BE #228) và trang admin Chi phí AI (FE #176). Phần ingest chung của analytics vẫn thuộc TF60. [Schema v1](https://github.com/Sukemcute/tripflix-ai/blob/4e9bb7d/contracts/events/ai.usage.recorded.v1.schema.json) · [SCRUM-123](https://tripflix.atlassian.net/browse/SCRUM-123)
 
 ---
 
@@ -705,16 +713,16 @@ Mỗi bước là một commit nhỏ, build và test pass. Một nhánh mỗi ta
 | T3 **[✅ (planner + turn thay cho plan_check + executor)]** | Đưa `build_llm` ra dùng chung; schema `Plan`; `plan_check.py`; `executor.py` có biến `$sN.x`, chạy song song, Skill lỗi trả `failed` và `done.degraded` | Test thuần cho checker và executor; test "stay lỗi vẫn ra reel" | 4 giờ |
 | T4 **[✅ (OpenAI, prompt v2)]** | Controller: prompt `assistant-controller.v1.md`, `LlmController` qua `GuardedLlmClient` + `to_thread`; thay chuỗi `if` trong route; bỏ httpx gọi DeepSeek và bảng giá trong `ChatSettings` | Test với Controller giả; eval CI không tụt | 3 giờ |
 | T5 **[✅ (V1–V7)]** | Responder + Verifier: prompt `assistant-responder.v1.md`, luật G1–G6, câu mẫu dự phòng, thay `[rN]` bằng tên | Test Verifier từng luật; test Responder giả viết câu sai thì bị bỏ | 3 giờ |
-| T6 **[🟡 (client dùng chung, deadline, eval live xong; chưa có bảng A/B vì chưa có cờ Responder)]** | Client HTTP dùng chung trong `lifespan`; deadline từng vai; chạy eval live (điểm "sau"), A và B bằng cờ Responder | Bảng A/B trong evidence (TF14) | 2 giờ + tiền LLM |
+| T6 **[✅ (bảng A/B trong `docs/evidence/TF31-co-tat-va-injection.md`, AI #36)]** | Client HTTP dùng chung trong `lifespan`; deadline từng vai; chạy eval live (điểm "sau"), A và B bằng cờ Responder | Bảng A/B trong evidence (TF14) | 2 giờ + tiền LLM |
 
 **P1: nếu kịp trước 19/11, theo thứ tự**
 
 | # | Việc | Phụ thuộc |
 |---|---|---|
 | T7 **[✅ đã xong]** | `contextPostId` cùng `post_itinerary`, `check_room` và `post_reviews` | AI #30, #32 và FE #164 đã merge |
-| T8 **[⬜]** | Sân bay qua `/api/suggest?types=airport` | — |
+| T8 **[✅ AI #37]** | Sân bay qua `/api/suggest?types=airport` | — |
 | T9 **[✅ đã xong]** | Hỏi lại một lần dựa vào `history[].kind` và `trip.asked` | FE #164 đã nối `kind` |
-| T10 **[🟡 (hạn mức, trần, giới hạn đồng thời xong; chưa có `CHAT_SKILLS_DISABLED`)]** | Hạn mức Redis, trần ngày, `CHAT_MAX_INFLIGHT`, `CHAT_SKILLS_DISABLED` | Chốt với Dũng nơi đếm hạn mức |
+| T10 **[✅ (`CHAT_SKILLS_DISABLED` có từ AI #36)]** | Hạn mức Redis, trần ngày, `CHAT_MAX_INFLIGHT`, `CHAT_SKILLS_DISABLED` | Chốt với Dũng nơi đếm hạn mức |
 | T11 **[✅]** | Đăng nhập tùy chọn sau cờ `CHAT_REQUIRE_LOGIN` | Chốt với leader tuần |
 
 **v0.7: sửa theo báo cáo Expo Web (16/11)**
@@ -727,7 +735,7 @@ Mỗi bước là một commit nhỏ, build và test pass. Một nhánh mỗi ta
 | T15 | Thời tiết, checklist dùng chung dự báo; Verifier v3; Responder v2 | ✅ |
 | T16 | Eval v2 + chain; test hồi quy từng mã lỗi | ✅ |
 | T17 | Gateway `rate-limit-chat` và preflight Web | ✅ BE #206 và #214 đã merge. Preflight staging đã đạt |
-| T18 | Evidence Expo Web và Android | 🟡 Có ảnh Expo Web và bundle Android. Chưa có ảnh chạy trên thiết bị/emulator Android |
+| T18 | Evidence Expo Web và Android | ✅ Có ảnh Expo Web và bundle Android. Ảnh thiết bị Android: Bảo bỏ (17/11) |
 | T19 | Sửa hồi quy lời chào, ngày đi và SSE lộ trình | ✅ AI #32 đã merge |
 | T20 | Producer usage và hợp đồng v1 | ✅ AI #33 đã merge. Consumer thuộc phần việc analytics |
 

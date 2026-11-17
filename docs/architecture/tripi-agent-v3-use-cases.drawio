@@ -202,7 +202,7 @@
         <mxCell id="stage-b" parent="1" value="" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EEE8FC;strokeColor=none;pointerEvents=0;rounded=1;absoluteArcSize=1;arcSize=18;">
           <mxGeometry x="42" y="1314" width="1836" height="46" as="geometry" />
         </mxCell>
-        <mxCell id="stage-b-title" parent="1" value="Giai đoạn B · Mở rộng sau demo" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=19;fontColor=#4E3C7A;fontStyle=1;">
+        <mxCell id="stage-b-title" parent="1" value="Giai đoạn B · Đã xây (17/11)" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=19;fontColor=#4E3C7A;fontStyle=1;">
           <mxGeometry x="62" y="1319" width="615" height="36" as="geometry" />
         </mxCell>
         <mxCell id="stage-b-scope" parent="1" value="Di chuyển, điểm tham quan, bản nháp chuyến đi và sửa kế hoạch qua nhiều lượt" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=15;fontColor=#4E3C7A;fontStyle=0;">

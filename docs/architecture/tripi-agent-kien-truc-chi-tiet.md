@@ -1,6 +1,10 @@
 # Tripi: kiến trúc chi tiết nối với core và database
 
-- **Ngày** 2026-11-16 · **Người viết** Bảo (dùng AI) · **Trạng thái v0.9**. Các phần TF31 đã merge vào `develop` được tô xanh đậm. Xác nhận trên môi trường chạy và phần analytics còn lại được ghi tại mục 7.
+- **Ngày** 2026-11-17 · **Người viết** Bảo (dùng AI) · **Trạng thái v1.0**. Giai đoạn A và B của TF31 đã merge vào `develop`, tô xanh đậm. Tripi chỉ có trên app mobile (Bảo chốt 17/11). Việc còn lại ghi ở mục 7.
+- **Mốc đối chiếu 17/11 (v1.0)**
+  - AI: [#36](https://github.com/Sukemcute/tripflix-ai/pull/36) cờ tắt và injection · [#37](https://github.com/Sukemcute/tripflix-ai/pull/37) sân bay theo tên · [#38](https://github.com/Sukemcute/tripflix-ai/pull/38) đủ 100 kịch bản và 50 câu tìm kiếm · [#39](https://github.com/Sukemcute/tripflix-ai/pull/39) Giai đoạn B (Itinerary Engine, bản nháp, Controller v5).
+  - BE: [#222](https://github.com/Sukemcute/tripflix-be/pull/222) seed Vũng Tàu · [#227](https://github.com/Sukemcute/tripflix-be/pull/227) `GET /api/places` · [#228](https://github.com/Sukemcute/tripflix-be/pull/228) chi phí AI ở analytics.
+  - FE: [#170](https://github.com/Sukemcute/tripflix-fe/pull/170) thẻ chuyến bay · [#175](https://github.com/Sukemcute/tripflix-fe/pull/175) thẻ kế hoạch có nút Chọn, Hoàn tác · [#176](https://github.com/Sukemcute/tripflix-fe/pull/176) trang admin Chi phí AI.
 - **Mốc đối chiếu 16/11**
   - `tripflix-ai` `develop@20e0a9d`. Hai agent và bộ nhớ chuyến đi, sửa cấu hình, hồi quy demo, producer TF95, giữ đúng ngày đặt phòng và bỏ điểm đến khi người dùng đổi ý. [AI #30](https://github.com/Sukemcute/tripflix-ai/pull/30) · [#31](https://github.com/Sukemcute/tripflix-ai/pull/31) · [#32](https://github.com/Sukemcute/tripflix-ai/pull/32) · [#33](https://github.com/Sukemcute/tripflix-ai/pull/33) · [#34](https://github.com/Sukemcute/tripflix-ai/pull/34)
   - `tripflix-be` `develop@51c2c97`; phần Tripi giữ nguyên từ `5ab83c8`. Gateway, cấu hình deploy, preflight cho Web và cải thiện lọc nơi ở Discovery. [BE #206](https://github.com/Sukemcute/tripflix-be/pull/206) · [#207](https://github.com/Sukemcute/tripflix-be/pull/207) · [#214](https://github.com/Sukemcute/tripflix-be/pull/214) · [#215](https://github.com/Sukemcute/tripflix-be/pull/215)
@@ -39,7 +43,7 @@ classDef planned fill:#e6f0ff,stroke:#1e5bb8,color:#0d3c80,stroke-dasharray:5 3
 
 subgraph CL["Clients"]
   MOB["Mobile chat: reel in view, trip memory, detailed cards, limit messages"]:::built
-  WEB["Web: assistant side panel"]:::missing
+  WEB["Web: no assistant, mobile only"]
   LS["On-device store: signed-in chat and trip memory for 7 days, cleared on logout"]:::built
 end
 
@@ -60,7 +64,7 @@ subgraph CORE["Core API, modular monolith"]
   CON["content: posts, comments, summaries, moderation"]:::exists
   DIS["discovery: search, suggest, stays, recommend"]:::exists
   COM["commerce: hotels, flights, checkout"]:::exists
-  ANA["analytics: ingest and marts"]:::missing
+  ANA["analytics: AI usage consumer and cost table"]:::built
 end
 
 DB[("Relational database: schemas access, content, discovery, commerce, analytics")]:::partial
@@ -68,9 +72,9 @@ KV[("Key-value store: event streams and technical keys")]:::exists
 UST["stream:ai"]:::built
 
 LLM["LLM provider"]:::exists
-MAP["Map provider: places, distance, directions"]:::missing
+MAP["Distance estimate in code, no map provider"]:::partbuilt
 WX["Weather provider, free tier"]:::built
-TRN["Intercity bus data provider"]:::missing
+TRN["Reference bus routes, static file"]:::built
 
 MOB --> GW
 WEB --> GW
@@ -102,15 +106,15 @@ UST -.->|"planned analytics consumption"| ANA
 
 | Thành phần | Vì sao | Chủ |
 |---|---|---|
-| Web: khung trợ lý 🟥 | Trong `apps/web` chưa có màn chat Tripi; mới có trên mobile [CODE: FE] | Thành |
+| Web: khung trợ lý — | Không làm: Tripi chỉ có trên app mobile (Bảo chốt 17/11) | — |
 | Mobile chat ✅ | FE #164 và #165 đã merge. App gửi `contextPostId`, `trip`, `kind`; hiện chi tiết thẻ và chip 44; xử lý 409/429/503. Đăng nhập bằng mật khẩu hoặc Google dùng chung đường quay về `/assistant`. Expo Web đã có evidence, còn thiếu ảnh Android | Bảo, chị Trang |
 | Lưu trên máy ✅ | Lưu 7 ngày khi còn đăng nhập, tính từ lần lưu gần nhất. Khách chỉ giữ phiên trong bộ nhớ app. Đăng xuất hoặc đổi tài khoản sẽ xoá phiên. Lượt bị từ chối và thẻ cũ được loại khỏi dữ liệu lưu ở FE #165 | Bảo, chị Trang |
 | Gateway ✅ | BE #206 và #214 đã merge. `POST /ai/chat` dùng `rate-limit-chat` 20 request/phút/IP, burst 5. `OPTIONS /ai/chat` dùng `rate-limit-api`. Preflight staging đã trả `200` và cho phép `https://tripflix.io.vn` | Dũng, anh Phong |
 | `POST /chat` ✅ | AI #30–#32 có hai agent, `trip`, kiểm đầu ra Controller, SSE và sửa hồi quy lời chào, ngày dự báo và stream lộ trình | Bảo |
 | Producer usage ✅ | AI #33 phát `ai.usage.recorded` v1 vào `stream:ai` từ chat, tóm tắt và kiểm duyệt | Bảo |
-| Analytics consumer 🟥 | Module và schema đã khai báo. Consumer, bảng sự kiện và số liệu Admin thuộc TF95/TF60 | chị Trang |
+| Analytics consumer ✅ | BE #228: bảng `analytics.ai_usage_events`, consumer `core-analytics` trên `stream:ai`, `GET /api/analytics/ai-usage`. FE #176: trang admin Chi phí AI. Phần ingest chung và marts vẫn thuộc TF60 | chị Trang |
 | Database 🟨 | Schema `analytics` trống | chị Trang |
-| Thời tiết ✅; map và xe khách 🟥 | Dự báo Open-Meteo đã có; chỉ đường và nguồn xe khách thuộc Giai đoạn B. | Bảo, mentor |
+| Thời tiết ✅; quãng đường và xe khách ✅ (ước tính) | Quãng đường = đường chim bay × 1,3, ghi "ước tính". Xe khách là tuyến mẫu, nhãn "Tham khảo", không giá. Chưa dùng nhà cung cấp bản đồ | Bảo, mentor |
 
 ---
 
@@ -135,8 +139,8 @@ subgraph AI["Assistant service"]
   GUA["Code guards: standalone greetings, explicit relative weather dates, trip memory"]:::built
   CHK["Planner: relative days, ask on a wrong date range, clarify once, defaults said aloud"]:::built
   EXE["Turn: picks skills by intent, picks the reel from cards, per-skill deadline, degraded"]:::built
-  OPS["Draft ops: set, select, remove, undo"]:::planned
-  ENG["Itinerary engine: pick, cluster by day, order from stay"]:::planned
+  OPS["Draft ops: set, select, remove, undo"]:::built
+  ENG["Itinerary engine: pick, cluster by day, order from stay"]:::built
   PACK["Packing rules v2: reason per item, what the user has, beach or not, item limit"]:::built
   RESP["Responder agent: Tripi voice, no tools, adds to the lead sentence"]:::built
   VER["Verifier: grounded text, per-day weather, numeric itinerary day count"]:::built
@@ -154,15 +158,15 @@ subgraph SKC["Skills calling core"]
   K_FLT["flight.search: time filter, children and infants; airport codes required"]:::partbuilt
   K_RT["flight.routes"]:::planned
   K_REC["taste.for_you"]:::planned
-  K_POI["place.search, POI with coordinates"]:::planned
+  K_POI["place.search, POI with coordinates"]:::built
   K_PREF["memory.preferences"]:::planned
 end
 
 subgraph SKX["Skills calling outside providers"]
   X_GEO["place.geocode"]:::planned
-  X_RTE["route.matrix, route.directions"]:::planned
+  X_RTE["route.estimate: km and minutes"]:::built
   X_WX["weather.forecast, place lookup included"]:::built
-  X_BUS["transport.bus"]:::planned
+  X_BUS["transport.bus: reference routes"]:::built
 end
 
 subgraph CAPI["Core API endpoints"]
@@ -178,16 +182,16 @@ subgraph CAPI["Core API endpoints"]
   E_FLT["GET /api/flights"]:::exists
   E_FRT["GET /api/flights/routes"]:::exists
   E_REC["GET /api/recommendations/posts"]:::exists
-  E_POI["GET /api/places, POI with coordinates"]:::missing
+  E_POI["GET /api/places, POI with coordinates"]:::built
   E_PREF["GET PUT DELETE /api/v1/me/assistant-preferences"]:::missing
   E_DRAFT["PUT GET /api/v1/me/trip-drafts, optional"]:::missing
   E_CHK["POST /api/checkout, called by the app only"]:::exists
 end
 
 subgraph EXT["Outside providers"]
-  P_MAP["Map provider"]:::missing
+  P_MAP["Distance estimate in code"]:::partbuilt
   P_WX["Weather provider"]:::built
-  P_BUS["Bus data provider or seed"]:::missing
+  P_BUS["Reference bus routes, static file"]:::built
   P_LLM["LLM provider"]:::exists
 end
 
@@ -271,7 +275,7 @@ subgraph API["Core API endpoints"]
   A8["GET, PUT /api/v1/posts/:postId/ai-summary<br/>GET comments, comments/sample, comment-stats<br/>GET internal/ai-summary/reconciliation"]:::exists
   A9["GET /api/recommendations/posts"]:::exists
   A10["POST /api/checkout<br/>GET /api/checkout"]:::exists
-  A11["GET /api/places"]:::missing
+  A11["GET /api/places"]:::built
   A12["/api/v1/me/assistant-preferences"]:::missing
 end
 
@@ -293,7 +297,7 @@ subgraph S_DIS["schema discovery"]
   T_SDOC[("search_documents, search_counts")]:::exists
   T_SENT[("search_entities: places, hotels, airports")]:::exists
   T_REC[("recommend_user_features, recommend_post_scores, recommend_posts, recommend_interactions")]:::exists
-  T_POI[("points of interest with coordinates")]:::missing
+  T_POI[("points of interest, static from open map data")]:::built
 end
 
 subgraph S_COM["schema commerce"]
@@ -304,7 +308,7 @@ subgraph S_COM["schema commerce"]
 end
 
 subgraph S_ANA["schema analytics"]
-  T_EVT[("events, mart tables")]:::missing
+  T_EVT[("ai_usage_events")]:::built
 end
 
 A1 --> T_USERS
@@ -332,7 +336,7 @@ T_MOD -.->|"hidden posts leave the index"| T_SDOC
 
 **Ghi chú:**
 - 🟨 `commerce.properties`: có `lat`, `lng` và `details.nearby` (tên + km) cho cả 2.200 khách sạn [CODE: seed], nhưng `nearby` không có tọa độ. Vũng Tàu chỉ có 1 khách sạn.
-- 🟥 `analytics`: schema đã khai báo (`pgSchema('analytics')`) nhưng chưa có bảng.
+- ✅ `analytics`: bảng `ai_usage_events` (BE #228). Bảng `events` chung và `mart_*` vẫn thuộc TF60.
 - Discovery không đọc bảng của module khác. Nó gọi `CommerceFacade`, `ContentFacade` trong cùng process (README discovery) [CODE]. Mũi tên nét đứt là lời gọi trong process, không phải truy vấn chéo schema.
 - ai-service **không có mũi tên nào tới database** (RULES §10).
 
@@ -386,12 +390,12 @@ CHATS --> P_USE
 SW --> P_USE
 MODERATION["POST /moderate"]:::exists --> P_USE
 P_USE -->|"event JSON"| ST_USE
-ST_USE -.-> ANA["analytics consumer, missing"]:::missing
+ST_USE -.-> ANA["analytics consumer core-analytics"]:::built
 ```
 
 - Không có khóa nào chứa nội dung chat (báo cáo SWE §3A.5).
 - ✅ `ai.usage.recorded` v1 do chat, worker tóm tắt và kiểm duyệt phát vào `stream:ai`. Các luồng dùng chung envelope camelCase với `eventId`, `occurredAt` và `userId` có thể null. Nếu ghi Redis lỗi, envelope được ghi vào log `ai.usage.publish_failed`. [Hợp đồng v1](https://github.com/Sukemcute/tripflix-ai/blob/4e9bb7d/contracts/events/ai.usage.recorded.v1.schema.json)
-- 🟥 Consumer và bảng số liệu chưa có trên `develop` của BE. Khi tích hợp, consumer dùng `eventId` để chống cộng trùng. [SCRUM-123](https://tripflix.atlassian.net/browse/SCRUM-123)
+- ✅ BE #228: consumer ghi theo `eventId` nên giao lại không cộng trùng; payload sai hợp đồng thì bỏ qua. Trang admin "Chi phí AI" (FE #176) đọc `GET /api/analytics/ai-usage`. [SCRUM-123](https://tripflix.atlassian.net/browse/SCRUM-123)
 
 ---
 
@@ -404,11 +408,11 @@ ST_USE -.-> ANA["analytics consumer, missing"]:::missing
 | `searchMode` | 🟩 có | |
 | `contextPostId` | ✅ có (PR1, dùng ở PR2); ✅ app gửi khi mở Tripi từ reel (PR3) | Reel đang xem (R4) |
 | `trip` (request) và SSE `trip` | ✅ có (PR5); ✅ app giữ và gửi lại (PR3) | Bộ nhớ chuyến đi bản gọn, version `v=1`: nơi, ngày đi/về, số người, trần giá, reel đang chọn, `lastCards` ≤ 5, `asked`. Server kiểm lại mọi thứ |
-| `tripDraft` | 🟥 chưa có | Bản nháp đầy đủ M2 (chọn khách sạn, sửa kế hoạch), Giai đoạn B |
-| `action` (bấm nút Chọn, Đổi, Bỏ, Hoàn tác) | 🟥 chưa có | Không gọi LLM |
+| `tripDraft` | ✅ AI #39 | Nằm trong `trip` v2: `stay`, `transport`, `days`, `pending`, `ops` (≤ 5 phép để hoàn tác) |
+| `action` (bấm nút Chọn, Bỏ, Hoàn tác) | ✅ AI #39, FE #175 | Không gọi LLM |
 | `noMemory` | 🟥 chưa có | Chế độ "không nhớ" (M3) |
 | SSE `status`, `text`, `cards`, `done`, `error` | ✅ có; `text` gửi theo từng câu (PR2) | Thêm bước `searching`, `writing` |
-| SSE `draft` | 🟥 chưa có | Trả draft mới |
+| SSE `draft` | — không cần | Bản nháp trả trong sự kiện `trip` có sẵn |
 | `done.degraded`, thẻ mới, chip | ✅ có ở AI (PR2); sự kiện `suggestions`; thẻ `weather`, `checklist`, `itinerary`, `summary` có `lines`, `source` | ✅ PR3: hiện dòng và nguồn, chip bấm là gửi, thẻ lộ trình có nút. App vẫn chờ hết body SSE rồi mới hiển thị |
 | HTTP 409, 429, 503 có `retryAfterSeconds` | ✅ có, kèm `loginRequired` cho khách | ✅ khách hết lượt có nút Đăng nhập. Sau đăng nhập quay lại `/assistant` (FE #165) |
 
@@ -446,7 +450,7 @@ subgraph DEV["User device"]
   D2["Access token, 15 min, app memory only"]:::exists
   D3["Chat history: 7 days while signed in; native capped at 2 KiB; guests in memory"]:::built
   D4["Trip memory, versioned: place, dates, people, price cap, reel, last cards"]:::built
-  D5["Full trip draft: chosen items, plan edits"]:::missing
+  D5["Full trip draft: chosen items, plan edits"]:::built
 end
 
 subgraph KVS["Key-value store"]
@@ -462,7 +466,7 @@ subgraph RDB["Relational database, core"]
   P2[("discovery.recommend_user_features: implicit taste")]:::exists
   P3[("access assistant_preferences: explicit, after pilot")]:::missing
   P4[("trip_drafts: cross-device, optional")]:::missing
-  P5[("analytics events: cost per user")]:::missing
+  P5[("analytics ai_usage_events: cost by feature, day, model")]:::built
 end
 
 AIS["Assistant service, stateless"]
@@ -470,7 +474,7 @@ COREAUTH["Core API: access"]:::exists
 COREREC["Core API: recommendations"]:::exists
 COREMEM["Core API: preferences and drafts"]:::missing
 USAGE["stream:ai, usage events v1"]:::built
-ANALYTICS["Analytics consumer"]:::missing
+ANALYTICS["Analytics consumer"]:::built
 
 D1 -->|"refresh"| COREAUTH
 COREAUTH --> P1
@@ -514,7 +518,7 @@ ai-service không giữ gì về phiên. Mỗi lượt nó kiểm chữ ký JWT 
 | Hạn mức, khóa 1 lượt, cache | Hạn mức và khóa có ở Redis; cache thời tiết 30 phút trong tiến trình AI | Cân nhắc chia sẻ cache khi tăng số tiến trình | — |
 | Gu ngầm (M3a) | Có ở core (`discovery.recommend_user_features`, làm mới mỗi 10 phút) | Đọc qua `GET /api/recommendations/posts` | — |
 | Sở thích dặn nhớ (M3b) | Chưa có | Không làm | `assistant_preferences` ở `access`; chỉ ghi khi người dùng bấm "Nhớ" |
-| Chi phí theo user | ✅ Producer phát `ai.usage.recorded` vào `stream:ai`. Khách có `userId: null` | Đọc sự kiện khi kiểm tra tích hợp | 🟥 Consumer và bảng `events` ở `analytics` |
+| Chi phí theo tính năng, ngày, model | ✅ Producer phát `ai.usage.recorded` vào `stream:ai` | ✅ BE #228 ghi vào `analytics.ai_usage_events` (không lưu userId) | ✅ FE #176 trang admin Chi phí AI |
 
 **Vì sao pilot lưu trên máy mà không lưu ở server:**
 - PRD F9 chỉ yêu cầu "đăng nhập giữa chừng không mất hội thoại". Lưu trên máy là đủ.
@@ -558,11 +562,11 @@ ai-service không giữ gì về phiên. Mỗi lượt nó kiểm chữ ký JWT 
 | # | Việc | Repo, module | Chủ | Trạng thái |
 |---|---|---|---|---|
 | O1 | Router chat và preflight có hạn mức riêng | be `deploy/traefik` | Dũng | ✅ BE #206 và #214 đã merge |
-| O2 | `GET /api/places` + bảng POI có tọa độ (nạp từ OSM như khách sạn) | be discovery | Duy | ⬜ Giai đoạn B (R5, R7, R11) |
-| O3 | Consumer `ai.usage.recorded`, bảng `events` và số liệu Admin | be analytics | chị Trang | 🟡 Producer AI đã xong. Consumer và kiểm thử chống đếm trùng thuộc SCRUM-123/TF60 |
+| O2 | `GET /api/places` + POI có tọa độ (nạp từ OSM) | be discovery | Duy | ✅ BE #227: 630 điểm, 7 thành phố, dữ liệu tĩnh, ghi nguồn ODbL |
+| O3 | Consumer `ai.usage.recorded` và số liệu Admin | be analytics, fe admin | chị Trang, Thành | ✅ BE #228, FE #176. Gộp vào phần ingest chung khi làm TF60 |
 | O4 | Gửi `kind`, `contextPostId`, `trip`, hiện thẻ, xử lý 409/429/503, lưu phiên và quay lại Tripi sau đăng nhập | fe mobile, api-client | chị Trang | ✅ FE #164 và #165 đã merge. Expo Web đã kiểm local, còn thiếu ảnh Android |
-| O5 | Khung Tripi trên web | fe web | Thành | ⬜ để sau (Thành đồng ý 16/11) |
-| O6 | Chọn điểm demo và bổ sung seed Vũng Tàu | be commerce seed | Thắng, Bảo | 🟡 Đà Lạt cho demo, Nha Trang dự phòng. Bổ sung seed Vũng Tàu sau demo |
+| O5 | Khung Tripi trên web | fe web | Thành | — Không làm (Bảo chốt 17/11: chỉ mobile) |
+| O6 | Chọn điểm demo và bổ sung seed Vũng Tàu | be commerce seed | Thắng, Bảo | ✅ BE #222 thêm khách sạn Vũng Tàu |
 | O7 | `assistant-preferences` (sau pilot) | be access | Dũng | ⬜ sau pilot |
 | O8 | Deploy cấu hình `CHAT_*` và CORS | deploy | anh Phong | ✅ Đã nạp cấu hình staging. Xác nhận `OPTIONS /ai/chat` trả `200` với `Access-Control-Allow-Origin: https://tripflix.io.vn`. 🟡 Còn kiểm chat khách và chat sau đăng nhập từ Web sau bản sửa, cùng log usage theo tag đang chạy |
 | O9 | Đo 10 rồi 30 lượt chat đồng thời với `/moderate` | deploy, ai | anh Phong, Bảo | ⬜ Chờ đo staging với trần 0,5 USD. Đạt khi p95 `/moderate` dưới 3 giây và ai-service không restart do hết RAM |
