@@ -48,7 +48,7 @@ VIETNAMESE = re.compile(
     r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]", re.IGNORECASE
 )
 # Two or more capitalised words in a row, e.g. "Mũi Nghinh Phong".
-NAME = re.compile(r"\b([A-ZÀ-ỸĐ][\wÀ-ỹđ]*(?:\s+[A-ZÀ-ỸĐ][\wÀ-ỹđ]*)+)")
+WORD = re.compile(r"[^\W\d_]+")
 EMOJI = re.compile("[\U0001f300-\U0001faff☀-➿]")
 WEEKDAY_WORDS = {
     0: ("thu hai", "t2"),
@@ -141,6 +141,27 @@ def verify(
     return kept, dropped
 
 
+def _names(text: str) -> list[str]:
+    """Runs of two or more capitalised words: "Vũng Tàu", "Mũi Nghinh Phong".
+
+    str.isupper, not a character range: [A-ZÀ-Ỹ] also holds lowercase đ, ô, ạ…, so
+    "Tripi đây" was read as a name and the sentence dropped (17/11).
+    """
+    names: list[str] = []
+    run: list[re.Match[str]] = []
+    for word in WORD.finditer(text):
+        joined = run and text[run[-1].end() : word.start()].isspace()
+        if word.group()[0].isupper() and (not run or joined):
+            run.append(word)
+            continue
+        if len(run) > 1:
+            names.append(text[run[0].start() : run[-1].end()])
+        run = [word] if word.group()[0].isupper() else []
+    if len(run) > 1:
+        names.append(text[run[0].start() : run[-1].end()])
+    return names
+
+
 def _broken_rule(
     sentence: str,
     refs: set[str],
@@ -155,7 +176,7 @@ def _broken_rule(
     without_refs = REF.sub(" ", sentence)
     if not _numbers(without_refs) <= allowed_numbers:
         return "V2_ungrounded_number"
-    for name in NAME.findall(without_refs):
+    for name in _names(without_refs):
         words = normalize_text(name).split()
         # The first word of a sentence is capitalised anyway: judge the rest of the name.
         if without_refs.lstrip().startswith(name):

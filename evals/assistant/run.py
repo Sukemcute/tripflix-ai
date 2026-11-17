@@ -82,6 +82,7 @@ EMPTY_PLAN = {
     "interests": [],
     "stop_name": "",
     "pace": None,
+    "meals_only": False,
 }
 
 
@@ -495,7 +496,8 @@ def main() -> int:
     parser.add_argument("--runs", type=int, default=3)
     args = parser.parse_args()
     if args.mode == "chain":
-        chains = read_jsonl("chains.v1.jsonl") + read_jsonl("chains.v2.jsonl")
+        chains = [read_jsonl(f"chains.v{n}.jsonl") for n in (1, 2, 3)]
+        chains = [chain for group in chains for chain in group]
         return asyncio.run(run_chain(chains, args.runs))
     if args.mode == "search":
         return asyncio.run(run_search(read_jsonl("search.v1.jsonl")))

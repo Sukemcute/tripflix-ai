@@ -11,7 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.services.assistant.schemas import TripContext, Understanding
+from app.services.assistant.schemas import Awaiting, TripContext, Understanding
+from app.services.summary.injection import match_injection
 from app.services.summary.vi_text import normalize_text
 
 PAST_WINDOW_DAYS = 7  # "15/11" said on 16/11 means last Monday, not next year
@@ -67,6 +68,44 @@ ORIGIN_CUE = (
 )
 PICK_CUE = r"\b(?:lay|chon)\b(?:\s+\w+){0,2}?\s+(?:thu\s+)?(\d|mot|nhat|hai|ba|bon|dau tien)\b"
 PICK_WORDS = {"mot": 1, "nhat": 1, "dau tien": 1, "hai": 2, "ba": 3, "bon": 4}
+# Vũng Tàu report (17/11): a plan of food stops only ("lộ trình ăn uống", "chỉ quán ăn").
+MEALS_CUE = (
+    r"\b((lo|lich) trinh an uong|tour an uong|food tour|an uong thoi|chi (an|quan an|an uong)"
+    r"|khong (xep |can )?(diem )?tham quan)\b"
+)
+# With a plan on screen, "chuyển thành 2n1d", "rút còn 2 ngày" change its length.
+EDIT_CUE = r"\b(chuyen|doi|rut|con|thanh|xep lai|sua|giam|tang|them|bot)\b"
+# Only a length, as the reply to a plan on screen: "3 ngày 2 đêm", "2n1d thôi".
+DURATION_ONLY = (
+    r"(\d+|mot|hai|ba|bon|nam)\s*(ngay|n)\s*((\d+|mot|hai|ba|bon)\s*(dem|d))?"
+    r"( thoi| nha| nhe| di| nhe ban)?"
+)
+# A day the user wrote: "21/11", "ngày 21", "thứ 7", "mai", "cuối tuần".
+DATE_WORDS = (
+    r"\b(\d{1,2}\s*[/.-]\s*\d{1,2}|ngay \d{1,2}(?!\s*d)|thang \d{1,2}"
+    r"|thu (2|3|4|5|6|7|hai|ba|tu|nam|sau|bay)"
+    r"|t[2-7]|chu nhat|cn|mai|ngay mot(?! dem)|hom nay|cuoi tuan|tuan (nay|sau))\b"
+)
+# Live eval of v7 (17/11): the model put unsafe asks and travel questions in off_topic.
+UNSAFE_CUE = (
+    r"\b(thuoc ngu|thuoc (doc|chuot)|ma tuy|can sa|vu khi|sung|dao gam|tu tu|tu sat|trom"
+    r"|an cap|lua dao|hack|lam gia|ve gia|giay to gia|tron ve|danh bac|ca do|mai dam)\b"
+)  # [HIỆU CHỈNH]
+# Chat-only injection words; the comment lexicon feeds the summary input_hash, so not there.
+CHAT_INJECTION_CUE = (
+    r"\b((bo qua|quen|phot lo)( \w+){0,3} (luat|quy tac|huong dan|lenh|chi dan)"
+    r"|in( ra)? prompt|prompt he thong|system prompt|ignore (all|previous|the))\b"
+)
+TRAVEL_CUE = (
+    r"\b(di dau|choi gi|an gi|uong gi|di choi|du lich|phuot|chill|check in|bien|nui|tour"
+    r"|lich trinh|lo trinh)\b"
+)
+SUGGEST_CUE = r"\b(di dau|dau cho|cho nao|o dau|goi y|nen di)\b"
+THANKS_ONLY = r"(cam on|camon|thanks|thank you|thank|tks|thanks ban)( (nha|nhe|ban|tripi|nhieu|a))*"
+# A short "why" right after a reply is about that reply.
+WHY_CUE = r"^(tai sao|sao (vay|the|lai|khong|ko)|vi sao|why|la sao)\b"
+# A reply to Tripi's question is short: "Vũng tàu", "3 ngày 2 đêm", "từ sài gòn".
+AWAIT_MAX_WORDS = 6
 # v5 left pace null for "đi nhiều chỗ" 3/3 (17/11) although the prompt has that very example.
 PACE_CUES = {
     "packed": r"\b(di nhieu cho|nhieu cho|nhieu diem|day lich|kin lich|di het)\b",
@@ -113,6 +152,8 @@ class ControllerOutput(BaseModel):
         "remove_stop",
         "undo",
         "select_option",
+        "off_topic",
+        "ask_why",
     ]
     query: str
     missing: Literal["place", "dates", "origin", "none"]
@@ -155,6 +196,7 @@ class ControllerOutput(BaseModel):
     interests: list[str]
     stop_name: str
     pace: Literal["relaxed", "packed"] | None
+    meals_only: bool
 
 
 def build_date(day_month: DayMonth | None, today: date) -> date | None:
@@ -259,6 +301,7 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         interests=[s[:30] for s in out.interests[:5]],
         stop_name=out.stop_name.strip()[:120],
         pace=out.pace,
+        meals_only=out.meals_only,
         is_past=(start is not None and start < today) or out.day_ref == "yesterday",
     )
     if out.missing == "origin":
@@ -267,12 +310,28 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
 
 
 def apply_guards(
-    out: ControllerOutput, message: str, *, has_reel: bool, has_options: bool = False
+    out: ControllerOutput,
+    message: str,
+    *,
+    has_reel: bool,
+    has_options: bool = False,
+    in_plan: bool = False,
+    awaiting: Awaiting | None = None,
 ) -> ControllerOutput:
     """Drop or fix what the model said that the message does not support [ĐỀ XUẤT]."""
     text = normalize_text(message)
+    # The model sometimes writes the word "null" for a place nobody said (17/11).
+    blanks = {
+        name: ""
+        for name in ("place", "from_city", "to_city")
+        if normalize_text(getattr(out, name)) in {"null", "none", "n a", "khong co"}
+    }
+    if blanks:
+        out = out.model_copy(update=blanks)
     if re.fullmatch(GREETING, text):
         return out.model_copy(update={"intent": "greeting"})
+    if re.fullmatch(THANKS_ONLY, text):  # "cam on nha" after a checklist was ack/packing (v7)
+        return out.model_copy(update={"intent": "thanks"})
     if re.fullmatch(ACK_ONLY, text):  # "mình chốt vậy" after a checklist was read as packing
         return out.model_copy(update={"intent": "ack"})
     fixed: dict = {}
@@ -300,6 +359,49 @@ def apply_guards(
     if origin and destination and normalize_text(CITY_NAMES[origin.group(1)]) == destination:
         origin = None  # where you go is not where you start
     pick = re.search(PICK_CUE, text)
+    # Vũng Tàu report (17/11): "chuyển thành 2n1d thôi" after a 3-day plan and "Vũng tàu" after
+    # "Bạn muốn đi đâu?" were right as plan_trip, then the keyword check below sent them to search.
+    plans_already = in_plan or (awaiting is not None and awaiting.intent == "plan_trip")
+    is_short = len(text.split()) <= AWAIT_MAX_WORDS
+    if awaiting and is_short and intent in {"search", "clarify", "find_stay", "find_reel"}:
+        fills = {
+            "place": bool(out.place),
+            "dates": out.start is not None or out.day_ref != "none" or out.nights is not None,
+            "origin": bool(origin or out.from_city),
+        }[awaiting.missing]
+        if fills and intent != awaiting.intent:
+            intent = awaiting.intent  # the answer to Tripi's question finishes that request
+            if out.nights is None and awaiting.nights is not None:
+                fixed["nights"] = awaiting.nights
+    if (
+        in_plan
+        and out.nights is not None
+        and intent in {"search", "find_stay", "clarify"}
+        and (re.search(EDIT_CUE, text) or re.fullmatch(DURATION_ONLY, text))
+    ):
+        intent = "plan_trip"
+    if is_short and intent in {"clarify", "search", "refusal"} and re.search(WHY_CUE, text):
+        intent = "ask_why"
+    if intent == "ask_why" and not re.search(r"\b(tai sao|vi sao|sao|why)\b", text):
+        # "vậy đi biển đâu cho chill" came back as ask_why once (17/11): no "why", no ask_why.
+        intent = "search" if re.search(TRAVEL_CUE, text) or out.place else "clarify"
+    if intent == "off_topic":
+        # Unsafe asks, prompt injection and homework stay refused; travel asks stay travel.
+        if (
+            match_injection(message)
+            or re.search(CHAT_INJECTION_CUE, text)
+            or re.search(UNSAFE_CUE, text)
+            or re.search(OFF_TOPIC, text)
+        ):
+            intent = "refusal"
+        elif re.search(PACKING_CUE, text):
+            intent = "packing"
+        elif re.search(STAY_CUE, text):
+            intent = "find_stay"
+        elif re.search(WEATHER_CUE, text):
+            intent = "weather"
+        elif out.place or re.search(TRAVEL_CUE, text):
+            intent = "search"
     if has_options and pick and intent != "select_option":
         intent = "select_option"  # "lấy cái thứ 1" with options on screen was change_stay 3/3
         word = pick.group(1)
@@ -323,7 +425,7 @@ def apply_guards(
         intent = "find_flight"  # flight-02: both airports read, then refused
     elif intent in {"search", "find_reel"} and re.search(OFF_TOPIC, text):
         intent = "refusal"  # "làm giúp bài văn tả cảnh biển" was a search 2/3 (v5)
-    elif intent == "plan_trip" and not re.search(PLAN_CUE, text):
+    elif intent == "plan_trip" and not plans_already and not re.search(PLAN_CUE, text):
         # "muốn đi vũng tàu 2n1đ", "đặt phòng giúp mình" are not "plan it for me" (v5).
         intent = "find_stay" if re.search(STAY_CUE, text) else "search" if out.place else "clarify"
         if intent == "clarify":
@@ -344,6 +446,13 @@ def apply_guards(
         intent = "find_stay"  # "ks da nang t7 nay" was read as a flight 3/3 with v4
     elif intent in SOCIAL_INTENTS and len(text.split()) > MAX_SOCIAL_WORDS:
         intent = "search"  # a long message is never only "ok" (review-02)
+    elif (
+        intent == "clarify"
+        and not out.place
+        and re.search(SUGGEST_CUE, text)
+        and re.search(TRAVEL_CUE, text)
+    ):
+        intent = "search"  # "vậy đi biển đâu cho chill" asks for ideas, not to be asked back
     elif intent in {"search", "clarify"} and out.place and re.search(STAY_CUE, text):
         intent = "find_stay"
     elif (
@@ -378,6 +487,13 @@ def apply_guards(
         if out.missing == "origin":
             # The origin was said; else to_understanding drops it (v5 gave SGN + missing=origin).
             fixed["missing"] = "none"
+    said_date = re.search(DATE_WORDS, text) or re.search(CALENDAR_DATE, message, re.IGNORECASE)
+    if (out.start or out.end) and not said_date:
+        # "2 ngày 1 đêm" alone got today as the start (Vũng Tàu report P2): no date was said,
+        # so the trip keeps the dates it already had.
+        fixed |= {"start": None, "end": None}
+    if intent == "plan_trip" and not out.meals_only and re.search(MEALS_CUE, text):
+        fixed["meals_only"] = True
     if intent == "plan_trip" and out.pace is None:
         fixed["pace"] = next((p for p, cue in PACE_CUES.items() if re.search(cue, text)), None)
     if intent == "post_itinerary":

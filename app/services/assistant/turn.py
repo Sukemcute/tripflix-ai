@@ -18,9 +18,10 @@ from pydantic import ValidationError
 
 from app.clients.places import CorePlaces, PlacesClient
 from app.clients.weather import WeatherClient
-from app.services.assistant import planner
+from app.services.assistant import planner, social
 from app.services.assistant.schemas import (
     Answer,
+    Awaiting,
     CardRef,
     ChatRequest,
     TripContext,
@@ -39,7 +40,8 @@ logger = logging.getLogger(__name__)
 SKILL_SECONDS = 3.0
 # Weather is two calls in a row (place, then forecast); a cold TLS start took ~1 s each
 # (live run 2026-11-16).
-SKILL_SECONDS_BY_NAME = {"weather": 6.0}
+# plan: points, forecast and maybe the hotel; 3 s timed out on staging (Vũng Tàu report P2).
+SKILL_SECONDS_BY_NAME = {"weather": 6.0, "plan": 7.0}
 SKILL_ERRORS = (TimeoutError, httpx.HTTPError, ValidationError, KeyError, ValueError, TypeError)
 LABELS = {
     "content": "kết quả tìm kiếm",
@@ -65,14 +67,10 @@ NEEDS_REEL = Answer(
     text="Bạn mở Tripi từ một reel, hoặc chọn một reel Tripi vừa gợi ý, để mình đọc lộ trình, "
     "review và khách sạn của reel đó nha.",
 )
-SOCIAL = {
-    "greeting": "Chào bạn, mình là Tripi nè! Bạn đang muốn đi đâu chơi?",
-    "identity": "Mình là Tripi, trợ lý du lịch của Tripflix. Mình tìm reel, lộ trình, chỗ ở, "
-    "chuyến bay, xem thời tiết và gợi ý đồ mang theo cho bạn.",
-    "thanks": "Không có gì nha! Cần gì thêm cứ nhắn Tripi.",
-    "ack": "Okie, cần gì thêm cứ nhắn Tripi nha!",
-    "goodbye": "Hẹn gặp lại nha, chúc bạn có chuyến đi thật vui!",
-}
+# Requests a clarifying question can be about; the answer to it finishes them (v2.1).
+AWAITABLE = {"search", "find_stay", "find_flight", "plan_trip", "weather", "packing", "find_reel"}
+# Turns answered without a Skill; their replies live in social.py (varied pools).
+SOCIAL = {"greeting", "identity", "thanks", "ack", "goodbye", "small_talk", "off_topic", "ask_why"}
 
 
 class Turn:
@@ -113,6 +111,21 @@ class Turn:
         self.planned_trip: TripContext | None = None
 
     async def answer(self) -> Answer:
+        answer = await self._answer()
+        move = self.parsed and social.choose_move(
+            self.parsed.intent, self.request.message, self.request.history
+        )
+        if not move and social.has_abuse(self.request.message):
+            # Rude but asking for something real: help, with one light reminder first.
+            note = social.reminder(self._seed())
+            answer.text = f"{note} {answer.text}"
+            answer.lead = f"{note} {answer.lead}" if answer.lead else None
+        return answer
+
+    def _seed(self) -> str:
+        return f"{self.request.conversation_id}:{len(self.request.history)}"
+
+    async def _answer(self) -> Answer:
         if self.request.action is not None:  # a button: no LLM was called
             return await self._plan_step(None)
         if self.cancel_destination:
@@ -197,20 +210,22 @@ class Turn:
         if shown:
             memory.last_cards = shown
         memory.asked = memory.asked or answer.kind == "clarify"
+        # What Tripi just asked for, so a short reply ("Vũng tàu") finishes it next turn.
+        memory.awaiting = None
+        if answer.kind == "clarify" and parsed is not None and parsed.intent in AWAITABLE:
+            missing = parsed.missing if parsed.missing in {"place", "dates"} else "place"
+            memory.awaiting = Awaiting.model_validate(
+                {"intent": parsed.intent, "missing": missing, "nights": parsed.nights}
+            )
         return memory
 
     # ---- social turns, refusals and questions: no Skill
 
     def _fixed(self, parsed: Understanding) -> Answer | None:
-        if parsed.intent in SOCIAL or parsed.intent == "small_talk":
-            place = self.memory.place
-            chips = (
-                [f"Thời tiết {place}", "Cần mang gì?"]
-                if place and parsed.intent in {"greeting", "ack"}
-                else []
-            )
-            return Answer(
-                kind="answer", text=SOCIAL.get(parsed.intent, SOCIAL["identity"]), suggestions=chips
+        move = social.choose_move(parsed.intent, self.request.message, self.request.history)
+        if move:
+            return social.social_answer(
+                move, place=self.memory.place, seed=self._seed(), history=self.request.history
             )
         if parsed.intent == "refusal":
             return Answer(
@@ -425,6 +440,22 @@ class Turn:
         if answer is None:
             return self._failed("plan")
         self.planned_trip = trip_planner.trip
+        if (
+            parsed is not None
+            and parsed.intent == "plan_trip"
+            and answer.kind == "no_result"
+            and not trip_planner.trip.days
+            and trip_planner.trip.place
+        ):
+            # No points with coordinates there (Hội An, live eval 17/11): show its reels instead
+            # of a dead end, and say why there is no day-by-day plan.
+            place = trip_planner.trip.place
+            found = await self._discover()
+            if found.kind == "answer":
+                note = f"Tripflix chưa có đủ điểm ở {place} để xếp lịch theo ngày, xem reel nè."
+                found.text = f"{note} {found.text}"
+                found.lead = f"{note} {found.lead}" if found.lead else note
+                return found
         return answer
 
     # ---- running Skills with their own deadline
