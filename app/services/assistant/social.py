@@ -22,6 +22,13 @@ LEXICON = Path(__file__).resolve().parents[2] / "lexicons" / "chat" / "abuse.v1.
 GREETING_TEXT = r"^(?:hi+|hell?o+|hey+|alo+|(?:xin )?chao(?: ban| tripi| cau| nha| ne)*)\W*$"
 REPEAT_AFTER = 2  # the third greeting (or same line) in a row is steered to travel [HIỆU CHỈNH]
 RECENT_USER_TURNS = 6
+# A rude message with one of these still asks for something; without them it is only venting.
+# "ve", "chuyen" alone fold "về", "chuyện": only as "vé máy bay", "chuyến bay" [HIỆU CHỈNH].
+REQUEST_CUE = (
+    r"\b(tim|kiem|dat|book|goi y|xep|lich trinh|lo trinh|ks|khach san|homestay|resort|cho o"
+    r"|phong|may bay|ve (may bay|xe)|chuyen (bay|di|xe)|thoi tiet|mang gi|reel|video"
+    r"|di dau|an gi|choi gi)\b"
+)
 
 POOLS: dict[str, list[str]] = {
     "greeting_intro": [
@@ -116,13 +123,24 @@ def _recent_user_texts(history: Sequence[Turn]) -> list[str]:
     return users[-RECENT_USER_TURNS:]
 
 
-def choose_move(intent: str, message: str, history: Sequence[Turn]) -> str | None:
+def asks_for_travel(message: str, place: str = "") -> bool:
+    """Whether a rude message still asks for something ("đm tìm ks vũng tàu đi")."""
+    text = normalize_text(message)
+    return bool(re.search(REQUEST_CUE, text) or (place and normalize_text(place) in text))
+
+
+def choose_move(
+    intent: str, message: str, history: Sequence[Turn], *, place: str = ""
+) -> str | None:
     """The kind of small-talk reply this turn needs, or None when it is a travel turn."""
     if intent == "ask_why":
         return "ask_why"
     text = normalize_text(message)
     is_abusive = has_abuse(message)
-    if intent not in SOCIAL_MOVES and not (is_abusive and intent in {"clarify", "refusal"}):
+    if is_abusive and not asks_for_travel(message, place):
+        # "cặc, chatbot như quần" with a Đà Lạt trip was a search 5/6 and showed reels (17/11).
+        return "abuse"
+    if intent not in SOCIAL_MOVES:
         return None
     if is_abusive:
         return "abuse"

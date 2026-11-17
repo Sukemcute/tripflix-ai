@@ -272,3 +272,32 @@ def test_a_card_title_already_in_the_sentence_is_not_written_twice():
     titles = {"r1": "Săn mây 4h sáng", "r2": ""}
     assert _name_refs("Có reel Săn mây 4h sáng [r1] nè", titles) == "Có reel Săn mây 4h sáng  nè"
     assert _name_refs("Xem [r1] nha", titles) == "Xem Săn mây 4h sáng nha"
+
+
+@pytest.mark.parametrize(
+    ("intent", "message", "place", "move"),
+    [
+        # Bảo, 17/11: with a Đà Lạt trip this was a search 5/6 and showed reels and hotels
+        ("search", "cặc, chatbot như quần", "Đà Lạt", "abuse"),
+        ("find_reel", "đm bot ngu", "", "abuse"),
+        ("find_stay", "đm tìm ks vũng tàu đi", "Vũng Tàu", None),
+        ("search", "vcl vũng tàu đẹp ko", "Vũng Tàu", None),
+        ("find_flight", "đm vé máy bay đắt vl", "", None),
+    ],
+)
+def test_venting_is_answered_with_a_reminder_not_a_search(intent, message, place, move):
+    assert social.choose_move(intent, message, [], place=place) == move
+
+
+def test_a_rude_message_without_a_request_shows_no_cards():
+    request = ChatRequest(conversation_id=uuid4(), message="cặc, chatbot như quần")
+    parsed = Understanding(intent="search", place="Đà Lạt", query="chatbot như quần")
+
+    async def go():
+        async with fake_core() as client:
+            turn = Turn(request, parsed, core=client, weather=FakeWeather(), today=TODAY)
+            return await turn.answer()
+
+    answer = asyncio.run(go())
+    assert answer.cards == [] and answer.facts[0]["move"] == "abuse"
+    assert answer.text.count("nhẹ nhàng") <= 1  # one reminder, not two

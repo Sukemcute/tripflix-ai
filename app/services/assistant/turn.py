@@ -113,7 +113,10 @@ class Turn:
     async def answer(self) -> Answer:
         answer = await self._answer()
         move = self.parsed and social.choose_move(
-            self.parsed.intent, self.request.message, self.request.history
+            self.parsed.intent,
+            self.request.message,
+            self.request.history,
+            place=self.parsed.place,
         )
         if not move and social.has_abuse(self.request.message):
             # Rude but asking for something real: help, with one light reminder first.
@@ -222,7 +225,9 @@ class Turn:
     # ---- social turns, refusals and questions: no Skill
 
     def _fixed(self, parsed: Understanding) -> Answer | None:
-        move = social.choose_move(parsed.intent, self.request.message, self.request.history)
+        move = social.choose_move(
+            parsed.intent, self.request.message, self.request.history, place=parsed.place
+        )
         if move:
             return social.social_answer(
                 move, place=self.memory.place, seed=self._seed(), history=self.request.history
