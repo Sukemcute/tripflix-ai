@@ -5,6 +5,7 @@ own adapter and breaker (Bảo, 2026-11-16: Controller on OpenAI, Responder on D
 """
 
 import json
+import logging
 from collections.abc import Callable
 from datetime import date
 from functools import cache
@@ -22,9 +23,11 @@ from app.services.assistant.controller import ControllerOutput, apply_guards, to
 from app.services.assistant.planner import today_in_vietnam
 from app.services.assistant.schemas import ChatRequest, Understanding
 from app.services.assistant.turn import REEL_KINDS
+from app.services.summary.injection import match_injection
 from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
 
+logger = logging.getLogger(__name__)
 Role = Literal["controller", "responder"]
 PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v4.md"
 
@@ -58,6 +61,9 @@ def build_understanding_input(
                 "hasReel": trip.reel_id is not None,
                 "lastCards": [{"ref": c.ref, "kind": c.kind} for c in trip.last_cards],
             },
+            # Rules that caught injection in comments (TF44) tag the message; the Controller
+            # still only names an intent, so the tag is a hint plus a log line, not a block.
+            "suspectedInjection": bool(match_injection(request.message)),
             "message": mask_pii(request.message),
             "history": [
                 {"role": turn.role, "text": mask_pii(turn.text)}
@@ -113,6 +119,9 @@ async def understand(
     request: ChatRequest, *, max_turns: int, on_usage: Callable[[LlmResult], None] | None = None
 ) -> tuple[Understanding, LlmResult]:
     """Raises on provider errors, cut output or invalid JSON: the caller falls back."""
+    groups = match_injection(request.message)
+    if groups:  # rule names only, never the message
+        logger.warning("chat.injection.suspected", extra={"groups": groups})
     result = await get_role_llm("controller").agenerate(
         PROMPT.read_text(encoding="utf-8"),
         build_understanding_input(request, max_turns=max_turns),
