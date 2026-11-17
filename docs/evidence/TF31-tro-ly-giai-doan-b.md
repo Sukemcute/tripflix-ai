@@ -92,7 +92,7 @@
 - Độ trễ Controller lần cuối: p50 2,57 giây, p95 4,25 giây. Hôm đó mạng tới OpenAI chậm: 5/336 lượt live và 3 lượt chain bị ReadTimeout, tính là sai.
 - Các ca còn lệch, không tính timeout:
   - `ctx-02` ("ks trong video này còn phòng"): ý định đúng, nhưng model ghi thừa `query`/`missing` ở 2/3 lần.
-  - Chain `reel-6.1`: "Quay lại lộ trình reel đó, ngày cuối đi đâu?" chưa chọn đúng ngày; "Đi Đà Lạt cần mang phụ kiện gì?" lệch thẻ. Hai lỗi này đã có từ v4.
+  - Chain `reel-6.1`: "Quay lại lộ trình reel đó, ngày cuối đi đâu?" chưa chọn đúng ngày; "Đi Đà Lạt cần mang phụ kiện gì?" lệch thẻ. **Lùi so với v4 + guard** (chain 5/5 chuỗi cũ); cần sửa tiếp ở task sau.
   - Chain `q2-rain-tshirt`: câu hỏi mặc gì sau thời tiết bị hiểu là hỏi thời tiết.
 - Guard thêm sau lần 2 (bắt từ eval): giữ nơi xuất phát khi model trả kèm "thiếu nơi xuất phát"; đọc nhịp đi ("đi nhiều chỗ", "thong thả"); "video này" khi chưa mở reel thì hỏi mở reel, không tìm reel.
 
