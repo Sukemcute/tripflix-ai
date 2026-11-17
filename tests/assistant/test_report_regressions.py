@@ -497,6 +497,11 @@ def test_reel_named_from_last_cards_is_the_one_opened():
          {"intent": "clarify", "missing": "place"}),
         ("xếp chuyến vũng tàu 2n1đ cho mình", {"intent": "plan_trip", "place": "Vũng Tàu"},
          False, {"intent": "plan_trip"}),
+        # Bảo on staging 17/11: these went to search and showed reels
+        ("Tôi muốn đi chơi Đà Nẵng, lên cho tôi lịch trình",
+         {"intent": "plan_trip", "place": "Đà Nẵng"}, False, {"intent": "plan_trip"}),
+        ("gợi ý lộ trình đà nẵng 3 ngày giúp mình", {"intent": "plan_trip", "place": "Đà Nẵng"},
+         False, {"intent": "plan_trip"}),
         ("mình ở sài gòn", {"intent": "change_transport", "to_city": "Vũng Tàu"}, False,
          {"from_city": "TP.HCM"}),
         ("đi đà nẵng từ hà nội bằng gì", {"intent": "change_transport", "to_city": "Đà Nẵng"},
