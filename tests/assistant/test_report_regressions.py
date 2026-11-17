@@ -35,6 +35,7 @@ from app.services.assistant.schemas import (
 )
 from app.services.assistant.skills import weather as weather_skill
 from app.services.assistant.turn import Turn
+from app.services.assistant.understand import build_understanding_input
 from app.services.assistant.verifier import verify
 from evals.assistant.run import controller_plan
 
@@ -714,3 +715,18 @@ def test_picking_an_option_on_screen_is_a_selection(message, ordinal):
     got = apply_guards(said, message, has_reel=False, has_options=True)
     assert (got.intent, got.card_ordinal) == ("select_option", ordinal)
     assert apply_guards(said, message, has_reel=False).intent == "change_stay"  # nothing shown
+
+
+def test_the_latest_message_comes_after_the_history():
+    # chain vung-tau-0A2 (17/11): with the message before the history, v5 answered the
+    # user's previous message ("đổi chỗ ở…" read as "mình ở sài gòn").
+    request = ChatRequest(
+        conversation_id=uuid4(),
+        message="đổi chỗ ở khác gần biển hơn",
+        history=[
+            HistoryTurn(role="user", text="mình ở sài gòn"),
+            HistoryTurn(role="assistant", text="Từ TP.HCM đi Vũng Tàu bạn có thể đi xe khách nè."),
+        ],
+    )
+    keys = list(json.loads(build_understanding_input(request)))
+    assert keys[-1] == "message" and keys.index("history") < keys.index("message")
