@@ -45,6 +45,11 @@
 - Model có lúc ghi `place` là chữ "null": guard coi "null", "none" là trống.
 - Model viết tên reel kèm mã ("Săn mây 4h sáng [r1]"), code lại thay mã bằng tên lần nữa: nay câu đã có tên thì chỉ bỏ mã.
 
+### 6c. Sửa sau khi Bảo test (17/11)
+- "Đi ăn ở đâu thì ngon" sau lịch Đà Nẵng bị Controller trả `plan_trip` 2/3 lần, và guard ở mục 1 giữ nguyên nên Tripi xếp lại lịch. Nay khi đang có lộ trình, guard chỉ giữ `plan_trip` nếu câu sửa lịch (đổi độ dài, chỉ nói thời lượng, lịch ăn uống). Test `test_a_plan_on_screen_does_not_turn_other_questions_into_a_new_plan`.
+- Câu này vẫn chưa ra quán: `/api/search` chưa có quán ăn và không nhận ra "Đà Nẵng"; Tripi cũng chưa hiện thẻ quán. Phần này Duy làm (nhánh `duy/TF11-index-diem-tham-quan`), Bảo chốt 17/11.
+- Chain chạy lại sau khi sửa: 97,7% (129/132), 4 chuỗi từ báo cáo đều đúng mọi lượt; 3 lượt trượt 1/3 lần ở `q2-rain-tshirt`, `reel-in-view`, `small-talk` (model tự điền nơi đến).
+
 ### 7. Giới hạn để test (chưa phải trần chính thức)
 - Lịch sử Controller đọc: khách và người đăng nhập đều 20 tin (trước 4 và 6). Request nhận tối đa 30 tin (trước 10).
 - Lượt/ngày: khách 300, người đăng nhập 500 (trước 5 và 40). Token/ngày: 1 triệu và 2 triệu (trước 20.000 và 150.000). Lượt/phút: 15 và 20.
@@ -62,7 +67,7 @@
 | Ca bổ sung: "Lên lịch trình tôi 3n2d" → "Vũng Tàu" → lịch 3N2Đ | Đạt | `test_a_short_answer_finishes_the_plan_tripi_asked_about`; chain `vt-report-tra-loi-ngan` |
 
 ## Kết quả kiểm tra
-- ruff, pyright sạch. `pytest`: **776 passed, 6 skipped**; `tests/test_chat.py` bản đã commit 17/17.
+- ruff, pyright sạch. `pytest`: **777 passed, 6 skipped**; `tests/test_chat.py` bản đã commit 17/17.
 - Eval ci: **112/112**.
 - Eval live (112 ca × 3) và chain (thêm `chains.v3.jsonl`: 4 chuỗi từ báo cáo và small talk):
 

@@ -73,6 +73,12 @@ def test_a_plan_on_screen_changes_length(message, said):
     assert guard(message, in_plan=True, **said).intent == "plan_trip"
 
 
+def test_a_plan_on_screen_does_not_turn_other_questions_into_a_new_plan():
+    # Bảo, 17/11: after a Đà Nẵng plan this re-planned the trip 2/3 instead of searching
+    said = {"intent": "plan_trip", "place": "Đà Nẵng", "nights": 2}
+    assert guard("Đi ăn ở đâu thì ngon", in_plan=True, **said).intent == "search"
+
+
 def test_without_a_plan_a_trip_length_is_still_a_search():
     got = guard("muon di vung tau 2n1d", intent="plan_trip", place="Vũng Tàu", nights=1)
     assert got.intent == "search"
