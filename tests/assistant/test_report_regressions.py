@@ -35,6 +35,7 @@ from app.services.assistant.schemas import (
 )
 from app.services.assistant.skills import weather as weather_skill
 from app.services.assistant.turn import Turn
+from app.services.assistant.understand import build_understanding_input
 from app.services.assistant.verifier import verify
 from evals.assistant.run import controller_plan
 
@@ -496,12 +497,25 @@ def test_reel_named_from_last_cards_is_the_one_opened():
          {"intent": "clarify", "missing": "place"}),
         ("xếp chuyến vũng tàu 2n1đ cho mình", {"intent": "plan_trip", "place": "Vũng Tàu"},
          False, {"intent": "plan_trip"}),
+        # Bảo on staging 17/11: these went to search and showed reels
+        ("Tôi muốn đi chơi Đà Nẵng, lên cho tôi lịch trình",
+         {"intent": "plan_trip", "place": "Đà Nẵng"}, False, {"intent": "plan_trip"}),
+        ("gợi ý lộ trình đà nẵng 3 ngày giúp mình", {"intent": "plan_trip", "place": "Đà Nẵng"},
+         False, {"intent": "plan_trip"}),
         ("mình ở sài gòn", {"intent": "change_transport", "to_city": "Vũng Tàu"}, False,
          {"from_city": "TP.HCM"}),
         ("đi đà nẵng từ hà nội bằng gì", {"intent": "change_transport", "to_city": "Đà Nẵng"},
          False, {"from_city": "Hà Nội"}),
         ("lộ trình video này", {"intent": "find_reel"}, True, {"intent": "post_itinerary"}),
         ("lộ trình video này", {"intent": "find_reel"}, False, {"intent": "post_itinerary"}),
+        # chain reel-6.1 with Controller v5 (17/11)
+        ("Quay lại lộ trình reel đó, ngày cuối đi đâu?",
+         {"intent": "post_itinerary", "reel_query": "đà lạt"}, True, {"reel_query": ""}),
+        ("Ngày thứ hai của video này có điểm gì?",
+         {"intent": "post_itinerary", "reel_query": "video này"}, True, {"reel_query": ""}),
+        ("Cho mình xem lịch trình của reel săn mây Đà Lạt vừa gợi ý",
+         {"intent": "post_itinerary", "reel_query": "săn mây Đà Lạt"}, False,
+         {"reel_query": "săn mây Đà Lạt"}),
         ("ks trong video này còn phòng cuối tuần không",
          {"intent": "check_room", "hotel_name": "ks trong video này còn phòng cuối tuần không"},
          True, {"hotel_name": ""}),
@@ -706,3 +720,18 @@ def test_picking_an_option_on_screen_is_a_selection(message, ordinal):
     got = apply_guards(said, message, has_reel=False, has_options=True)
     assert (got.intent, got.card_ordinal) == ("select_option", ordinal)
     assert apply_guards(said, message, has_reel=False).intent == "change_stay"  # nothing shown
+
+
+def test_the_latest_message_comes_after_the_history():
+    # chain vung-tau-0A2 (17/11): with the message before the history, v5 answered the
+    # user's previous message ("đổi chỗ ở…" read as "mình ở sài gòn").
+    request = ChatRequest(
+        conversation_id=uuid4(),
+        message="đổi chỗ ở khác gần biển hơn",
+        history=[
+            HistoryTurn(role="user", text="mình ở sài gòn"),
+            HistoryTurn(role="assistant", text="Từ TP.HCM đi Vũng Tàu bạn có thể đi xe khách nè."),
+        ],
+    )
+    keys = list(json.loads(build_understanding_input(request)))
+    assert keys[-1] == "message" and keys.index("history") < keys.index("message")

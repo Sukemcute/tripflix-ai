@@ -56,7 +56,8 @@ DAYS_COUNT_CUE = r"\b(may|bao nhieu) ngay\b"
 ALREADY_HAVE = r"\bco (?:san )?([a-z ]{2,30}?) roi\b"
 ITEM_LIMIT = r"\b(\d{1,2}) mon\b"
 # Live eval of Controller v5 (16/11).
-PLAN_CUE = r"\b(xep|sap xep|len lich|len ke hoach|lap ke hoach|len lo trinh|plan|lich trinh giup)\b"
+# "lên cho tôi lịch trình", "gợi ý lộ trình" were demoted to search with the narrower list (17/11).
+PLAN_CUE = r"\b(xep|sap xep|len lich|lich trinh|lo trinh|ke hoach|plan|itinerary)\b"
 THIS_REEL = r"\b(video|reel|clip) (nay|do)\b"
 OFF_TOPIC = r"\b(bai van|viet code|lap trinh|giai toan|bai tap|co phieu|chung khoan|crypto)\b"
 # "ở X" alone is also where you stay or eat ("ăn gì ở huế"): it needs a subject.
@@ -286,6 +287,11 @@ def apply_guards(
         fixed["hotel_name"] = ""
     if out.hotel_name and re.search(THIS_REEL, normalize_text(out.hotel_name)):
         fixed["hotel_name"] = ""  # "ks trong video này…" is the reel's hotel, not a name
+    if out.reel_query and re.search(THIS_REEL, text):
+        # "reel đó", "video này" point at the remembered reel. v5 filled reel_query with the
+        # whole sentence, "ngày cuối" or the city (chain reel-6.1, 3/5 on 17/11), and the name
+        # check then said the open reel was another one.
+        fixed["reel_query"] = ""
     hotel_name = fixed.get("hotel_name", out.hotel_name)
     intent = out.intent
     cities = "|".join(sorted(CITY_NAMES, key=len, reverse=True))

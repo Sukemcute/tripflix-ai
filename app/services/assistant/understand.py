@@ -29,7 +29,7 @@ from app.services.summary.schemas import strict_json_schema
 
 logger = logging.getLogger(__name__)
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v5.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v6.md"
 
 
 class LlmNotConfiguredError(Exception):
@@ -69,11 +69,13 @@ def build_understanding_input(
             # Rules that caught injection in comments (TF44) tag the message; the Controller
             # still only names an intent, so the tag is a hint plus a log line, not a block.
             "suspectedInjection": bool(match_injection(request.message)),
-            "message": mask_pii(request.message),
             "history": [
                 {"role": turn.role, "text": mask_pii(turn.text)}
                 for turn in request.history[-max_turns:]
             ],
+            # Latest last: with history after it, v5 answered the user's previous message
+            # (chain vung-tau-0A2, 3/3 on 17/11; 2/2 right once moved here).
+            "message": mask_pii(request.message),
         },
         ensure_ascii=False,
     )
