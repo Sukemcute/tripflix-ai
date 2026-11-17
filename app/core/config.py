@@ -150,17 +150,19 @@ class ChatSettings(BaseSettings):
     # Hashes the guest's IP into a counter key; set a long random value in every environment.
     chat_identity_salt: SecretStr = SecretStr("")
     chat_max_inflight: int = Field(default=30, ge=1)
-    chat_user_turns_per_minute: int = Field(default=6, ge=1)
-    chat_guest_turns_per_minute: int = Field(default=3, ge=1)
-    # A two-agent turn measured ~3,500 tokens (local run 2026-11-16), not the 2,500 estimated:
-    # 150k is ~40 turns (~0.01 USD a day), 20k is ~5 guest turns.
-    chat_user_daily_turns: int = Field(default=40, ge=1)
-    chat_user_daily_tokens: int = Field(default=150_000, ge=1)
-    chat_guest_daily_turns: int = Field(default=5, ge=1)
-    chat_guest_daily_tokens: int = Field(default=20_000, ge=1)
+    # TEST LIMITS (Bảo, 2026-11-17): wide on purpose while the team tests Tripi; the real
+    # caps are decided before release. A two-agent turn measured ~3,500 tokens (2026-11-16),
+    # so 2M tokens is ~570 turns. The system USD cap still stops runaway spend.
+    chat_user_turns_per_minute: int = Field(default=20, ge=1)
+    chat_guest_turns_per_minute: int = Field(default=15, ge=1)
+    chat_user_daily_turns: int = Field(default=500, ge=1)
+    chat_user_daily_tokens: int = Field(default=2_000_000, ge=1)
+    chat_guest_daily_turns: int = Field(default=300, ge=1)
+    chat_guest_daily_tokens: int = Field(default=1_000_000, ge=1)
     chat_system_daily_usd: float = Field(default=3.0, gt=0)
-    chat_user_history_turns: int = Field(default=6, ge=0, le=10)
-    chat_guest_history_turns: int = Field(default=4, ge=0, le=10)
+    # Messages (not pairs) the Controller reads; the request carries at most 30.
+    chat_user_history_turns: int = Field(default=20, ge=0, le=30)
+    chat_guest_history_turns: int = Field(default=20, ge=0, le=30)
 
     @property
     def resolved_jwks_url(self) -> str:

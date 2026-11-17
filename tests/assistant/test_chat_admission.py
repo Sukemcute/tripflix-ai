@@ -179,7 +179,15 @@ def chat_client(monkeypatch):
 
     monkeypatch.setattr(chat_api, "understand", classify)
     monkeypatch.setattr(chat_api, "publish_usage", AsyncMock())
-    settings = ChatSettings.model_construct(chat_llm_enabled=True, chat_guest_daily_turns=1)
+    settings = ChatSettings.model_construct(
+        chat_llm_enabled=True,
+        chat_guest_daily_turns=1,
+        # Defaults are wide for everyone while testing (2026-11-17): set the two apart here.
+        chat_guest_history_turns=4,
+        chat_user_history_turns=6,
+        # Small talk now has facts for the Responder: keep this test off the network.
+        chat_responder_enabled=False,
+    )
     gate = TurnGate(settings, None)
     app.dependency_overrides[get_chat_settings] = lambda: settings
     app.dependency_overrides[get_gate] = lambda: gate
