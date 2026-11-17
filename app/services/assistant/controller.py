@@ -59,7 +59,11 @@ ITEM_LIMIT = r"\b(\d{1,2}) mon\b"
 PLAN_CUE = r"\b(xep|sap xep|len lich|len ke hoach|lap ke hoach|len lo trinh|plan|lich trinh giup)\b"
 THIS_REEL = r"\b(video|reel|clip) (nay|do)\b"
 OFF_TOPIC = r"\b(bai van|viet code|lap trinh|giai toan|bai tap|co phieu|chung khoan|crypto)\b"
-ORIGIN_CUE = r"\b(?:o|tu|xuat phat tu|di tu)\s+({cities})\b"
+# "ở X" alone is also where you stay or eat ("ăn gì ở huế"): it needs a subject.
+ORIGIN_CUE = (
+    r"\b(?:(?:minh|em|toi|tui|tao|nha|nha minh)\s+(?:dang\s+)?o|tu|xuat phat tu|di tu)"
+    r"\s+({cities})\b"
+)
 PICK_CUE = r"\b(?:lay|chon)\b(?:\s+\w+){0,2}?\s+(?:thu\s+)?(\d|mot|nhat|hai|ba|bon|dau tien)\b"
 PICK_WORDS = {"mot": 1, "nhat": 1, "dau tien": 1, "hai": 2, "ba": 3, "bon": 4}
 # Cities people name as a starting point, folded; the value is the name Core and the catalog know.
@@ -281,6 +285,9 @@ def apply_guards(
     intent = out.intent
     cities = "|".join(sorted(CITY_NAMES, key=len, reverse=True))
     origin = re.search(ORIGIN_CUE.format(cities=cities), text)
+    destination = normalize_text(out.to_city or out.place)
+    if origin and destination and normalize_text(CITY_NAMES[origin.group(1)]) == destination:
+        origin = None  # where you go is not where you start
     pick = re.search(PICK_CUE, text)
     if has_options and pick and intent != "select_option":
         intent = "select_option"  # "lấy cái thứ 1" with options on screen was change_stay 3/3
@@ -353,8 +360,11 @@ def apply_guards(
         if found:
             word = found.group(1)
             fixed["itinerary_day"] = int(word) if word.isdigit() else DAY_WORDS[word]
-    if intent == "change_transport" and not out.from_city and origin:
+    is_trip_leg = intent in {"change_transport", "find_flight"}
+    if is_trip_leg and not out.from_city and not out.from_airport and origin:
         fixed["from_city"] = CITY_NAMES[origin.group(1)]  # "mình ở sài gòn": 0/3 with v5
+        if out.missing == "origin":
+            fixed["missing"] = "none"  # else to_understanding drops the city just read
     if intent == "post_itinerary":
         # A reel's days are numbered from 1; a date here would only be "ngay 2" misread.
         fixed |= {"start": None, "end": None, "day_ref": "none"}

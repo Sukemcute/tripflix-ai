@@ -507,6 +507,16 @@ def test_reel_named_from_last_cards_is_the_one_opened():
         ("làm giúp bài văn tả cảnh biển", {"intent": "search"}, False, {"intent": "refusal"}),
         ("mình ở sài gòn", {"intent": "plan_trip", "place": "Vũng Tàu"}, False,
          {"intent": "change_transport", "from_city": "TP.HCM"}),
+        # live eval of Controller v5, second run (17/11)
+        ("mình ở sài gòn",
+         {"intent": "change_transport", "to_city": "Vũng Tàu", "missing": "origin"},
+         False, {"from_city": "TP.HCM", "missing": "none"}),
+        ("tối 21/11 ở vũng tàu chỗ nào ok", {"intent": "find_stay", "place": "Vũng Tàu"}, False,
+         {"intent": "find_stay", "from_city": ""}),
+        ("ăn gì ở Huế cho đúng vị", {"intent": "search", "place": "Huế"}, False,
+         {"intent": "search", "from_city": ""}),
+        ("đi đà nẵng từ hà nội bằng gì", {"intent": "find_flight", "to_city": "Đà Nẵng"}, False,
+         {"from_city": "Hà Nội"}),
         ("Thời tiết Đà Lạt thứ Bảy thế nào?", {"intent": "post_itinerary"}, True,
          {"intent": "weather"}),
         # live eval of Controller v4 (16/11)
