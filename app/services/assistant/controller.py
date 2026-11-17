@@ -286,6 +286,11 @@ def apply_guards(
         fixed["hotel_name"] = ""
     if out.hotel_name and re.search(THIS_REEL, normalize_text(out.hotel_name)):
         fixed["hotel_name"] = ""  # "ks trong video này…" is the reel's hotel, not a name
+    if out.reel_query and re.search(THIS_REEL, text):
+        # "reel đó", "video này" point at the remembered reel. v5 filled reel_query with the
+        # whole sentence, "ngày cuối" or the city (chain reel-6.1, 3/5 on 17/11), and the name
+        # check then said the open reel was another one.
+        fixed["reel_query"] = ""
     hotel_name = fixed.get("hotel_name", out.hotel_name)
     intent = out.intent
     cities = "|".join(sorted(CITY_NAMES, key=len, reverse=True))
