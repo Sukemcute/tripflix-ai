@@ -134,5 +134,7 @@ async def understand(
         request.context_post_id
         or (trip and (trip.reel_id or any(c.kind in REEL_KINDS for c in trip.last_cards)))
     )
-    out = apply_guards(out, request.message, has_reel=has_reel)
+    out = apply_guards(
+        out, request.message, has_reel=has_reel, has_options=bool(trip and trip.pending)
+    )
     return to_understanding(out, trip, today_in_vietnam()), result
