@@ -66,6 +66,11 @@ ORIGIN_CUE = (
 )
 PICK_CUE = r"\b(?:lay|chon)\b(?:\s+\w+){0,2}?\s+(?:thu\s+)?(\d|mot|nhat|hai|ba|bon|dau tien)\b"
 PICK_WORDS = {"mot": 1, "nhat": 1, "dau tien": 1, "hai": 2, "ba": 3, "bon": 4}
+# v5 left pace null for "đi nhiều chỗ" 3/3 (17/11) although the prompt has that very example.
+PACE_CUES = {
+    "packed": r"\b(di nhieu cho|nhieu cho|nhieu diem|day lich|kin lich|di het)\b",
+    "relaxed": r"\b(thong tha|nhe nhang|cham rai|khong voi|chill)\b",
+}
 # Cities people name as a starting point, folded; the value is the name Core and the catalog know.
 CITY_NAMES = {
     "sai gon": "TP.HCM", "sg": "TP.HCM", "hcm": "TP.HCM", "tp hcm": "TP.HCM", "tphcm": "TP.HCM",
@@ -317,12 +322,12 @@ def apply_guards(
         intent = "find_stay" if re.search(STAY_CUE, text) else "search" if out.place else "clarify"
         if intent == "clarify":
             fixed["missing"] = "place"
-    elif (
-        intent in {"find_reel", "search"}
-        and has_reel
-        and (out.uses_context_post or re.search(THIS_REEL, text))
+    elif intent in {"find_reel", "search"} and (
+        (has_reel and out.uses_context_post) or re.search(THIS_REEL, text)
     ):
-        intent = "post_itinerary"  # "video này ở đâu vậy" in a reel was find_reel 3/3
+        # "video này ở đâu vậy" in a reel was find_reel 3/3. "Video này" names one reel even
+        # when none is open (trip-03, 0/3 on 17/11): the itinerary step then asks to open it.
+        intent = "post_itinerary"
     elif intent == "check_room" and not hotel_name and not has_reel:
         intent = "find_stay"  # no reel to read a hotel from: the user means stays there
     elif (
@@ -361,10 +366,14 @@ def apply_guards(
             word = found.group(1)
             fixed["itinerary_day"] = int(word) if word.isdigit() else DAY_WORDS[word]
     is_trip_leg = intent in {"change_transport", "find_flight"}
-    if is_trip_leg and not out.from_city and not out.from_airport and origin:
-        fixed["from_city"] = CITY_NAMES[origin.group(1)]  # "mình ở sài gòn": 0/3 with v5
+    if is_trip_leg and origin:
+        if not out.from_city:
+            fixed["from_city"] = CITY_NAMES[origin.group(1)]  # "mình ở sài gòn": 0/3 with v5
         if out.missing == "origin":
-            fixed["missing"] = "none"  # else to_understanding drops the city just read
+            # The origin was said; else to_understanding drops it (v5 gave SGN + missing=origin).
+            fixed["missing"] = "none"
+    if intent == "plan_trip" and out.pace is None:
+        fixed["pace"] = next((p for p, cue in PACE_CUES.items() if re.search(cue, text)), None)
     if intent == "post_itinerary":
         # A reel's days are numbered from 1; a date here would only be "ngay 2" misread.
         fixed |= {"start": None, "end": None, "day_ref": "none"}
