@@ -212,6 +212,8 @@ class Understanding(WireModel):
     pace: Literal["relaxed", "packed"] | None = None
     # "lộ trình ăn uống", "chỉ quán ăn": food and drink stops only, by meal.
     meals_only: bool = False
+    # v8 (2026-11-17): the tone, read by the Controller (the word list only backs it up).
+    is_rude: bool = False
     # Set by code when a date the user gave is in the past (no weather history yet).
     is_past: bool = False
 

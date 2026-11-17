@@ -112,13 +112,16 @@ class Turn:
 
     async def answer(self) -> Answer:
         answer = await self._answer()
-        move = self.parsed and social.choose_move(
-            self.parsed.intent,
+        parsed = self.parsed
+        move = parsed and social.choose_move(
+            parsed.intent,
             self.request.message,
             self.request.history,
-            place=self.parsed.place,
+            said_rude=parsed.is_rude,
+            has_request=social.names_its_target(self.request.message, parsed),
         )
-        if not move and social.has_abuse(self.request.message):
+        rude = parsed is not None and social.is_rude(self.request.message, said_rude=parsed.is_rude)
+        if not move and rude:
             # Rude but asking for something real: help, with one light reminder first.
             note = social.reminder(self._seed())
             answer.text = f"{note} {answer.text}"
@@ -226,7 +229,11 @@ class Turn:
 
     def _fixed(self, parsed: Understanding) -> Answer | None:
         move = social.choose_move(
-            parsed.intent, self.request.message, self.request.history, place=parsed.place
+            parsed.intent,
+            self.request.message,
+            self.request.history,
+            said_rude=parsed.is_rude,
+            has_request=social.names_its_target(self.request.message, parsed),
         )
         if move:
             return social.social_answer(

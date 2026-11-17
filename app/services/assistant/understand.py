@@ -29,7 +29,7 @@ from app.services.summary.schemas import strict_json_schema
 
 logger = logging.getLogger(__name__)
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v7.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v8.md"
 
 
 class LlmNotConfiguredError(Exception):

@@ -197,6 +197,7 @@ class ControllerOutput(BaseModel):
     stop_name: str
     pace: Literal["relaxed", "packed"] | None
     meals_only: bool
+    is_rude: bool
 
 
 def build_date(day_month: DayMonth | None, today: date) -> date | None:
@@ -302,6 +303,7 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         stop_name=out.stop_name.strip()[:120],
         pace=out.pace,
         meals_only=out.meals_only,
+        is_rude=out.is_rude,
         is_past=(start is not None and start < today) or out.day_ref == "yesterday",
     )
     if out.missing == "origin":
