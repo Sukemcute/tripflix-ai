@@ -7,7 +7,7 @@ import pytest
 from evals.assistant.run import load_cases, read_jsonl, run_ci
 
 
-@pytest.mark.parametrize(("version", "count"), [("v1", 40), ("v2", 30)])
+@pytest.mark.parametrize(("version", "count"), [("v1", 40), ("v2", 30), ("v3", 30)])
 def test_every_labelled_case_matches_in_ci_mode(version, count):
     cases = load_cases(version)
     assert len(cases) == count

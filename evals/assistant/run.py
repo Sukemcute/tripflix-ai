@@ -5,9 +5,13 @@
     uv run python -m evals.assistant.run --mode chain    # multi-turn chains, real Controller
 
 ci    checks the code after the Controller (planner, Skills, cards, clarify-once) against the
-      labelled cases with a fake Core and fake weather: cases.v1.jsonl (40) and
-      cases.v2.jsonl (30 defects of the Expo Web report). v2 cases give the Controller's
-      own output (day and month, no year) and the requests Core must, or must never, get.
+      labelled cases with a fake Core and fake weather: cases.v1.jsonl (40),
+      cases.v2.jsonl (30 defects of the Expo Web report) and cases.v3.jsonl (30 more so the
+      set reaches the 100 scenarios of the PRD). v2 and v3 cases give the Controller's own
+      output (day and month, no year) and the requests Core must, or must never, get.
+search the 50 search messages of the PRD (search.v1.jsonl) through the real Controller and
+      the real Core at CORE_API_URL: right on the first try when one of the first 3 results
+      names the place the user meant (title, subtitle or location). PRD target: 80%.
 live  asks the real Controller three times per case and scores the intent (a case may accept
       other intents in "alsoOk" when the code still ends the same way) and, in v2, the slots:
       accuracy over all runs and pass^3 (all three right; tau-bench, Yao et al. 2024), plus
@@ -180,8 +184,9 @@ CORE = {
 SUGGEST = {
     "place": {"items": [{"type": "place", "refId": "place-1"}]},
     "hotel": {"items": [{"type": "hotel", "refId": "h2", "name": "Vinpearl Luxury Nha Trang"}]},
-    "airport": {"items": [{"type": "airport", "refId": "HAN", "name": "Sân bay Nội Bài"}]},
 }
+# Like Core's suggest index: one airport per city that has one; Vũng Tàu has none.
+AIRPORT_BY_CITY = {"TP.HCM": "SGN", "Hà Nội": "HAN", "Đà Nẵng": "DAD", "Đà Lạt": "DLI"}
 
 
 def fake_core(calls: list[tuple[str, dict]] | None = None) -> httpx.AsyncClient:
@@ -189,6 +194,10 @@ def fake_core(calls: list[tuple[str, dict]] | None = None) -> httpx.AsyncClient:
         params = dict(request.url.params)
         if calls is not None:
             calls.append((request.url.path, params))
+        if request.url.path == "/api/suggest" and params.get("types") == "airport":
+            code = AIRPORT_BY_CITY.get(params.get("q", ""))
+            items = [{"type": "airport", "refId": code, "name": f"Sân bay {code}"}] if code else []
+            return httpx.Response(200, json={"items": items})
         if request.url.path == "/api/suggest":
             return httpx.Response(200, json=SUGGEST.get(params.get("types", ""), {"items": []}))
         for prefix, body in CORE.items():
@@ -345,6 +354,47 @@ async def run_chain(chains: list[dict], runs: int) -> int:
     return 0
 
 
+TOP_RESULTS = 3
+
+
+async def run_search(queries: list[dict]) -> int:
+    """PRD: search right on the first try >= 80%. Needs .env (Controller) and a running Core."""
+    from app.api.chat import get_core_client  # noqa: PLC0415  # needs .env
+    from app.services.assistant.understand import understand  # noqa: PLC0415
+
+    misses = []
+    async with get_core_client() as core:
+        for query in queries:
+            request = ChatRequest.model_validate(
+                {
+                    "conversationId": "00000000-0000-4000-8000-000000000000",
+                    "message": query["message"],
+                }
+            )
+            try:
+                parsed, _ = await understand(request, max_turns=6)
+                q = parsed.query or query["message"]
+                response = await core.post("/api/search", json={"q": q})
+                response.raise_for_status()
+                items = [i for s in response.json().get("sections") or [] for i in s["items"]]
+            except Exception as error:  # noqa: BLE001  # an eval run reports, never stops
+                misses.append((query["id"], query["message"], type(error).__name__))
+                continue
+            top = [
+                normalize_text(
+                    " ".join(str(i.get(k) or "") for k in ("title", "subtitle", "location"))
+                )
+                for i in items[:TOP_RESULTS]
+            ]
+            if not any(word in text for word in query["anyOf"] for text in top):
+                misses.append((query["id"], query["message"], f"q={q!r} top={top}"))
+    right = len(queries) - len(misses)
+    print(f"search right on the first try: {right}/{len(queries)} = {right / len(queries):.0%}")
+    for query_id, message, why in misses:
+        print(f"  MISS {query_id} «{message}»: {why[:200]}")
+    return 0
+
+
 class _DroppedRules(logging.Handler):
     """Collects the Verifier's dropped-sentence counts that respond() logs."""
 
@@ -407,13 +457,15 @@ async def run_ab(cases: list[dict]) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["ci", "live", "chain", "ab"], default="ci")
-    parser.add_argument("--cases", choices=["v1", "v2", "all"], default="all")
+    parser.add_argument("--mode", choices=["ci", "live", "chain", "search", "ab"], default="ci")
+    parser.add_argument("--cases", choices=["v1", "v2", "v3", "all"], default="all")
     parser.add_argument("--runs", type=int, default=3)
     args = parser.parse_args()
     if args.mode == "chain":
         return asyncio.run(run_chain(read_jsonl("chains.v1.jsonl"), args.runs))
-    versions = ["v1", "v2"] if args.cases == "all" else [args.cases]
+    if args.mode == "search":
+        return asyncio.run(run_search(read_jsonl("search.v1.jsonl")))
+    versions = ["v1", "v2", "v3"] if args.cases == "all" else [args.cases]
     cases = [case for version in versions for case in load_cases(version)]
     if args.mode == "ci":
         return asyncio.run(run_ci(cases))
