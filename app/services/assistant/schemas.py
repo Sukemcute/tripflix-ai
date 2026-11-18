@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -52,6 +52,13 @@ class DraftChoice(WireModel):
 class DraftTransport(WireModel):
     mode: Literal["flight", "bus"]
     summary: str = Field(max_length=160)
+    ref: str = Field(default="", max_length=4)
+    flight_id: str | None = Field(default=None, max_length=100)
+    fare_code: str | None = Field(default=None, max_length=40)
+    flight_date: date | None = None
+    from_airport: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    to_airport: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    passengers: int | None = Field(default=None, ge=1, le=9)
 
 
 class DraftOp(WireModel):
@@ -76,7 +83,14 @@ class Awaiting(WireModel):
     """The request Tripi asked a question about and still has to finish."""
 
     intent: Literal[
-        "search", "find_stay", "find_flight", "plan_trip", "weather", "packing", "find_reel"
+        "search",
+        "find_stay",
+        "find_flight",
+        "plan_trip",
+        "weather",
+        "packing",
+        "find_reel",
+        "change_transport",
     ]
     missing: Literal["place", "dates", "origin"] = "place"
     nights: int | None = Field(default=None, ge=0, le=30)
@@ -110,6 +124,7 @@ class TripContext(WireModel):
     transport: DraftTransport | None = None
     days: list[list[DraftStop]] = Field(default_factory=list, max_length=7)
     pending: list[DraftChoice] = Field(default_factory=list, max_length=4)
+    pending_flights: list[DraftTransport] = Field(default_factory=list, max_length=5)
     ops: list[DraftOp] = Field(default_factory=list, max_length=5)
     # v2.1 (2026-11-17, Vũng Tàu report): what Tripi just asked for, so a short answer
     # ("Vũng tàu") finishes that request; and a plan of food stops only.
@@ -159,6 +174,7 @@ class Understanding(WireModel):
         "remove_stop",
         "undo",
         "select_option",
+        "confirm_booking",
         # v2.1 (2026-11-17): harmless chit-chat outside travel, "why" about the last reply
         "off_topic",
         "ask_why",
@@ -262,6 +278,23 @@ class CardLine(WireModel):
     ref: str | None = None
 
 
+class CardAction(WireModel):
+    type: Literal["select", "book"]
+    label: str = Field(min_length=1, max_length=40)
+    ref: str | None = Field(default=None, max_length=4)
+    path: Literal["/trip-builder"] | None = None
+    params: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def check_target(self) -> "CardAction":
+        if self.type == "select":
+            if not self.ref or self.path is not None or self.params is not None:
+                raise ValueError("select requires only a ref")
+        elif self.path is None or self.params is None or self.ref is not None:
+            raise ValueError("book requires a path and params")
+        return self
+
+
 class Card(WireModel):
     ref: str
     id: str
@@ -288,6 +321,7 @@ class Card(WireModel):
     # v3 cards without a price: weather days, a packing list, itinerary days.
     lines: list[CardLine] | None = None
     source: str | None = None  # attribution the app must show, e.g. "Open-Meteo.com"
+    actions: list[CardAction] | None = None
 
 
 class Answer(WireModel):

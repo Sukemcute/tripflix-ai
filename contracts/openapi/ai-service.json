@@ -13,7 +13,8 @@
               "plan_trip",
               "weather",
               "packing",
-              "find_reel"
+              "find_reel",
+              "change_transport"
             ],
             "title": "Intent",
             "type": "string"
@@ -46,6 +47,310 @@
           "intent"
         ],
         "title": "Awaiting",
+        "type": "object"
+      },
+      "Card": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CardAction"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Actions"
+          },
+          "checkIn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Checkin"
+          },
+          "checkOut": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Checkout"
+          },
+          "currency": {
+            "const": "VND",
+            "default": "VND",
+            "title": "Currency",
+            "type": "string"
+          },
+          "fareCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Farecode"
+          },
+          "flightDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Flightdate"
+          },
+          "fromAirport": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fromairport"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CardLine"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lines"
+          },
+          "observedAt": {
+            "format": "date-time",
+            "title": "Observedat",
+            "type": "string"
+          },
+          "passengers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Passengers"
+          },
+          "priceBasis": {
+            "enum": [
+              "indicative_per_night",
+              "estimated_per_person",
+              "per_night_per_room",
+              "per_ticket",
+              "unavailable"
+            ],
+            "title": "Pricebasis",
+            "type": "string"
+          },
+          "priceFrom": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricefrom"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "toAirport": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Toairport"
+          },
+          "totalPrice": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Totalprice"
+          }
+        },
+        "required": [
+          "ref",
+          "id",
+          "kind",
+          "title",
+          "priceFrom",
+          "priceBasis",
+          "observedAt"
+        ],
+        "title": "Card",
+        "type": "object"
+      },
+      "CardAction": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Params"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "const": "/trip-builder",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ref"
+          },
+          "type": {
+            "enum": [
+              "select",
+              "book"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "label"
+        ],
+        "title": "CardAction",
+        "type": "object"
+      },
+      "CardLine": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ref"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "CardLine",
         "type": "object"
       },
       "CardRef": {
@@ -367,6 +672,54 @@
       "DraftTransport": {
         "additionalProperties": false,
         "properties": {
+          "fareCode": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Farecode"
+          },
+          "flightDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flightdate"
+          },
+          "flightId": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flightid"
+          },
+          "fromAirport": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fromairport"
+          },
           "mode": {
             "enum": [
               "flight",
@@ -375,10 +728,41 @@
             "title": "Mode",
             "type": "string"
           },
+          "passengers": {
+            "anyOf": [
+              {
+                "maximum": 9.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passengers"
+          },
+          "ref": {
+            "default": "",
+            "maxLength": 4,
+            "title": "Ref",
+            "type": "string"
+          },
           "summary": {
             "maxLength": 160,
             "title": "Summary",
             "type": "string"
+          },
+          "toAirport": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Toairport"
           }
         },
         "required": [
@@ -625,6 +1009,14 @@
             },
             "maxItems": 4,
             "title": "Pending",
+            "type": "array"
+          },
+          "pendingFlights": {
+            "items": {
+              "$ref": "#/components/schemas/DraftTransport"
+            },
+            "maxItems": 5,
+            "title": "Pendingflights",
             "type": "array"
           },
           "place": {
