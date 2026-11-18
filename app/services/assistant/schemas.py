@@ -59,6 +59,8 @@ class DraftTransport(WireModel):
     from_airport: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     to_airport: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     passengers: int | None = Field(default=None, ge=1, le=9)
+    depart_time: str | None = None
+    arrive_time: str | None = None
 
 
 class DraftOp(WireModel):
@@ -92,7 +94,7 @@ class Awaiting(WireModel):
         "find_reel",
         "change_transport",
     ]
-    missing: Literal["place", "dates", "origin"] = "place"
+    missing: Literal["place", "dates", "origin", "origin_dates"] = "place"
     nights: int | None = Field(default=None, ge=0, le=30)
 
 
@@ -122,6 +124,7 @@ class TripContext(WireModel):
     interests: list[str] = Field(default_factory=list, max_length=5)
     stay: DraftChoice | None = None
     transport: DraftTransport | None = None
+    return_transport: DraftTransport | None = None
     days: list[list[DraftStop]] = Field(default_factory=list, max_length=7)
     pending: list[DraftChoice] = Field(default_factory=list, max_length=4)
     pending_flights: list[DraftTransport] = Field(default_factory=list, max_length=5)
@@ -272,6 +275,7 @@ class SearchResponse(BaseModel):
 
 
 class CardLine(WireModel):
+    service: Literal["flight", "stay"] | None = None
     label: str
     detail: str = ""
     # An option the user can pick with a button (comparison card); sent back as action.ref.
@@ -318,6 +322,8 @@ class Card(WireModel):
     to_airport: str | None = None
     passengers: int | None = None
     fare_code: str | None = None
+    depart_time: str | None = None
+    arrive_time: str | None = None
     # v3 cards without a price: weather days, a packing list, itinerary days.
     lines: list[CardLine] | None = None
     source: str | None = None  # attribution the app must show, e.g. "Open-Meteo.com"
@@ -367,6 +373,7 @@ class FlightOffer(BaseModel):
     name: str = Field(min_length=1)
     flightKey: str | None = None
     departTime: str | None = None  # "HH:MM", Vietnam time (core FlightOfferDto)
+    arriveTime: str | None = None
     isAvailable: bool
     priceFrom: float | None = Field(ge=0, allow_inf_nan=False)
     fares: list[FlightFare] = Field(default_factory=list)

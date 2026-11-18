@@ -98,6 +98,21 @@ def _by_time_of_day(stops: list[PointOfInterest], *, is_rainy: bool) -> list[Poi
 Slot = Literal["sáng", "trưa", "chiều", "tối"]
 
 
+def travel_slots(*, arrival: str | None = None, departure: str | None = None) -> set[Slot]:
+    """Conservative half-day windows; leave two hours before the return flight."""
+    allowed: set[Slot] = {"sáng", "trưa", "chiều", "tối"}
+    if arrival:
+        if arrival >= "17:00":
+            allowed &= {"tối"}
+        elif arrival >= "12:00":
+            allowed &= {"chiều", "tối"}
+    if departure:
+        hours = {"sáng": 8, "trưa": 12, "chiều": 14, "tối": 18}
+        hour, minute = map(int, departure.split(":"))
+        allowed = {slot for slot in allowed if hours[slot] * 60 + 120 <= hour * 60 + minute}
+    return allowed
+
+
 def _slots(count: int) -> list[Slot]:
     morning = max(1, count // 2) if count else 0
     slots: list[Slot] = []

@@ -55,7 +55,9 @@ def test_a_short_answer_finishes_the_plan_tripi_asked_about():
 
 
 def test_any_other_answer_clears_what_tripi_was_waiting_for():
-    _, trip, _ = run(Understanding(intent="plan_trip", place="Vũng Tàu", nights=1))
+    _, trip, _ = run(
+        Understanding(intent="plan_trip", place="Vũng Tàu", nights=1), message="cứ lên trước"
+    )
     assert trip.awaiting is None
 
 
@@ -111,6 +113,7 @@ def test_meals_only_plan_has_breakfast_lunch_dinner_and_no_sights():
     _, trip, _ = run(
         Understanding(intent="plan_trip", place="Vũng Tàu", nights=1, meals_only=True),
         places=FakePlaces([*POINTS, *FOOD]),
+        message="cứ lên trước",
     )
     sights = {p.id for p in POINTS if p.kind == "see"}
     assert trip.meals_only is True and len(trip.days) == 2
@@ -245,7 +248,7 @@ def test_thanks_after_a_checklist_is_thanks():
 
 
 def test_a_city_without_points_shows_its_reels_instead_of_a_dead_end():
-    request = ChatRequest(conversation_id=uuid4(), message="lich trinh hoi an 3 ngay")
+    request = ChatRequest(conversation_id=uuid4(), message="lich trinh hoi an 3 ngay, cứ lên trước")
     parsed = Understanding(intent="plan_trip", place="Hội An", nights=2, query="Hội An")
 
     async def go():

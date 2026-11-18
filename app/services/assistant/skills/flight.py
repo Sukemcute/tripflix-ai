@@ -29,6 +29,8 @@ def draft_flights(cards: list[Card]) -> list[DraftTransport]:
             from_airport=c.from_airport,
             to_airport=c.to_airport,
             passengers=c.passengers,
+            depart_time=c.depart_time,
+            arrive_time=c.arrive_time,
         )
         for c in cards
         if c.kind == "flight"
@@ -62,7 +64,13 @@ async def _airport_or_answer(
     return str(airports[0]["refId"])
 
 
-async def search_flights(core: httpx.AsyncClient, understood: Understanding) -> Answer:
+async def search_flights(
+    core: httpx.AsyncClient,
+    understood: Understanding,
+    *,
+    latest: bool = False,
+    daytime: bool = False,
+) -> Answer:
     # The LLM guesses codes badly for "bay ra hn"; Core knows each city's airport (T8).
     origins = (
         [{"refId": understood.from_airport}]
@@ -152,6 +160,10 @@ async def search_flights(core: httpx.AsyncClient, understood: Understanding) -> 
     # said there was none after 15:00 (Expo Web report I08, I09).
     window = _window_text(understood)
     offers = _unique([o for o in offers if _in_window(o.departTime, understood)])
+    if daytime:
+        offers = [o for o in offers if o.arriveTime is None or (_minutes(o.arriveTime) or 0) >= 420]
+    if latest:
+        offers.reverse()
     if not offers:
         return Answer(
             kind="no_result",
@@ -185,6 +197,8 @@ async def search_flights(core: httpx.AsyncClient, understood: Understanding) -> 
                     to_airport=destination,
                     passengers=understood.adults,
                     fare_code=fare.code,
+                    depart_time=offer.departTime,
+                    arrive_time=offer.arriveTime,
                     actions=[CardAction(type="select", label="Chọn chuyến này", ref="r1")],
                 )
             ],
@@ -207,6 +221,8 @@ async def search_flights(core: httpx.AsyncClient, understood: Understanding) -> 
                 # The app opens its flight screen with these; without it a party of 2 became 1.
                 passengers=understood.adults,
                 fare_code=next((f.code for f in offer.fares if f.totalPrice is not None), None),
+                depart_time=offer.departTime,
+                arrive_time=offer.arriveTime,
                 actions=[CardAction(type="select", label="Chọn chuyến này", ref=f"r{i}")],
             )
             for i, offer in enumerate(offers[:5], 1)

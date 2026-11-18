@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.services.assistant.planner import PLAN_FIRST_CUE
 from app.services.assistant.schemas import Awaiting, TripContext, Understanding
 from app.services.summary.injection import match_injection
 from app.services.summary.vi_text import normalize_text
@@ -110,6 +111,9 @@ THANKS_ONLY = r"(cam on|camon|thanks|thank you|thank|tks|thanks ban)( (nha|nhe|b
 WHY_CUE = r"^(tai sao|sao (vay|the|lai|khong|ko)|vi sao|why|la sao)\b"
 # A reply to Tripi's question is short: "Vũng tàu", "3 ngày 2 đêm", "từ sài gòn".
 AWAIT_MAX_WORDS = 6
+# An answer with both origin and day runs longer: "mình đi từ Sài Gòn, ngày 21/11" (7 words)
+# was dropped and Tripi asked again (18/11) [HIỆU CHỈNH].
+AWAIT_TRIP_MAX_WORDS = 10
 # v5 left pace null for "đi nhiều chỗ" 3/3 (17/11) although the prompt has that very example.
 PACE_CUES = {
     "packed": r"\b(di nhieu cho|nhieu cho|nhieu diem|day lich|kin lich|di het)\b",
@@ -277,6 +281,9 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
     trip = trip or TripContext()
     start = build_date(out.start, today)
     end = build_end(out.end, start, today)
+    if start and end and end <= start and out.nights:
+        # "từ TP.HCM, 21/11" for a 2-night plan: the model copied the day into the end too.
+        end = None
     place = out.place.strip()
     is_new_place = bool(place) and trip.place and place.casefold() != trip.place.casefold()
     has_date_words = start is not None or out.day_ref != "none"
@@ -351,6 +358,15 @@ def apply_guards(
     }
     if blanks:
         out = out.model_copy(update=blanks)
+    # One name per city for the airport and route lookups: the model wrote "Sài Gòn" once and
+    # "TP.HCM" the next time, and only one of them matched (18/11).
+    canonical = {
+        name: CITY_NAMES[normalize_text(getattr(out, name))]
+        for name in ("from_city", "to_city")
+        if normalize_text(getattr(out, name)) in CITY_NAMES
+    }
+    if canonical:
+        out = out.model_copy(update=canonical)
     if re.fullmatch(GREETING, text):
         return out.model_copy(update={"intent": "greeting"})
     if re.fullmatch(THANKS_ONLY, text):  # "cam on nha" after a checklist was ack/packing (v7)
@@ -407,18 +423,23 @@ def apply_guards(
         re.search(EDIT_CUE, text) or re.fullmatch(DURATION_ONLY, text) or re.search(MEALS_CUE, text)
     )
     plans_already = edits_plan or (awaiting is not None and awaiting.intent == "plan_trip")
-    is_short = len(text.split()) <= AWAIT_MAX_WORDS
+    is_short = len(text.split()) <= (
+        AWAIT_TRIP_MAX_WORDS
+        if awaiting and awaiting.missing in {"origin", "dates", "origin_dates"}
+        else AWAIT_MAX_WORDS
+    )
     if (
         awaiting
         and is_short
         and (
             intent
             in {"search", "clarify", "find_stay", "find_reel", "find_flight", "change_transport"}
-            or (intent == "plan_trip" and awaiting.intent != "plan_trip")
+            or intent == "plan_trip"
+            or (awaiting.intent == "plan_trip" and re.search(PLAN_FIRST_CUE, text))
         )
     ):
         reply_city = out.from_city or (CITY_NAMES[origin.group(1)] if origin else "")
-        if not reply_city:
+        if not reply_city and awaiting.missing in {"origin", "origin_dates"}:
             reply_city = next(
                 (
                     name
@@ -428,12 +449,34 @@ def apply_guards(
                 "",
             )
         calendar_date = re.search(CALENDAR_DATE, message, re.IGNORECASE)
-        if awaiting.missing == "dates" and out.start is None and calendar_date:
+        if (
+            awaiting.missing in {"dates", "origin_dates", "origin"}
+            and out.start is None
+            and calendar_date
+        ):
             day, month = map(int, re.findall(r"\d+", calendar_date.group()))
             year = re.match(r"\s*[/.-]\s*(\d{4})\b", message[calendar_date.end() :])
             fixed["start"] = _MessageDate(
                 day=day, month=month, year=int(year.group(1)) if year else None
             )
+        elif awaiting.missing in {"dates", "origin_dates"} and out.day_ref == "none":
+            relative_days = DAY_CUES | {
+                "next_weekend": r"\bcuoi tuan sau\b",
+                "this_weekend": r"\bcuoi tuan(?! sau)\b",
+                "saturday": r"\b(t7|thu (7|bay))\b",
+                "sunday": r"\b(chu nhat|cn)\b",
+            }
+            for day_ref, cue in relative_days.items():
+                if re.search(cue, text):
+                    fixed["day_ref"] = day_ref
+                    break
+        has_date = bool(
+            out.start is not None
+            or out.day_ref != "none"
+            or out.nights is not None
+            or calendar_date
+            or re.search(DATE_WORDS, text)
+        )
         fills = {
             "place": bool(out.place),
             "dates": (
@@ -443,14 +486,24 @@ def apply_guards(
                 or calendar_date is not None
                 or re.search(DATE_WORDS, text) is not None
             ),
-            "origin": bool(reply_city),
+            "origin": bool(reply_city) or (awaiting.intent == "plan_trip" and has_date),
+            "origin_dates": bool(reply_city) or has_date,
         }[awaiting.missing]
-        if fills:
+        if fills or (awaiting.intent == "plan_trip" and re.search(PLAN_FIRST_CUE, text)):
             intent = awaiting.intent  # the answer to Tripi's question finishes that request
-            if awaiting.missing == "origin":
+            if awaiting.missing in {"origin", "origin_dates"} and reply_city:
                 fixed |= {"from_city": reply_city, "place": "", "to_city": "", "missing": "none"}
             if out.nights is None and awaiting.nights is not None:
                 fixed["nights"] = awaiting.nights
+            if awaiting.intent == "plan_trip":
+                fixed["query"] = message
+                if reply_city:
+                    fixed |= {
+                        "from_city": reply_city,
+                        "place": "",
+                        "to_city": "",
+                        "missing": "none",
+                    }
     if (
         in_plan
         and out.nights is not None
@@ -487,6 +540,7 @@ def apply_guards(
     elif (
         intent in {"plan_trip", "search", "find_stay", "clarify"}
         and origin
+        and not (awaiting and awaiting.intent == "plan_trip")
         and not re.search(STAY_CUE, text)
         and not re.search(PLAN_CUE, text)
     ):
