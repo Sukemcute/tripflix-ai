@@ -17,7 +17,7 @@ import httpx
 from app.clients.places import ATTRIBUTION, PlacesClient, PointOfInterest
 from app.clients.weather import WeatherClient
 from app.services.assistant import planner
-from app.services.assistant.itinerary import Slot, build_itinerary, build_meal_plan
+from app.services.assistant.itinerary import Slot, build_itinerary, build_meal_plan, travel_slots
 from app.services.assistant.route import estimate_leg
 from app.services.assistant.schemas import (
     Answer,
@@ -96,7 +96,12 @@ class TripPlanner:
         stay = self.trip.stay
         if stay and stay.lat is not None and stay.lng is not None:
             return (stay.lat, stay.lng), stay.name
-        centre = await self.weather.find_place(self.trip.place)
+        try:
+            async with asyncio.timeout(RAIN_SECONDS):
+                centre = await self.weather.find_place(self.trip.place)
+        except (TimeoutError, httpx.HTTPError, ValueError, KeyError, TypeError):
+            logger.warning("chat base degraded during plan", exc_info=True)
+            return None
         if centre is None:
             return None
         return (centre.latitude, centre.longitude), f"trung tâm {self.trip.place}"
@@ -105,7 +110,8 @@ class TripPlanner:
         try:
             async with asyncio.timeout(RAIN_SECONDS):
                 return await self._rain_by_day(days)
-        except (TimeoutError, httpx.HTTPError):
+        except (TimeoutError, httpx.HTTPError, ValueError, KeyError, TypeError):
+            logger.warning("chat weather degraded during plan", exc_info=True)
             return []
 
     async def _rain_by_day(self, days: int) -> list[int | None]:
@@ -119,7 +125,7 @@ class TripPlanner:
 
     # ---- the plan
 
-    async def plan(self, understood: Understanding) -> Answer:
+    async def plan(self, understood: Understanding, *, message: str = "") -> Answer:
         place = understood.place or self.trip.place
         if not place:
             return Answer(kind="clarify", text="Bạn muốn đi đâu nè? Mình xếp lộ trình luôn cho.")
@@ -134,32 +140,121 @@ class TripPlanner:
             self.trip.meals_only = False  # a new kind of plan was asked for
         if understood.interests:
             self.trip.interests = [t for t in understood.interests if t in INTEREST_TAGS][:5]
-        days = self._days(understood)
         self.trip.ops = []  # a new plan: nothing to undo
         window = planner.stay_range(understood, self.today)
         if isinstance(window, planner.DateProblem):
             return Answer(kind="clarify", text=window.question)
         if window:
             self.trip.date_from, self.trip.date_to = window
+        days = self._days(understood)
         self.trip.adults = understood.adults
-        answer, stays = await asyncio.gather(
-            self._build(days, pace=understood.pace or "relaxed"),
+        bare = bool(re.search(planner.PLAN_FIRST_CUE, normalize_text(message or understood.query)))
+        if not bare and (not self.trip.origin_city or self.trip.date_from is None):
+            missing = (
+                "origin_dates"
+                if not self.trip.origin_city and self.trip.date_from is None
+                else "origin"
+                if not self.trip.origin_city
+                else "dates"
+            )
+            self.trip.awaiting = Awaiting(intent="plan_trip", missing=missing, nights=days - 1)
+            questions = {
+                "origin_dates": "Bạn đi từ đâu và đi ngày nào để Tripi xếp lịch "
+                "kèm vé máy bay và phòng nha?",
+                "origin": "Bạn đi từ đâu để Tripi xếp lịch kèm vé máy bay và phòng nha?",
+                "dates": "Bạn đi ngày nào để Tripi xếp lịch kèm vé máy bay và phòng nha?",
+            }
+            return Answer(
+                kind="clarify",
+                text=questions[missing],
+                suggestions=["Từ TP.HCM", "Từ Hà Nội"] if missing != "dates" else [],
+            )
+        if bare:
+            return await self._build(days, pace=understood.pace or "relaxed")
+        self.trip.stay, self.trip.transport, self.trip.return_transport = None, None, None
+        self.trip.pending, self.trip.pending_flights = [], []
+        kinds = ["food", "cafe"] if self.trip.meals_only else ["see", "food", "cafe"]
+        candidates, rain, _, outbound, inbound = await asyncio.gather(
+            self._plan_points(kinds),
+            self._rain_capped(days),
             self._plan_stays(understood),
+            self._plan_flight(understood, returning=False),
+            self._plan_flight(understood, returning=True),
         )
-        if answer.kind == "answer" and stays:
-            for card in stays.cards:
-                card.ref = f"r{len(answer.cards) + 1}"
-                answer.cards.append(card)
-            for fact in stays.facts:
-                answer.facts.append(fact | {"ref": "r2"})
-        return answer
+        self.trip.transport, self.trip.return_transport = outbound, inbound
+        if outbound is None:
+            routes = bus_routes(self.trip.origin_city, self.trip.place)
+            if routes:
+                self.trip.transport = DraftTransport(
+                    mode="bus",
+                    summary=(
+                        f"Xe khách {routes[0].from_station} → {routes[0].to_station}"
+                        " · tham khảo, chưa đặt được"
+                    )[:160],
+                )
+        return await self._build(
+            days, pace=understood.pace or "relaxed", resources=(candidates, rain)
+        )
+
+    async def _plan_points(self, kinds: list[str]) -> list[PointOfInterest]:
+        try:
+            async with asyncio.timeout(STAY_SECONDS):
+                return await self.places.search(city=self.trip.place, kinds=kinds, limit=60)
+        except (TimeoutError, httpx.HTTPError, ValueError, KeyError, TypeError):
+            logger.warning("chat places degraded during plan", exc_info=True)
+            return []
+
+    async def _plan_flight(
+        self, understood: Understanding, *, returning: bool
+    ) -> DraftTransport | None:
+        try:
+            async with asyncio.timeout(STAY_SECONDS):
+                found = await search_flights(
+                    self.core,
+                    understood.model_copy(
+                        update={
+                            "intent": "find_flight",
+                            "from_airport": None,
+                            "to_airport": None,
+                            "from_city": self.trip.place if returning else self.trip.origin_city,
+                            "to_city": self.trip.origin_city if returning else self.trip.place,
+                            "flight_date": self.trip.date_to if returning else self.trip.date_from,
+                            "adults": self.trip.adults,
+                            "cheapest_only": False,
+                            "depart_after": None,
+                            "depart_before": None,
+                        }
+                    ),
+                    latest=returning,
+                    daytime=not returning,
+                )
+                options = draft_flights(found.cards)
+                return next(
+                    (f.model_copy(update={"ref": ""}) for f in options if f.fare_code), None
+                )
+        except (TimeoutError, httpx.HTTPError, ValueError, KeyError, TypeError):
+            logger.warning(
+                "chat flight degraded during plan (%s)",
+                "return" if returning else "outbound",
+                exc_info=True,
+            )
+            return None
 
     async def _plan_stays(self, understood: Understanding) -> Answer | None:
         if self.trip.date_from is None or self.trip.date_to is None:
             return None
         try:
             async with asyncio.timeout(STAY_SECONDS):
-                return await self.stay_options(understood, tripflix_only=True)
+                found = await self.stay_options(understood, tripflix_only=True)
+                if self.trip.pending:
+                    choice = self.trip.pending[0]
+                    response = await self.core.get(f"/api/hotels/{choice.id}")
+                    response.raise_for_status()
+                    location = response.json().get("location") or {}
+                    self.trip.stay = choice.model_copy(
+                        update={"ref": "", "lat": location.get("lat"), "lng": location.get("lng")}
+                    )
+                return found
         except (TimeoutError, httpx.HTTPError, ValueError, KeyError, TypeError):
             logger.warning("chat skill stay degraded during plan", exc_info=True)
             return None
@@ -174,16 +269,29 @@ class TripPlanner:
         self.notes.append(f"Tripi tạm xếp {DEFAULT_DAYS} ngày, bạn muốn đi mấy ngày cứ nói nha.")
         return DEFAULT_DAYS
 
-    async def _build(self, days: int, *, pace: str = "relaxed") -> Answer:
+    async def _build(
+        self,
+        days: int,
+        *,
+        pace: str = "relaxed",
+        resources: tuple[list[PointOfInterest], list[int | None]] | None = None,
+    ) -> Answer:
         base = await self._base()
+        if base is None and resources and resources[0]:
+            first = resources[0][0]
+            base = ((first.latitude, first.longitude), first.name)
         if base is None:
             return Answer(kind="no_result", text=f"Tripi chưa định vị được {self.trip.place}.")
         point, base_name = base
         kinds = ["food", "cafe"] if self.trip.meals_only else ["see", "food", "cafe"]
         # Points and forecast at once: both waited in turn took the plan step past its deadline.
-        candidates, rain = await asyncio.gather(
-            self.places.search(city=self.trip.place, kinds=kinds, limit=60),
-            self._rain_capped(days),
+        candidates, rain = (
+            resources
+            if resources is not None
+            else await asyncio.gather(
+                self.places.search(city=self.trip.place, kinds=kinds, limit=60),
+                self._rain_capped(days),
+            )
         )
         if self.trip.meals_only:
             plan = build_meal_plan(candidates, base=point, days=days, start=self.trip.date_from)
@@ -206,6 +314,13 @@ class TripPlanner:
                 suggestions=[f"Reel {self.trip.place}"],
             )
         self.trip.days = [[_stop(s.place, s.slot) for s in day.stops] for day in plan.days]
+        outbound, inbound = self.trip.transport, self.trip.return_transport
+        for index, stops in enumerate(self.trip.days):
+            allowed = travel_slots(
+                arrival=outbound.arrive_time if index == 0 and outbound else None,
+                departure=inbound.depart_time if index == days - 1 and inbound else None,
+            )
+            self.trip.days[index] = [stop for stop in stops if stop.slot in allowed]
         self.notes += [note for day in plan.days for note in day.notes]
         return self._itinerary_answer(point, base_name, plan.assumptions)
 
@@ -215,6 +330,20 @@ class TripPlanner:
         lines, days_facts = [], []
         for index, stops in enumerate(self.trip.days, 1):
             previous, facts = base, []
+            if index == 1:
+                outbound = self.trip.transport
+                if outbound and outbound.mode == "flight":
+                    lines.append(self._flight_line(outbound, index))
+                elif outbound:
+                    lines.append(CardLine(label=f"Ngày 1 · {outbound.summary}"))
+                if self.trip.stay:
+                    lines.append(
+                        CardLine(
+                            label=f"Ngày 1 · Nhận phòng {self.trip.stay.name}",
+                            detail=f"{self.trip.date_from:%d/%m}" if self.trip.date_from else "",
+                            service="stay",
+                        )
+                    )
             for stop in stops:
                 leg = estimate_leg(previous, _point(stop))
                 previous = _point(stop)
@@ -229,9 +358,20 @@ class TripPlanner:
                     {"name": stop.name, "slot": stop.slot, "km": leg.km, "minutes": leg.minutes}
                 )
             days_facts.append({"day": index, "stops": facts})
+            if index == len(self.trip.days):
+                if self.trip.stay:
+                    lines.append(
+                        CardLine(
+                            label=f"Ngày {index} · Trả phòng {self.trip.stay.name}",
+                            detail=f"{self.trip.date_to:%d/%m}" if self.trip.date_to else "",
+                            service="stay",
+                        )
+                    )
+                if self.trip.return_transport:
+                    lines.append(self._flight_line(self.trip.return_transport, index))
         days = len(self.trip.days)
         lead = f"Lộ trình {self.trip.place} {days} ngày đây nè, xếp từ {base_name}."
-        chips = ["Đổi chỗ ở", "Thời tiết những ngày đó"]
+        chips = ["Đổi chuyến bay", "Đổi chỗ ở", "Thời tiết những ngày đó"]
         if not self.trip.origin_city:
             chips = ["Bay từ TP.HCM", "Bay từ Hà Nội", "Đổi chỗ ở"]
             self.notes.append(f"Bạn bay từ đâu tới {self.trip.place} nè?")
@@ -251,6 +391,17 @@ class TripPlanner:
                     observed_at=datetime.now(UTC),
                     lines=lines,
                     source=ATTRIBUTION,
+                    actions=[
+                        self._booking_action(
+                            self.trip.stay, self.trip.transport, self.trip.return_transport
+                        )
+                    ]
+                    if self.trip.stay
+                    and self.trip.stay.source == "tripflix"
+                    and self.trip.transport
+                    and self.trip.transport.flight_id
+                    and self.trip.transport.fare_code
+                    else None,
                 )
             ],
             facts=[
@@ -262,9 +413,54 @@ class TripPlanner:
                     "days": days_facts,
                     "estimate": True,
                     "notes": [*assumptions, *self.notes],
+                    "services": [s.name for s in [self.trip.stay] if s]
+                    + [f.summary for f in [self.trip.transport, self.trip.return_transport] if f],
                 }
             ],
             suggestions=chips[:3],
+        )
+
+    def _flight_line(self, flight: DraftTransport, day: int) -> CardLine:
+        times = "–".join(t for t in [flight.depart_time, flight.arrive_time] if t)
+        return CardLine(
+            label=f"Ngày {day} · ✈ Bay {flight.from_airport} → {flight.to_airport} {times}".strip(),
+            detail=flight.summary,
+            service="flight",
+        )
+
+    def _booking_action(
+        self,
+        stay: DraftChoice | None,
+        flight: DraftTransport | None,
+        returning: DraftTransport | None = None,
+    ) -> CardAction:
+        params = {"destination": self.trip.place, "adults": str(self.trip.adults)}
+        start = self.trip.date_from or (flight.flight_date if flight else None)
+        if start:
+            params["startDate"] = start.isoformat()
+        if self.trip.days:
+            params["days"] = str(len(self.trip.days))
+        if stay and stay.source == "tripflix" and self.trip.date_from and self.trip.date_to:
+            params.update(
+                hotelId=stay.id,
+                hotelName=stay.name,
+                checkIn=self.trip.date_from.isoformat(),
+                nights=str((self.trip.date_to - self.trip.date_from).days),
+            )
+        if flight and flight.flight_date and flight.from_airport and flight.to_airport:
+            params.update(
+                flightFrom=flight.from_airport,
+                flightTo=flight.to_airport,
+                flightDate=flight.flight_date.isoformat(),
+            )
+        if returning and returning.flight_date and returning.from_airport and returning.to_airport:
+            params.update(
+                returnFrom=returning.from_airport,
+                returnTo=returning.to_airport,
+                returnDate=returning.flight_date.isoformat(),
+            )
+        return CardAction(
+            type="book", label="Đặt theo lộ trình", path="/trip-builder", params=params
         )
 
     async def _render(self) -> Answer:
@@ -383,6 +579,8 @@ class TripPlanner:
         if flight is not None:
             self.trip.transport = flight.model_copy(update={"ref": ""})
             self.trip.pending_flights = []
+            if self.trip.days:
+                return await self._build(len(self.trip.days))
             return self._review(Answer(kind="answer", text=f"Đã chọn {flight.summary} nha."))
         pending = self.trip.pending
         choice = next((o for o in pending if o.ref == ref), None) if ref else None
@@ -404,7 +602,7 @@ class TripPlanner:
         self.trip.stay = choice.model_copy(update={"ref": ""})
         self.trip.pending = []
         if self.trip.days:
-            return self._review(await self._build(len(self.trip.days)))
+            return await self._build(len(self.trip.days))
         lead = f"Đã chọn {choice.name} nha."
         return self._review(
             Answer(
@@ -438,12 +636,7 @@ class TripPlanner:
             )
         lines: list[CardLine] = []
         actions: list[CardAction] = []
-        params = {"destination": self.trip.place, "adults": str(self.trip.adults)}
-        start_date = self.trip.date_from or (flight.flight_date if flight else None)
-        if start_date:
-            params["startDate"] = start_date.isoformat()
-        if self.trip.days:
-            params["days"] = str(len(self.trip.days))
+        checked_stay, checked_flight, checked_return = None, None, None
         notes: list[str] = []
         if has_stay and stay:
             start, end = self.trip.date_from, self.trip.date_to
@@ -454,12 +647,7 @@ class TripPlanner:
                 if checked.kind == "answer":
                     card = checked.cards[0]
                     lines.append(CardLine(label=card.title, detail=f"{start:%d/%m}–{end:%d/%m}"))
-                    params.update(
-                        hotelId=stay.id,
-                        hotelName=card.title,
-                        checkIn=start.isoformat(),
-                        nights=str((end - start).days),
-                    )
+                    checked_stay = stay.model_copy(update={"name": card.title})
                 else:
                     notes.append(f"{stay.name} hết phòng hoặc không còn bán. Bạn đổi chỗ ở nha.")
         if has_flight and flight:
@@ -467,19 +655,26 @@ class TripPlanner:
             if available:
                 assert flight.flight_date and flight.from_airport and flight.to_airport
                 lines.append(CardLine(label=available, detail=f"{flight.flight_date:%d/%m}"))
-                params.update(
-                    flightFrom=flight.from_airport,
-                    flightTo=flight.to_airport,
-                    flightDate=flight.flight_date.isoformat(),
-                )
+                checked_flight = flight
             else:
                 notes.append("Chuyến hoặc hạng vé đã chọn không còn chỗ. Bạn đổi chuyến bay nha.")
-        if lines:
-            actions.append(
-                CardAction(
-                    type="book", label="Đặt theo lộ trình", path="/trip-builder", params=params
+        returning = self.trip.return_transport
+        if returning and returning.flight_id:
+            available = await self._check_flight(returning)
+            if available:
+                checked_return = returning
+                lines.append(
+                    CardLine(
+                        label=available,
+                        detail=f"{returning.flight_date:%d/%m}" if returning.flight_date else "",
+                    )
                 )
-            )
+            else:
+                notes.append(
+                    "Chuyến về hoặc hạng vé đã chọn không còn chỗ. Bạn chọn lại chuyến về nha."
+                )
+        if lines:
+            actions.append(self._booking_action(checked_stay, checked_flight, checked_return))
         lead = f"Chốt chuyến {self.trip.place} nè, mình vừa kiểm tra lại phòng và vé."
         return Answer(
             kind="answer" if actions else "no_result",

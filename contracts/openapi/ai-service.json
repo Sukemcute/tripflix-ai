@@ -24,7 +24,8 @@
             "enum": [
               "place",
               "dates",
-              "origin"
+              "origin",
+              "origin_dates"
             ],
             "title": "Missing",
             "type": "string"
@@ -67,6 +68,18 @@
             "default": null,
             "title": "Actions"
           },
+          "arriveTime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Arrivetime"
+          },
           "checkIn": {
             "anyOf": [
               {
@@ -98,6 +111,18 @@
             "default": "VND",
             "title": "Currency",
             "type": "string"
+          },
+          "departTime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Departtime"
           },
           "fareCode": {
             "anyOf": [
@@ -345,6 +370,22 @@
             ],
             "default": null,
             "title": "Ref"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "enum": [
+                  "flight",
+                  "stay"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Service"
           }
         },
         "required": [
@@ -672,6 +713,28 @@
       "DraftTransport": {
         "additionalProperties": false,
         "properties": {
+          "arriveTime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrivetime"
+          },
+          "departTime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departtime"
+          },
           "fareCode": {
             "anyOf": [
               {
@@ -1048,6 +1111,16 @@
               }
             ],
             "title": "Reelid"
+          },
+          "returnTransport": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftTransport"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "stay": {
             "anyOf": [

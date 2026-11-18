@@ -102,9 +102,10 @@ def run(
     *,
     airports=None,
     places=None,
+    message="...",
 ):
     calls: list[str] = []
-    request = ChatRequest(conversation_id=uuid4(), message="...", trip=trip, action=action)
+    request = ChatRequest(conversation_id=uuid4(), message=message, trip=trip, action=action)
 
     async def go():
         async with core(calls, airports=airports) as client:
@@ -124,7 +125,9 @@ def run(
 
 
 def plan_vung_tau():
-    return run(Understanding(intent="plan_trip", place="Vũng Tàu", nights=1))
+    return run(
+        Understanding(intent="plan_trip", place="Vũng Tàu", nights=1), message="cứ lên trước"
+    )
 
 
 def test_plan_trip_builds_a_two_day_itinerary_with_estimates_and_asks_the_origin():
@@ -141,7 +144,9 @@ def test_plan_trip_builds_a_two_day_itinerary_with_estimates_and_asks_the_origin
 
 def test_no_places_with_coordinates_is_said_not_invented():
     answer, trip, _ = run(
-        Understanding(intent="plan_trip", place="Vũng Tàu", nights=1), places=FakePlaces([])
+        Understanding(intent="plan_trip", place="Vũng Tàu", nights=1),
+        places=FakePlaces([]),
+        message="cứ lên trước",
     )
     assert answer.kind == "no_result" and answer.cards == [] and trip.days == []
 

@@ -15,7 +15,6 @@ from app.clients.places import CorePlaces
 from app.services.assistant import understand
 from app.services.assistant.controller import apply_guards, to_understanding
 from app.services.assistant.schemas import (
-    Answer,
     CardAction,
     ChatRequest,
     DraftAction,
@@ -204,17 +203,18 @@ def test_select_flight_remembers_fields_and_keeps_pending_stays(ordinal):
 
 
 def test_plan_then_select_flight_and_stay_then_confirm():
-    plan = Understanding(intent="plan_trip", place="Đà Nẵng", day_ref="this_weekend", nights=2)
+    plan = Understanding(
+        intent="plan_trip", place="Đà Nẵng", day_ref="this_weekend", nights=2, from_city="TP.HCM"
+    )
     answer, memory, _ = run_turn(TripContext(), plan)
-    assert [c.kind for c in answer.cards] == ["itinerary", "compare"]
+    assert [c.kind for c in answer.cards] == ["itinerary"]
     assert len(memory.days) == 3 and memory.pending
-    assert all(a.label == "Chọn" for a in answer.cards[1].actions or [])
-    assert "Bạn bay từ đâu tới Đà Nẵng nè?" in answer.text
+    assert answer.cards[0].actions and answer.cards[0].actions[0].type == "book"
     answer, memory, _ = run_turn(
         memory, Understanding(intent="change_transport", from_city="TP.HCM")
     )
     assert all(c.kind == "flight" and c.actions for c in answer.cards)
-    assert memory.transport is None and memory.pending
+    assert memory.transport and memory.pending
     _, memory, _ = run_turn(memory, None, DraftAction(type="select", ref="r2"))
     _, memory, _ = run_turn(memory, None, DraftAction(type="select", ref="o1"))
     assert memory.stay and memory.transport
@@ -254,7 +254,7 @@ def test_transport_date_reply_finishes_the_undated_plan(reply_intent, has_model_
         ),
         message="Tôi muốn đi Đà Nẵng 3n2d, lên lộ trình chi tiết cho tôi",
     )
-    assert answer.cards[0].kind == "itinerary" and memory.date_from is None
+    assert answer.kind == "clarify" and memory.date_from is None
     answer, memory, _ = run_turn(
         memory,
         Understanding(
@@ -547,27 +547,31 @@ def test_plan_stay_failure_keeps_itinerary_and_logs_degraded(monkeypatch, caplog
             place="Đà Nẵng",
             day_ref="this_weekend",
             nights=2,
+            from_city="TP.HCM",
         ),
     )
     assert answer.cards[0].kind == "itinerary" and memory.days
     assert "stay degraded" in caplog.text
+    assert memory.stay is None and not answer.cards[0].actions
 
 
 def test_plan_build_and_stays_run_concurrently(monkeypatch):
+    original = TripPlanner._plan_points
+
     async def run():
         build_started, stays_started = asyncio.Event(), asyncio.Event()
 
         async def build(self, *args, **kwargs):
             build_started.set()
             await stays_started.wait()
-            return Answer(kind="answer", text="Lộ trình")
+            return await original(self, *args, **kwargs)
 
         async def stays(self, *args, **kwargs):
             stays_started.set()
             await build_started.wait()
             return None
 
-        monkeypatch.setattr(TripPlanner, "_build", build)
+        monkeypatch.setattr(TripPlanner, "_plan_points", build)
         monkeypatch.setattr(TripPlanner, "_plan_stays", stays)
         async with fake_core() as core:
             planner = TripPlanner(core, CorePlaces(core), FakeWeather(), TODAY, TripContext())
@@ -577,6 +581,8 @@ def test_plan_build_and_stays_run_concurrently(monkeypatch):
                         intent="plan_trip",
                         place="Đà Nẵng",
                         nights=2,
+                        from_city="TP.HCM",
+                        day_ref="this_weekend",
                     )
                 ),
                 timeout=1,
@@ -659,10 +665,12 @@ def test_typed_selection_uses_the_named_list_when_both_are_pending(message, ordi
             place="Đà Nẵng",
             day_ref="this_weekend",
             nights=2,
+            from_city="TP.HCM",
         ),
     )
     _, memory, _ = run_turn(memory, Understanding(intent="change_transport", from_city="TP.HCM"))
     assert memory.pending and memory.pending_flights
+    memory.stay, memory.transport = None, None
     answer, memory, _ = run_turn(
         memory,
         Understanding(

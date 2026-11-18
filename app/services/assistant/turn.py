@@ -202,10 +202,15 @@ class Turn:
                 memory.place, memory.date_from, memory.date_to = parsed.place, None, None
                 # The plan belonged to the old place.
                 memory.stay, memory.transport, memory.days = None, None, []
+                memory.return_transport = None
                 memory.pending, memory.ops = [], []
                 memory.pending_flights = []
             start = planner.start_day(parsed, self.today)
-            if start is not None and start >= self.today:
+            if (
+                start is not None
+                and start >= self.today
+                and not (self.planned_trip is not None and parsed.intent == "plan_trip")
+            ):
                 window = planner.day_window(parsed, self.today)
                 memory.date_from = window.start
                 memory.date_to = window.end if window.end > window.start else None
@@ -464,7 +469,7 @@ class Turn:
         else:
             assert parsed is not None
             step = {
-                "plan_trip": lambda: trip_planner.plan(parsed),
+                "plan_trip": lambda: trip_planner.plan(parsed, message=self.request.message),
                 "change_stay": lambda: trip_planner.stay_options(parsed),
                 "select_option": lambda: trip_planner.select(
                     ordinal=parsed.card_ordinal, message=self.request.message

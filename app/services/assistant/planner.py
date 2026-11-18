@@ -15,6 +15,7 @@ from app.services.assistant.schemas import ChatRequest, Understanding
 SATURDAY, SUNDAY = 5, 6
 MAX_DAYS_AHEAD = 365
 FORECAST_DAYS = 16
+PLAN_FIRST_CUE = r"\b(chua biet|khong biet|cu (len|xep)(?: lich| lo trinh)? truoc|len truoc)\b"
 STAY_DATE_QUESTION = "Bạn muốn nhận phòng và trả phòng vào ngày nào?"
 SHORT_STAY_DATES = re.compile(r"(?:(?:ngày|ngay)\s+)?([0-9]{1,2})\s+([0-9]{1,2})", re.I)
 
