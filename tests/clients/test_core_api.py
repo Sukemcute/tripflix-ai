@@ -130,6 +130,14 @@ def test_missing_summary_is_none_and_post_is_parsed() -> None:
     assert post.trip_attachment.hotel_name == "Vinpearl"
 
 
+def test_empty_204_summary_is_none() -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(204))
+    with httpx.Client(base_url="http://core", transport=transport) as http:
+        client = CoreApiClient("http://core", "ai-service", SecretStr("s3cret"), http)
+
+        assert client.fetch_summary(POST_ID) is None
+
+
 def test_put_sends_camel_case_with_a_reused_service_token() -> None:
     core = FakeCore()
     client = core.client()

@@ -362,20 +362,26 @@ SUMMARY_WITHHELD = {"status": "ready", "summary": None, "content": None, "keyTak
 
 
 @pytest.mark.parametrize(
-    ("post", "summary", "text"),
+    ("post", "summary", "summary_status", "text"),
     [
-        (None, SUMMARY_READY, "không còn hiển thị"),  # hidden post: ai-summary 404 too
-        (POST, None, "chưa có tóm tắt"),  # visible post, 404: no summary yet
-        (POST, SUMMARY_WITHHELD, "chưa có tóm tắt"),  # a quoted comment was hidden
-        (POST, SUMMARY_READY, "nhắc nhiều nhất"),
+        (None, SUMMARY_READY, 200, "không còn hiển thị"),  # hidden post: ai-summary 404 too
+        (POST, None, 404, "chưa có tóm tắt"),  # visible post, old core: no summary yet
+        (POST, None, 204, "chưa có tóm tắt"),  # visible post, new core: empty body
+        (POST, SUMMARY_WITHHELD, 200, "chưa có tóm tắt"),  # a quoted comment was hidden
+        (POST, SUMMARY_READY, 200, "nhắc nhiều nhất"),
     ],
 )
-def test_reel_reviews_read_the_post_before_the_summary(post, summary, text):
+def test_reel_reviews_read_the_post_before_the_summary(post, summary, summary_status, text):
     """ai-summary 404 means "no summary yet" only once the post is visible (Thành 2026-11-16)."""
 
     def handle(request: httpx.Request) -> httpx.Response:
-        body = summary if request.url.path.endswith("/ai-summary") else post
-        return httpx.Response(404) if body is None else httpx.Response(200, json=body)
+        if request.url.path.endswith("/ai-summary"):
+            return (
+                httpx.Response(summary_status)
+                if summary is None
+                else httpx.Response(summary_status, json=summary)
+            )
+        return httpx.Response(404) if post is None else httpx.Response(200, json=post)
 
     async def run():
         transport = httpx.MockTransport(handle)

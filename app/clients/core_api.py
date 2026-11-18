@@ -4,7 +4,7 @@ Endpoints agreed with content (Thành, PR be #49 and #54):
 - GET  /api/v1/posts                             public published posts, cursor, max 50 per page
 - GET  /api/v1/posts/:id                          public post detail (trip already PII-masked)
 - GET  /api/v1/posts/:id/comments?flat=true       every level, cursor paging, max 200 per page
-- GET  /api/v1/posts/:id/ai-summary               last summary with inputHash, 404 if none
+- GET  /api/v1/posts/:id/ai-summary               last summary with inputHash, 204/404 if none
 - PUT  /api/v1/posts/:id/ai-summary               service token, @ServiceOnly('ai-service')
 - PUT  /api/v1/posts/:id/ai-summary/checked       service token; same input as the saved row:
                                                   core moves its staleness mark, 200 {updated}
@@ -227,7 +227,7 @@ class CoreApiClient:
 
     def fetch_summary(self, post_id: str) -> CoreSummary | None:
         response = self.http.get(f"/api/v1/posts/{post_id}/ai-summary")
-        if response.status_code == httpx.codes.NOT_FOUND:
+        if response.status_code in (httpx.codes.NO_CONTENT, httpx.codes.NOT_FOUND):
             return None
         response.raise_for_status()
         return CoreSummary.model_validate(response.json())
