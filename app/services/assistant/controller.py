@@ -48,9 +48,13 @@ MAX_SOCIAL_WORDS = 6
 IDENTITY_CUE = r"\b(la ai|(lam|giup) (duoc )?(gi|nhung gi)|biet lam gi)\b"
 # Live eval of v4 (16/11): slots the message states plainly but the model sometimes missed.
 FLIGHT_CUE = r"\b(bay|may bay|ve bay|chuyen bay|flight|san bay)\b"  # after "thu bay" is removed
+CLOSING_ONLY = (
+    r"(?:(?:ok |minh )?chot(?: va dat| luon| vay)?|(?:ok )?book (?:di|lun|luon)|"
+    r"dat (?:luon|di))(?: nha| nhe)?"
+)
 ACK_ONLY = (
-    r"(ok|oke|okie|okay|duoc|duoc roi|du roi|vay du roi|chot|chot vay|minh chot vay|the thoi|"
-    r"vay nhe|thoi du roi)( nha| nhe)?"
+    rf"(?:{CLOSING_ONLY}|(?:ok|oke|okie|okay|duoc|duoc roi|du roi|vay du roi|the thoi|"
+    r"vay nhe|thoi du roi)( nha| nhe)?)"
 )
 DEPART_TIME = r"\b(sau|truoc) (\d{1,2}) ?(?:h|g|gio)( chieu| toi)?\b"
 DAYS_COUNT_CUE = r"\b(may|bao nhieu) ngay\b"
@@ -125,6 +129,11 @@ class DayMonth(BaseModel):
     month: int
 
 
+class _MessageDate(DayMonth):
+    # Only code reads the user's year; the model's DayMonth schema stays unchanged.
+    year: int | None = None
+
+
 class ControllerOutput(BaseModel):
     """Strict JSON schema for the LLM: every field present, null when not said."""
 
@@ -152,6 +161,7 @@ class ControllerOutput(BaseModel):
         "remove_stop",
         "undo",
         "select_option",
+        "confirm_booking",
         "off_topic",
         "ask_why",
     ]
@@ -203,6 +213,16 @@ class ControllerOutput(BaseModel):
 def build_date(day_month: DayMonth | None, today: date) -> date | None:
     """Day and month to a date: this year, next year when long past, None when impossible."""
     if day_month is None:
+        return None
+    if isinstance(day_month, _MessageDate):
+        years = [day_month.year] if day_month.year else range(today.year, today.year + 5)
+        for year in years:
+            try:
+                candidate = date(year, day_month.month, day_month.day)
+            except ValueError:
+                continue
+            if day_month.year or candidate >= today:
+                return candidate
         return None
     try:
         candidate = date(today.year, day_month.month, day_month.day)
@@ -270,7 +290,7 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         place=(place or trip.place)[:100],
         check_in=start,
         check_out=end,
-        flight_date=start if out.intent == "find_flight" else None,
+        flight_date=start if out.intent in {"find_flight", "change_transport"} else None,
         adults=_count(out.adults, 1, 9) or trip.adults,
         children=trip.children if out.children is None else (_count(out.children, 0, 9) or 0),
         infants=trip.infants if out.infants is None else (_count(out.infants, 0, 9) or 0),
@@ -318,6 +338,7 @@ def apply_guards(
     has_reel: bool,
     has_options: bool = False,
     in_plan: bool = False,
+    has_booking: bool = False,
     awaiting: Awaiting | None = None,
 ) -> ControllerOutput:
     """Drop or fix what the model said that the message does not support [ĐỀ XUẤT]."""
@@ -334,7 +355,9 @@ def apply_guards(
         return out.model_copy(update={"intent": "greeting"})
     if re.fullmatch(THANKS_ONLY, text):  # "cam on nha" after a checklist was ack/packing (v7)
         return out.model_copy(update={"intent": "thanks"})
-    if re.fullmatch(ACK_ONLY, text):  # "mình chốt vậy" after a checklist was read as packing
+    if re.fullmatch(CLOSING_ONLY, text):
+        return out.model_copy(update={"intent": "confirm_booking" if has_booking else "ack"})
+    if re.fullmatch(ACK_ONLY, text):
         return out.model_copy(update={"intent": "ack"})
     fixed: dict = {}
     if out.day_ref in DAY_CUES and not re.search(DAY_CUES[out.day_ref], text):
@@ -355,6 +378,21 @@ def apply_guards(
         fixed["reel_query"] = ""
     hotel_name = fixed.get("hotel_name", out.hotel_name)
     intent = out.intent
+    if intent == "confirm_booking" and not has_booking:
+        named = (out.place, out.to_city, out.from_city, hotel_name, out.reel_query)
+        flight_words = re.search(
+            r"\b(ve|bay|may bay|chuyen bay)\b", re.sub(r"\bthu bay\b", " ", text)
+        )
+        has_target = (
+            any(name.strip() and normalize_text(name) in text for name in named)
+            or re.search(DATE_WORDS, text)
+            or re.search(CALENDAR_DATE, message, re.IGNORECASE)
+            or re.search(r"\b(\d+ nguoi|nguoi lon|em be|phong)\b", text)
+            or re.search(STAY_CUE, text)
+            or flight_words
+        )
+        if has_target:
+            intent = "find_flight" if flight_words else "find_stay"
     cities = "|".join(sorted(CITY_NAMES, key=len, reverse=True))
     origin = re.search(ORIGIN_CUE.format(cities=cities), text)
     destination = normalize_text(out.to_city or out.place)
@@ -370,14 +408,47 @@ def apply_guards(
     )
     plans_already = edits_plan or (awaiting is not None and awaiting.intent == "plan_trip")
     is_short = len(text.split()) <= AWAIT_MAX_WORDS
-    if awaiting and is_short and intent in {"search", "clarify", "find_stay", "find_reel"}:
+    if (
+        awaiting
+        and is_short
+        and (
+            intent
+            in {"search", "clarify", "find_stay", "find_reel", "find_flight", "change_transport"}
+            or (intent == "plan_trip" and awaiting.intent != "plan_trip")
+        )
+    ):
+        reply_city = out.from_city or (CITY_NAMES[origin.group(1)] if origin else "")
+        if not reply_city:
+            reply_city = next(
+                (
+                    name
+                    for name in (out.place, out.to_city)
+                    if name and normalize_text(name) in text
+                ),
+                "",
+            )
+        calendar_date = re.search(CALENDAR_DATE, message, re.IGNORECASE)
+        if awaiting.missing == "dates" and out.start is None and calendar_date:
+            day, month = map(int, re.findall(r"\d+", calendar_date.group()))
+            year = re.match(r"\s*[/.-]\s*(\d{4})\b", message[calendar_date.end() :])
+            fixed["start"] = _MessageDate(
+                day=day, month=month, year=int(year.group(1)) if year else None
+            )
         fills = {
             "place": bool(out.place),
-            "dates": out.start is not None or out.day_ref != "none" or out.nights is not None,
-            "origin": bool(origin or out.from_city),
+            "dates": (
+                out.start is not None
+                or out.day_ref != "none"
+                or out.nights is not None
+                or calendar_date is not None
+                or re.search(DATE_WORDS, text) is not None
+            ),
+            "origin": bool(reply_city),
         }[awaiting.missing]
-        if fills and intent != awaiting.intent:
+        if fills:
             intent = awaiting.intent  # the answer to Tripi's question finishes that request
+            if awaiting.missing == "origin":
+                fixed |= {"from_city": reply_city, "place": "", "to_city": "", "missing": "none"}
             if out.nights is None and awaiting.nights is not None:
                 fixed["nights"] = awaiting.nights
     if (

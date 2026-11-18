@@ -30,7 +30,7 @@ from app.services.assistant.schemas import (
 from app.services.assistant.skills import trip as trip_skill
 from app.services.assistant.skills import weather as weather_skill
 from app.services.assistant.skills.content import search
-from app.services.assistant.skills.flight import search_flights
+from app.services.assistant.skills.flight import draft_flights, search_flights
 from app.services.assistant.skills.plan import TripPlanner
 from app.services.assistant.skills.stay import search_stays
 from app.services.summary.pii import mask_pii
@@ -59,6 +59,7 @@ PLAN_INTENTS = {
     "remove_stop",
     "undo",
     "select_option",
+    "confirm_booking",
 }
 REEL_KINDS = {"video", "plan", "post"}
 DISCOVERY_SUGGESTIONS = ["Thời tiết ở đó", "Cần mang gì?", "Tìm chỗ ở"]
@@ -68,7 +69,16 @@ NEEDS_REEL = Answer(
     "review và khách sạn của reel đó nha.",
 )
 # Requests a clarifying question can be about; the answer to it finishes them (v2.1).
-AWAITABLE = {"search", "find_stay", "find_flight", "plan_trip", "weather", "packing", "find_reel"}
+AWAITABLE = {
+    "search",
+    "find_stay",
+    "find_flight",
+    "plan_trip",
+    "weather",
+    "packing",
+    "find_reel",
+    "change_transport",
+}
 # Turns answered without a Skill; their replies live in social.py (varied pools).
 SOCIAL = {"greeting", "identity", "thanks", "ack", "goodbye", "small_talk", "off_topic", "ask_why"}
 
@@ -193,6 +203,7 @@ class Turn:
                 # The plan belonged to the old place.
                 memory.stay, memory.transport, memory.days = None, None, []
                 memory.pending, memory.ops = [], []
+                memory.pending_flights = []
             start = planner.start_day(parsed, self.today)
             if start is not None and start >= self.today:
                 window = planner.day_window(parsed, self.today)
@@ -215,10 +226,21 @@ class Turn:
         ][:5]
         if shown:
             memory.last_cards = shown
+        if any(c.kind == "flight" for c in answer.cards):
+            memory.pending_flights = draft_flights(answer.cards)
         memory.asked = memory.asked or answer.kind == "clarify"
         # What Tripi just asked for, so a short reply ("Vũng tàu") finishes it next turn.
-        memory.awaiting = None
-        if answer.kind == "clarify" and parsed is not None and parsed.intent in AWAITABLE:
+        memory.awaiting = (
+            self.planned_trip.awaiting
+            if (answer.kind == "clarify" and self.planned_trip is not None)
+            else None
+        )
+        if (
+            memory.awaiting is None
+            and answer.kind == "clarify"
+            and parsed is not None
+            and parsed.intent in AWAITABLE
+        ):
             missing = parsed.missing if parsed.missing in {"place", "dates"} else "place"
             memory.awaiting = Awaiting.model_validate(
                 {"intent": parsed.intent, "missing": missing, "nights": parsed.nights}
@@ -431,6 +453,7 @@ class Turn:
             today=self.today,
             trip=self.memory.model_copy(deep=True),
         )
+        trip_planner.trip.awaiting = None
         action = self.request.action
         if action is not None:
             step = {
@@ -443,10 +466,13 @@ class Turn:
             step = {
                 "plan_trip": lambda: trip_planner.plan(parsed),
                 "change_stay": lambda: trip_planner.stay_options(parsed),
-                "select_option": lambda: trip_planner.select(ordinal=parsed.card_ordinal),
+                "select_option": lambda: trip_planner.select(
+                    ordinal=parsed.card_ordinal, message=self.request.message
+                ),
                 "remove_stop": lambda: trip_planner.remove_stop(name=parsed.stop_name),
                 "undo": trip_planner.undo,
                 "change_transport": lambda: trip_planner.transport(parsed),
+                "confirm_booking": trip_planner.confirm,
             }[parsed.intent]()
         answer = await self._run_value("plan", step)
         if answer is None:

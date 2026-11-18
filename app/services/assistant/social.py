@@ -28,7 +28,7 @@ RECENT_USER_TURNS = 6
 SKILL_INTENTS = {
     "search", "find_reel", "find_stay", "find_flight", "check_room", "post_itinerary",
     "post_reviews", "weather", "packing", "plan_trip", "change_stay", "change_transport",
-    "clarify",
+    "clarify", "confirm_booking",
 }  # fmt: skip
 
 POOLS: dict[str, list[str]] = {

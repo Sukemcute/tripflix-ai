@@ -135,7 +135,8 @@ def test_plan_trip_builds_a_two_day_itinerary_with_estimates_and_asks_the_origin
     assert (answer.lead or "").startswith("Lộ trình Vũng Tàu 2 ngày")
     assert all("km" in line.detail and "phút" in line.detail for line in card.lines or [])
     assert answer.facts[0]["estimate"] is True
-    assert "Mình đi từ TP.HCM" in answer.suggestions
+    assert "Bay từ TP.HCM" in answer.suggestions
+    assert "Bay từ Hà Nội" in answer.suggestions
 
 
 def test_no_places_with_coordinates_is_said_not_invented():
