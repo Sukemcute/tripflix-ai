@@ -85,6 +85,8 @@ class ModerationSettings(BaseSettings):
     visobert_threads: int = Field(default=1, ge=1)
     visobert_batch_size: int = Field(default=4, ge=1, le=20)
     visobert_timeout_seconds: float = Field(default=1.5, gt=0)
+    # POST /embed (TF28): loaded on first call, so the RAM is only used once core calls it.
+    embedding_dir: Path = Path(__file__).resolve().parents[1] / "models" / "e5_embedding"
 
     # Core's service tokens (libs/auth/src/service-token.ts): ES256, typ "service".
     core_api_url: str = "http://localhost:3000"

@@ -12,3 +12,4 @@ __pycache__
 data/
 docs/research/
 app/models/visobert_moderation/
+app/models/e5_embedding/

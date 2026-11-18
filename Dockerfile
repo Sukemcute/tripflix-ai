@@ -11,11 +11,21 @@ COPY app ./app
 COPY scripts/export_visobert.py ./scripts/export_visobert.py
 RUN python -m scripts.export_visobert --out /models/visobert_moderation
 
+FROM python:3.13-slim AS e5-model
+COPY --from=uv /uv /bin/uv
+WORKDIR /build
+# The checkpoint ships an ONNX graph: only quantize it, no torch.
+RUN uv pip install --system onnxruntime==1.31.1 onnx==1.23.2 numpy tokenizers==0.21.2
+COPY app ./app
+COPY scripts/export_e5.py ./scripts/export_e5.py
+RUN python -m scripts.export_e5 --out /models/e5_embedding
+
 FROM python:3.13-slim AS base
 COPY --from=uv /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_CACHE_DIR=/tmp/uv-cache PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=visobert-model /models/visobert_moderation ./app/models/visobert_moderation
+COPY --from=e5-model /models/e5_embedding ./app/models/e5_embedding
 
 FROM base AS dependencies
 COPY pyproject.toml uv.lock ./
