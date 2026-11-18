@@ -74,6 +74,24 @@ class UsageEvent(_WireModel):
     payload: ChatUsage | SummaryUsage | ModerationUsage
 
 
+class ChatTurn(_WireModel):
+    conversation_id: UUID
+    question: str = Field(max_length=120)
+    intent: str | None
+    answer_kind: str
+    is_action: bool
+
+
+class ChatTurnEvent(_WireModel):
+    event_id: UUID = Field(default_factory=uuid4)
+    type: Literal["ai.chat.turn.recorded"] = "ai.chat.turn.recorded"
+    version: Literal[1] = 1
+    occurred_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
+    producer: Literal["ai-service"] = "ai-service"
+    user_id: UUID
+    payload: ChatTurn
+
+
 class _UsageSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
     redis_url: str = "redis://localhost:6379/0"
@@ -100,18 +118,21 @@ def create_worker_usage_redis(url: str) -> redis.Redis:
     )
 
 
-def _fields(event: UsageEvent) -> dict[FieldT, EncodableT]:
+def _fields(event: UsageEvent | ChatTurnEvent) -> dict[FieldT, EncodableT]:
     return {"event": event.model_dump_json(by_alias=True)}
 
 
-def _log_unpublished(event: UsageEvent) -> None:
+def _log_unpublished(event: UsageEvent | ChatTurnEvent) -> None:
+    if isinstance(event, ChatTurnEvent):
+        logger.warning("ai.chat_turn.publish_failed", extra={"eventId": str(event.event_id)})
+        return
     logger.warning(
         "ai.usage.publish_failed",
         extra={"usageEvent": event.model_dump(mode="json", by_alias=True)},
     )
 
 
-async def publish_usage(events: Sequence[UsageEvent]) -> None:
+async def publish_usage(events: Sequence[UsageEvent | ChatTurnEvent]) -> None:
     if not events:
         return
     try:

@@ -39,7 +39,8 @@ from app.services.assistant.planner import today_in_vietnam
 from app.services.assistant.responder import respond, split_for_stream
 from app.services.assistant.turn import Turn
 from app.services.assistant.understand import LlmNotConfiguredError, understand
-from app.services.usage_events import ChatUsage, UsageEvent, publish_usage
+from app.services.summary.pii import mask_pii
+from app.services.usage_events import ChatTurn, ChatTurnEvent, ChatUsage, UsageEvent, publish_usage
 
 __all__ = ["ChatSettings", "get_chat_settings", "router"]
 
@@ -184,7 +185,9 @@ async def run_turn(
 ):
     loop = asyncio.get_running_loop()
     usage = {"inputTokens": 0, "outputTokens": 0, "costUsd": 0.0, "estimated": True}
-    events: list[UsageEvent] = []
+    events: list[UsageEvent | ChatTurnEvent] = []
+    parsed = None
+    answer_kind = "error"
     user_id = None
     if not ticket.identity.is_guest:
         with suppress(ValueError):
@@ -213,7 +216,6 @@ async def run_turn(
     try:
         yield event("status", {"step": "understanding"})
         async with asyncio.timeout_at(deadline):
-            parsed = None
             llm_status = "quota" if "quota" in degraded else "disabled"
             if request.action is not None:
                 llm_status = "action"  # a button on a card runs as code: no LLM, no tokens
@@ -292,6 +294,7 @@ async def run_turn(
                 yield event("suggestions", {"items": answer.suggestions[:3]})
             # What Tripi remembers; the app sends it back next turn (trip memory, v3.1).
             yield event("trip", turn.next_trip(answer).model_dump(mode="json", by_alias=True))
+            answer_kind = answer.kind
             yield event("done", {"kind": answer.kind, "usage": usage, "degraded": degraded})
     except (TimeoutError, httpx.HTTPError, ValidationError, ValueError):
         yield event("error", {"code": "DEPENDENCY_UNAVAILABLE", "usage": usage})
@@ -299,6 +302,19 @@ async def run_turn(
         # Shielded: a client that leaves mid-stream cancels us, yet tokens were already spent
         # and the lock must be freed for the next turn.
         with anyio.CancelScope(shield=True):
+            if user_id is not None:
+                events.append(
+                    ChatTurnEvent(
+                        user_id=user_id,
+                        payload=ChatTurn(
+                            conversation_id=request.conversation_id,
+                            question=mask_pii(request.message)[:120],
+                            intent=parsed.intent if parsed is not None else None,
+                            answer_kind=answer_kind,
+                            is_action=request.action is not None,
+                        ),
+                    )
+                )
             try:
                 await gate.settle(
                     ticket,
