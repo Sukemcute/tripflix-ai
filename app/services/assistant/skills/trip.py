@@ -139,14 +139,14 @@ async def post_itinerary(
 async def post_reviews(core: httpx.AsyncClient, post_id: UUID) -> Answer:
     """The stored comment summary (TF44); never summarised again in chat.
 
-    ai-summary answers 404 both for "no summary yet" and for a post nobody may see (hidden,
-    removed, pending review, private, deleted). So the post is read first: only once it is
-    visible does 404 mean "no summary yet" (Thành, 2026-11-16).
+    ai-summary answers 204 (new core) or 404 (old core) for "no summary yet". A missing or
+    non-viewable post also returns 404, so the post is read first: only once it is visible
+    does 404 mean "no summary yet" (Thành, 2026-11-16).
     """
     if await fetch_post(core, post_id) is None:
         return GONE
     response = await core.get(f"/api/v1/posts/{post_id}/ai-summary")
-    if response.status_code == httpx.codes.NOT_FOUND:
+    if response.status_code in (httpx.codes.NO_CONTENT, httpx.codes.NOT_FOUND):
         summary = {}
     else:
         response.raise_for_status()
