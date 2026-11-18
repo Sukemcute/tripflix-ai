@@ -148,7 +148,7 @@ def test_origin_said_with_the_plan_is_kept():
             [("user", "hi"), ("assistant", "a"), ("user", "hello"), ("assistant", "b")],
             "greeting_repeat",
         ),
-        ("clarify", "trả lời ngu vl", [], "abuse"),
+        ("off_topic", "trả lời ngu vl", [], "abuse"),
         ("greeting", "đm chào", [], "abuse"),
         (
             "off_topic",
@@ -272,3 +272,81 @@ def test_a_card_title_already_in_the_sentence_is_not_written_twice():
     titles = {"r1": "Săn mây 4h sáng", "r2": ""}
     assert _name_refs("Có reel Săn mây 4h sáng [r1] nè", titles) == "Có reel Săn mây 4h sáng  nè"
     assert _name_refs("Xem [r1] nha", titles) == "Xem Săn mây 4h sáng nha"
+
+
+PLACES = ["Đà Lạt", "Phú Quốc", "Hà Nội", ""]
+
+
+@pytest.mark.parametrize("place", PLACES)
+@pytest.mark.parametrize(
+    ("intent", "message", "said_rude", "has_request", "move"),
+    [
+        # rude, no request: a reminder whatever the intent the trip pulled the model to
+        ("search", "cặc, chatbot như quần", True, False, "abuse"),
+        ("find_reel", "bot óc bã đậu thật sự", True, False, "abuse"),  # not in the word list
+        ("plan_trip", "trả lời như cái bô", True, False, "abuse"),
+        ("find_stay", "đm bot ngu", False, False, "abuse"),  # model missed it, word list did not
+        # not rude: never held back on the model's request reading (a wrong "no request"
+        # once blocked "Dự báo Đà Lạt hôm đó sao", v8 eval); off_topic handles chit-chat
+        ("search", "trả lời gì kì vậy, dở tệ", False, False, None),
+        ("weather", "Dự báo Đà Lạt hôm đó sao", False, False, None),
+        # a request, rude or not: answered (Turn adds one reminder when rude)
+        ("find_stay", "đm tìm ks đi", True, True, None),
+        ("weather", "vcl thời tiết mai sao", True, True, None),
+        ("search", "tìm reel đi chơi", False, True, None),
+    ],
+)
+def test_one_rule_for_tone_and_request_at_any_place(
+    intent, message, said_rude, has_request, move, place
+):
+    talk = history(("user", f"Giờ tôi muốn đi {place}"), ("assistant", "Bạn đi mấy ngày?"))
+    got = social.choose_move(
+        intent, message, talk if place else [], said_rude=said_rude, has_request=has_request
+    )
+    assert got == move
+
+
+@pytest.mark.parametrize("place", PLACES)
+def test_a_rude_message_without_a_request_shows_no_cards(place):
+    request = ChatRequest(conversation_id=uuid4(), message="cặc, chatbot như quần")
+    parsed = Understanding(intent="search", place=place, query="chatbot như quần", is_rude=True)
+
+    async def go():
+        async with fake_core() as client:
+            turn = Turn(request, parsed, core=client, weather=FakeWeather(), today=TODAY)
+            return await turn.answer()
+
+    answer = asyncio.run(go())
+    assert answer.cards == [] and answer.facts[0]["move"] == "abuse"
+    assert answer.text.count("nhẹ nhàng") <= 1  # one reminder, not two
+
+
+def test_a_rude_request_is_answered_with_one_reminder():
+    request = ChatRequest(conversation_id=uuid4(), message="bot phế vật, tìm reel phú quốc coi")
+    parsed = Understanding(intent="search", place="Phú Quốc", query="Phú Quốc", is_rude=True)
+
+    async def go():
+        async with fake_core() as client:
+            turn = Turn(request, parsed, core=client, weather=FakeWeather(), today=TODAY)
+            return await turn.answer()
+
+    answer = asyncio.run(go())
+    assert answer.cards and any(answer.text.startswith(r) for r in social.REMINDERS)
+
+
+@pytest.mark.parametrize(
+    ("message", "parsed", "named"),
+    [
+        # the trip in memory never counts: only what the message itself names
+        ("cặc, chatbot như quần", {"place": "Đà Lạt"}, False),
+        ("bot óc bã đậu thật sự", {"place": "Phú Quốc", "query": "bot"}, False),
+        ("đm tìm ks đà nẵng t7 này", {"place": "Đà Nẵng"}, True),
+        ("vcl thời tiết mai sao", {"place": "Hà Nội"}, True),  # a day is named
+        ("đm ks Mường Thanh còn phòng ko", {"hotel_name": "Mường Thanh"}, True),
+        # shortcut: a rude ask that names nothing ("đm tìm ks rẻ đi") gets the reminder only
+        ("đm tìm ks rẻ đi", {"place": "Đà Lạt"}, False),
+    ],
+)
+def test_a_rude_message_is_acted_on_only_from_its_own_words(message, parsed, named):
+    understood = Understanding(intent="search", is_rude=True, **parsed)
+    assert social.names_its_target(message, understood) is named

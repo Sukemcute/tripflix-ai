@@ -15,13 +15,21 @@ from typing import Any
 
 import yaml
 
-from app.services.assistant.schemas import Answer, Turn
+from app.services.assistant.controller import CALENDAR_DATE, DATE_WORDS
+from app.services.assistant.schemas import Answer, Turn, Understanding
 from app.services.summary.vi_text import normalize_text
 
 LEXICON = Path(__file__).resolve().parents[2] / "lexicons" / "chat" / "abuse.v1.yaml"
 GREETING_TEXT = r"^(?:hi+|hell?o+|hey+|alo+|(?:xin )?chao(?: ban| tripi| cau| nha| ne)*)\W*$"
 REPEAT_AFTER = 2  # the third greeting (or same line) in a row is steered to travel [HIỆU CHỈNH]
 RECENT_USER_TURNS = 6
+# Intents that lead to a Skill and cards. Without a request in the message they run none:
+# the trip on screen never turns venting into a search (v8, 2026-11-17).
+SKILL_INTENTS = {
+    "search", "find_reel", "find_stay", "find_flight", "check_room", "post_itinerary",
+    "post_reviews", "weather", "packing", "plan_trip", "change_stay", "change_transport",
+    "clarify",
+}  # fmt: skip
 
 POOLS: dict[str, list[str]] = {
     "greeting_intro": [
@@ -116,15 +124,49 @@ def _recent_user_texts(history: Sequence[Turn]) -> list[str]:
     return users[-RECENT_USER_TURNS:]
 
 
-def choose_move(intent: str, message: str, history: Sequence[Turn]) -> str | None:
-    """The kind of small-talk reply this turn needs, or None when it is a travel turn."""
+def names_its_target(message: str, parsed: Understanding) -> bool:
+    """Whether the message itself names what to act on: a place, a day, a hotel, a reel.
+
+    A rude message is acted on only from its own words, never from the trip in memory
+    ("cặc, chatbot như quần" carried Đà Lạt from the chat into a search, 17/11). The model's
+    own "is there a request" reading was wrong both ways in the v8 eval, so code checks this.
+    """
+    text = normalize_text(message)
+    named = (parsed.place, parsed.to_city, parsed.from_city, parsed.hotel_name, parsed.reel_query)
+    if any(name.strip() and normalize_text(name) in text for name in named):
+        return True
+    return bool(re.search(DATE_WORDS, text) or re.search(CALENDAR_DATE, message))
+
+
+def is_rude(message: str, *, said_rude: bool) -> bool:
+    """The Controller reads the tone; the word list only backs it up when the model misses."""
+    return said_rude or has_abuse(message)
+
+
+def choose_move(
+    intent: str,
+    message: str,
+    history: Sequence[Turn],
+    *,
+    said_rude: bool = False,
+    has_request: bool = True,
+) -> str | None:
+    """The kind of small-talk reply this turn needs, or None when it is a request.
+
+    One rule for every place and none: rude without a request gets a reminder, a request is
+    answered (Turn adds one reminder when rude), social intents get small talk.
+    """
     if intent == "ask_why":
         return "ask_why"
     text = normalize_text(message)
-    is_abusive = has_abuse(message)
-    if intent not in SOCIAL_MOVES and not (is_abusive and intent in {"clarify", "refusal"}):
+    rude = is_rude(message, said_rude=said_rude)
+    if intent in SKILL_INTENTS and rude and not has_request:
+        # "cặc, chatbot như quần" during a Đà Lạt chat was a search 5/6 and showed reels (17/11).
+        # Only rude turns are held back: a polite question is never blocked on a model mistake.
+        return "abuse"
+    if intent not in SOCIAL_MOVES:
         return None
-    if is_abusive:
+    if rude:
         return "abuse"
     recent = _recent_user_texts(history)
     if intent == "greeting" or re.match(GREETING_TEXT, text):

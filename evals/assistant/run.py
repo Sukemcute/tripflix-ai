@@ -83,6 +83,7 @@ EMPTY_PLAN = {
     "stop_name": "",
     "pace": None,
     "meals_only": False,
+    "is_rude": False,
 }
 
 
@@ -492,7 +493,7 @@ async def run_ab(cases: list[dict]) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["ci", "live", "chain", "search", "ab"], default="ci")
-    parser.add_argument("--cases", choices=["v1", "v2", "v3", "v4", "all"], default="all")
+    parser.add_argument("--cases", choices=["v1", "v2", "v3", "v4", "v5", "all"], default="all")
     parser.add_argument("--runs", type=int, default=3)
     args = parser.parse_args()
     if args.mode == "chain":
@@ -501,7 +502,7 @@ def main() -> int:
         return asyncio.run(run_chain(chains, args.runs))
     if args.mode == "search":
         return asyncio.run(run_search(read_jsonl("search.v1.jsonl")))
-    versions = ["v1", "v2", "v3", "v4"] if args.cases == "all" else [args.cases]
+    versions = ["v1", "v2", "v3", "v4", "v5"] if args.cases == "all" else [args.cases]
     cases = [case for version in versions for case in load_cases(version)]
     if args.mode == "ci":
         return asyncio.run(run_ci(cases))
