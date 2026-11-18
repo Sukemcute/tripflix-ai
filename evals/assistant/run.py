@@ -109,6 +109,7 @@ def request_of(case: dict) -> ChatRequest:
             "history": case["history"],
             "contextPostId": str(REEL) if case["inReel"] else None,
             "trip": case.get("trip"),
+            "action": case.get("action"),
         }
     )
 
@@ -265,6 +266,17 @@ def core_problem(expect: dict, calls: list[tuple[str, dict]]) -> str | None:
     return None
 
 
+def actions_match(answer, expect: dict) -> bool:
+    actions = [a for card in answer.cards for a in card.actions or []]
+    return all(
+        any(
+            all(action.model_dump().get(key) == value for key, value in wanted.items())
+            for action in actions
+        )
+        for wanted in expect.get("actions", [])
+    )
+
+
 async def run_ci(cases: list[dict]) -> int:
     failures = []
     for case in cases:
@@ -278,7 +290,13 @@ async def run_ci(cases: list[dict]) -> int:
             answer = await turn.answer()
         card = answer.cards[0].kind if answer.cards else None
         problem = core_problem(expect, calls)
-        if answer.kind != expect["kind"] or card != expect["card"] or turn.degraded or problem:
+        if (
+            answer.kind != expect["kind"]
+            or card != expect["card"]
+            or turn.degraded
+            or problem
+            or not actions_match(answer, expect)
+        ):
             got = f"{answer.kind}/{card}" + (f", {problem}" if problem else "")
             failures.append((case["id"], f"{expect['kind']}/{expect['card']}", got))
     print(f"ci: {len(cases) - len(failures)}/{len(cases)} cases match kind, card and Core calls")
@@ -367,6 +385,7 @@ async def run_chain(chains: list[dict], runs: int) -> int:
                             parsed.intent in [expect["intent"], *expect.get("alsoOk", [])]
                             and slots_match(parsed, expect.get("slots", {}))
                             and ("card" not in expect or card == expect["card"])
+                            and actions_match(answer, expect)
                         )
                         got = f"{parsed.intent}/{card}"
                     except Exception as error:  # noqa: BLE001  # an eval run reports, never stops
@@ -493,16 +512,18 @@ async def run_ab(cases: list[dict]) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["ci", "live", "chain", "search", "ab"], default="ci")
-    parser.add_argument("--cases", choices=["v1", "v2", "v3", "v4", "v5", "all"], default="all")
+    parser.add_argument(
+        "--cases", choices=["v1", "v2", "v3", "v4", "v5", "v6", "all"], default="all"
+    )
     parser.add_argument("--runs", type=int, default=3)
     args = parser.parse_args()
     if args.mode == "chain":
-        chains = [read_jsonl(f"chains.v{n}.jsonl") for n in (1, 2, 3)]
+        chains = [read_jsonl(f"chains.v{n}.jsonl") for n in (1, 2, 3, 4)]
         chains = [chain for group in chains for chain in group]
         return asyncio.run(run_chain(chains, args.runs))
     if args.mode == "search":
         return asyncio.run(run_search(read_jsonl("search.v1.jsonl")))
-    versions = ["v1", "v2", "v3", "v4", "v5"] if args.cases == "all" else [args.cases]
+    versions = ["v1", "v2", "v3", "v4", "v5", "v6"] if args.cases == "all" else [args.cases]
     cases = [case for version in versions for case in load_cases(version)]
     if args.mode == "ci":
         return asyncio.run(run_ci(cases))
