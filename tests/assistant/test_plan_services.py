@@ -354,3 +354,21 @@ def test_a_longer_origin_and_day_reply_finishes_the_plan(message):
         awaiting=Awaiting(intent="plan_trip", missing="origin_dates", nights=2),
     )
     assert (out.intent, out.from_city) == ("plan_trip", "TP.HCM")
+
+
+def test_city_aliases_and_a_copied_end_day_do_not_break_the_plan():
+    out = apply_guards(
+        controller_plan(intent="plan_trip", place="Đà Lạt", from_city="Sài Gòn"),
+        "mình đi từ Sài Gòn, ngày 21/11",
+        has_reel=False,
+    )
+    assert out.from_city == "TP.HCM"  # the fake and the real core both know this name
+    copied = controller_plan(
+        intent="plan_trip",
+        place="Vũng Tàu",
+        nights=2,
+        start={"day": 21, "month": 11, "year": None},
+        end={"day": 21, "month": 11, "year": None},
+    )
+    parsed = to_understanding(copied, None, date(2026, 11, 18))
+    assert (parsed.check_in, parsed.check_out) == (date(2026, 11, 21), None)

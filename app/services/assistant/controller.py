@@ -281,6 +281,9 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
     trip = trip or TripContext()
     start = build_date(out.start, today)
     end = build_end(out.end, start, today)
+    if start and end and end <= start and out.nights:
+        # "từ TP.HCM, 21/11" for a 2-night plan: the model copied the day into the end too.
+        end = None
     place = out.place.strip()
     is_new_place = bool(place) and trip.place and place.casefold() != trip.place.casefold()
     has_date_words = start is not None or out.day_ref != "none"
@@ -355,6 +358,15 @@ def apply_guards(
     }
     if blanks:
         out = out.model_copy(update=blanks)
+    # One name per city for the airport and route lookups: the model wrote "Sài Gòn" once and
+    # "TP.HCM" the next time, and only one of them matched (18/11).
+    canonical = {
+        name: CITY_NAMES[normalize_text(getattr(out, name))]
+        for name in ("from_city", "to_city")
+        if normalize_text(getattr(out, name)) in CITY_NAMES
+    }
+    if canonical:
+        out = out.model_copy(update=canonical)
     if re.fullmatch(GREETING, text):
         return out.model_copy(update={"intent": "greeting"})
     if re.fullmatch(THANKS_ONLY, text):  # "cam on nha" after a checklist was ack/packing (v7)
