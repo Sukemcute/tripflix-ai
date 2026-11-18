@@ -29,7 +29,7 @@ from app.services.summary.schemas import strict_json_schema
 
 logger = logging.getLogger(__name__)
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v8.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v9.md"
 
 
 class LlmNotConfiguredError(Exception):
@@ -67,7 +67,8 @@ def build_understanding_input(
                 "planStops": [stop.name for day in trip.days for stop in day][:20],
                 "interests": trip.interests,
                 "mealsOnly": trip.meals_only,
-                "pendingCount": len(trip.pending),
+                "pendingCount": len(trip.pending_flights or trip.pending),
+                "hasChosenFlight": bool(trip.transport and trip.transport.flight_id),
                 # What Tripi just asked for: a short reply ("Vũng tàu") finishes this request.
                 "awaiting": trip.awaiting.model_dump(mode="json", by_alias=True)
                 if trip.awaiting
@@ -156,8 +157,15 @@ async def understand(
         out,
         request.message,
         has_reel=has_reel,
-        has_options=bool(trip and trip.pending),
+        has_options=bool(trip and (trip.pending or trip.pending_flights)),
         in_plan=bool(trip and trip.days),
+        has_booking=bool(
+            trip
+            and (
+                (trip.stay and trip.stay.source == "tripflix")
+                or (trip.transport and trip.transport.flight_id)
+            )
+        ),
         awaiting=trip.awaiting if trip else None,
     )
     return to_understanding(out, trip, today_in_vietnam()), result
