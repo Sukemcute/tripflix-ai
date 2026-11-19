@@ -388,14 +388,44 @@ def move_from_message(message: str, trip: TripContext) -> dict[str, str] | None:
     if len(mentioned) != 2:
         return None
     first, second = mentioned
-    between = " ".join(words[first[1] : second[0]])
-    if re.search(r"\b(truoc|roi moi(?: sang)?)\b", between):
-        placement = "before"
-    elif re.search(r"\bsau\b", between):
-        placement = "after"
-    else:
+    placement = _visit_order(
+        " ".join(words[: first[0]]), " ".join(words[first[1] : second[0]]), " ".join(words)
+    )
+    if placement == "swap":
+        order = [stop.id for day in trip.days for stop in day]
+        placement = "after" if order.index(first[2]) < order.index(second[2]) else "before"
+    if placement is None:
         return None
     return {"stop_name": first[3], "anchor_name": second[3], "placement": placement}
+
+
+GO = r"(?: (?:di|ghe|toi|den|qua|sang|choi|tham))?"
+SEQUENCE = r"\b(sau do|roi|xong|tiep theo|tiep den|ke den|ke tiep|moi)\b"
+
+
+def _visit_order(prefix: str, between: str, text: str) -> str | None:
+    """Whether the first named stop comes before or after the second, from the words around.
+
+    "A trước B", "A rồi (mới) B", "A, sau đó B", "sau A thì B" → before; "B sau A",
+    "B sau khi đi A", "trước A thì đi B" → after; "đổi chỗ A và B" → swap. Order words beat
+    the model's anchor: it read "Thung Lũng trước Chùa Tàu" as before German House (19/11).
+    """
+    if re.search(rf"\b(?:dau tien|truoc tien|truoc het){GO}$", prefix):
+        return "before"
+    if re.search(rf"\btruoc(?: khi)?{GO}$", prefix):
+        return "after"  # "trước Chùa Tàu thì đi Thung Lũng"
+    if re.search(rf"\bsau(?: khi)?{GO}$", prefix):
+        return "before"  # "sau Chùa Tàu thì đi Thung Lũng"
+    if re.search(r"\bsau khi\b", between):
+        return "after"
+    if re.search(r"\btruoc\b", between) or re.search(SEQUENCE, between):
+        return "before"
+    if re.search(r"\bsau\b", between):
+        return "after"
+    if re.fullmatch(r"(?:va|voi)", between) and re.search(r"\b(doi cho|hoan doi|dao)\b", text):
+        # shortcut: swaps by moving the first past the second; exact for neighbours only.
+        return "swap"
+    return None
 
 
 def is_unspecified_edit(message: str, trip: TripContext) -> bool:
