@@ -16,6 +16,7 @@ class LlmResult:
     cost_usd: float = 0.0  # estimated by the adapter from token counts
     # "length" means the output was cut: JSON may still parse, so callers check this first.
     finish_reason: str = ""
+    latency_ms: int | None = None
 
 
 class LlmClient(Protocol):

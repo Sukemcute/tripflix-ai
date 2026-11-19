@@ -1,8 +1,12 @@
+import asyncio
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from app.clients.llm import guarded
 from app.clients.llm.base import LlmResult
 from app.clients.llm.guarded import GuardedLlmClient, LlmUnavailableError
 from app.core.breaker import CircuitBreaker
@@ -74,6 +78,51 @@ def test_an_open_llm_breaker_fails_at_once_without_calling_the_provider() -> Non
         llm.generate("s", "u", {})
 
     assert inner.calls == 2 and llm.model == "m1"
+
+
+@pytest.mark.parametrize("native", [False, True])
+def test_async_llm_measures_provider_latency_without_changing_result(monkeypatch, native):
+    original = LlmResult("{}", "m1", 7, 11, cost_usd=0.01, finish_reason="stop")
+    counter = Mock(side_effect=[100.0, 100.123])
+    monkeypatch.setattr(guarded.time, "perf_counter", counter)
+
+    def generate(*args):
+        assert args == ("s", "u", {}) and counter.call_count == 1
+        return original
+
+    inner = Mock(spec=FlakyLlm)
+    inner.generate = Mock(side_effect=generate)
+    if native:
+        inner.agenerate = AsyncMock(side_effect=generate)
+    llm = GuardedLlmClient(inner, CircuitBreaker("llm", clock=Clock()))
+    result = asyncio.run(llm.agenerate("s", "u", {}))
+    assert result == replace(original, latency_ms=123)
+    assert isinstance(result.latency_ms, int) and result.latency_ms >= 0
+    assert original.latency_ms is None and counter.call_count == 2
+    if native:
+        inner.generate.assert_not_called()
+
+
+@pytest.mark.parametrize("error", [TimeoutError, asyncio.CancelledError])
+def test_async_failure_and_cancellation_keep_breaker_behavior(error):
+    inner = Mock(spec=FlakyLlm)
+    inner.agenerate = AsyncMock(side_effect=error)
+    breaker = CircuitBreaker("llm", clock=Clock())
+    with pytest.raises(error):
+        asyncio.run(GuardedLlmClient(inner, breaker).agenerate("s", "u", {}))
+    assert breaker.failures == (0 if error is asyncio.CancelledError else 1)
+
+
+def test_async_open_breaker_never_starts_latency_timer(monkeypatch):
+    counter = Mock()
+    monkeypatch.setattr(guarded.time, "perf_counter", counter)
+    inner = Mock(spec=FlakyLlm)
+    breaker = CircuitBreaker("llm", threshold=1, clock=Clock())
+    breaker.record_failure()
+    with pytest.raises(LlmUnavailableError):
+        asyncio.run(GuardedLlmClient(inner, breaker).agenerate("s", "u", {}))
+    counter.assert_not_called()
+    inner.generate.assert_not_called()
 
 
 class BrokenClassifier:
