@@ -45,6 +45,8 @@ class ChatUsage(_LlmUsage):
     feature: Literal["chat"] = "chat"
     conversation_id: UUID
     step: Literal["controller", "responder"]
+    turn_id: UUID | None = None
+    latency_ms: int | None = Field(default=None, ge=0)
 
 
 class SummaryUsage(_LlmUsage):
@@ -80,6 +82,8 @@ class ChatTurn(_WireModel):
     intent: str | None
     answer_kind: str
     is_action: bool
+    turn_id: UUID | None = None
+    latency_ms: int | None = Field(default=None, ge=0)
 
 
 class ChatTurnEvent(_WireModel):
