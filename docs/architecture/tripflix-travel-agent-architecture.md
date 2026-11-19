@@ -4,6 +4,8 @@
 - **Phạm vi:** trợ lý chat trên app và web, task TF14 (so sánh cách làm), TF31 (trợ lý gợi ý), TF40 (bài đăng và chi phí).
 - **Bản trước:** v1.1 (09/11) mô tả tầm nhìn lớn. Phần còn dùng được chuyển xuống mục 14 "Sau pilot". Sơ đồ ER 33 bảng đã bỏ, vì schema thật nằm trong `tripflix-be` và thay đổi liên tục.
 
+- **v1.1 (19/11), đối chiếu trạng thái:** xem [thiết kế v3 và trạng thái triển khai](tripi-agent-v3-de-xuat.md) và [kiến trúc chi tiết](tripi-agent-kien-truc-chi-tiet.md); phần thiết kế v2.0 ngày 10/11 dưới đây giữ làm mốc, chỉ sửa các câu đã sai.
+
 **Quy ước trong tài liệu:**
 - **[CODE]**: đã kiểm trong code hoặc OpenAPI của `tripflix-be` ngày 10/11 (commit `598e9df`).
 - **[NGUỒN]**: có nguồn ở mục 15. Phần lớn nguồn mới đọc ở mức tóm tắt, chưa đọc toàn văn.
@@ -47,7 +49,7 @@
 
 **Mốc:** TF31 hạn 13/11 (demo mốc 2). TF40 hạn 20/11 (demo mốc 3). Ngừng thêm tính năng 19/11.
 
-**Mâu thuẫn trong TF31 [CẦN CHỐT, leader tuần]:** phần thuộc tính ghi "dùng được khi chưa đăng nhập", phần nội dung trang ghi "chỉ dùng được khi đã đăng nhập". Kiến trúc dưới đây chạy được cả hai; khác nhau ở hạn mức (mục 10).
+**Đã chốt:** khách chưa đăng nhập dùng được, có hạn mức và đường quay lại sau đăng nhập; chỉ lượt đăng nhập phát sự kiện hành vi. [FE #230](https://github.com/Sukemcute/tripflix-fe/pull/230) · [AI #48](https://github.com/Sukemcute/tripflix-ai/pull/48)
 
 ---
 
@@ -71,12 +73,11 @@
 
 **ai-service đã có [CODE]:** `GET /health`, `POST /moderate`, worker tóm tắt, client gọi core có service token, kiểm service token qua JWKS, `mask_pii`, `match_injection`, cổng LLM (`LlmClient`) với DeepSeek và bản giả.
 
-**Chưa có:**
-- Endpoint chat, luồng trợ lý, bộ kiểm gợi ý.
-- Bảng so sánh 2 cách làm và 2 mô hình (TF14 đang "In Review" nhưng repo chưa có evidence phần trợ lý).
-- Bộ 100 câu chưa nằm trong `evals/` của repo AI [CẦN CHỐT: bộ này đang ở đâu].
-- Đường `/ai` trên gateway staging (anh Phong xác nhận 09/11 là chưa mở).
-- Cách ai-service kiểm token của **người dùng** (hiện mới kiểm service token).
+**Đối chiếu 19/11 (thay danh sách “chưa có” ngày 10/11):**
+- Chat, Controller/Skills/Responder/Verifier, bản nháp và nút đặt đã có; mobile và web đều dùng Tripi. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) · [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) · [FE #230](https://github.com/Sukemcute/tripflix-fe/pull/230)
+- Bộ 100 kịch bản và 50 câu tìm kiếm, bảng A/B đã có. [AI #36](https://github.com/Sukemcute/tripflix-ai/pull/36) · [AI #38](https://github.com/Sukemcute/tripflix-ai/pull/38)
+- Gateway `/ai/chat` đã có; ai-service cho khách dùng và kiểm token/phiên khi có. [BE #268](https://github.com/Sukemcute/tripflix-be/pull/268) · [BE #270](https://github.com/Sukemcute/tripflix-be/pull/270)
+- Sự kiện lượt chat và chi phí/trace đã có; không phải lưu toàn bộ hội thoại ở server. [AI #48](https://github.com/Sukemcute/tripflix-ai/pull/48) · [AI #50](https://github.com/Sukemcute/tripflix-ai/pull/50) · [BE #278](https://github.com/Sukemcute/tripflix-be/pull/278)
 
 ---
 
@@ -193,10 +194,7 @@ BUS -.-> ANALYTICS
 - Không có mũi tên nào từ ai-service tới `CHECKOUT`. Chỉ người dùng bấm nút mới tạo đơn.
 - LLM viết câu không gọi được tool. LLM hiểu câu không đọc kết quả tool.
 
-**Đường vào [CẦN CHỐT, Dũng và anh Phong]:**
-- Kiến trúc v4.3 và TF14: client gọi thẳng `/ai/chat` qua gateway, gateway kiểm token người dùng.
-- Staging hiện chưa mở `/ai`.
-- Cách khác: core nhận chat rồi chuyển tiếp. Cách này thêm một chặng cho luồng stream và thêm code ở core, nên tài liệu này theo v4.3.
+**Đường vào đã triển khai:** client gọi `/ai/chat` qua gateway; ai-service nhận khách hoặc kiểm chữ ký và phiên người dùng qua core. Staging đã có đường này; image/hạn mức hiện chạy xem mốc v1.1. [BE #268](https://github.com/Sukemcute/tripflix-be/pull/268) · [FE #230](https://github.com/Sukemcute/tripflix-fe/pull/230)
 
 ---
 
@@ -320,7 +318,7 @@ Ví dụ: lượt 1 "đi Vũng Tàu 2n1đ ăn hải sản", lượt 2 "có chỗ
 
 ---
 
-## 7. Hợp đồng chat (đề xuất, chưa chốt)
+## 7. Hợp đồng chat (đã triển khai; đối chiếu bổ sung ở v1.1)
 
 ```
 POST /ai/chat        Authorization: Bearer <token người dùng>   Accept: text/event-stream
@@ -342,12 +340,12 @@ Các sự kiện trả về, theo thứ tự:
 - **Giới hạn [HIỆU CHỈNH]:** `message` tối đa 500 ký tự; `history` tối đa 10 lượt, server tự cắt còn 6 lượt gần nhất.
 - **Chữ gửi theo câu, không theo từng token:** bộ kiểm cần cả câu mới biết giữ hay bỏ. Đổi lại chữ hiện chậm hơn một chút.
 - JSON dùng camelCase (RULES §4.1). Khi chốt, sinh lại `contracts/openapi/ai-service.json`.
-- **[CẦN CHỐT, Thành và chị Trang]:** FE nhận SSE qua `POST` thế nào trên web và trên app; hình dạng thẻ.
+- ✅ Mobile/web đều nhận SSE qua POST, chờ hết body rồi hiển thị thẻ; có actions và dòng dịch vụ. [FE #230](https://github.com/Sukemcute/tripflix-fe/pull/230) · [FE #235](https://github.com/Sukemcute/tripflix-fe/pull/235) · [FE #239](https://github.com/Sukemcute/tripflix-fe/pull/239)
 
 ### 7.1. Vì sao client giữ lịch sử
 
 - ai-service không được lưu dữ liệu nghiệp vụ, nên có ba chỗ để giữ: client, core, hoặc Redis có hạn giờ.
-- Client giữ là đơn giản nhất và giải luôn yêu cầu "đăng nhập giữa chừng không mất cuộc trò chuyện", vì lịch sử không gắn với tài khoản [ĐỀ XUẤT].
+- Client giữ phiên đăng nhập theo user trên cùng máy 7 ngày/20 tin, gồm thẻ và trip; logout/đổi tài khoản xoá. Native file riêng 64 KB, web localStorage; khách chỉ trong bộ nhớ. [FE #244](https://github.com/Sukemcute/tripflix-fe/pull/244)
 - **Rủi ro:** client có thể gửi lịch sử giả. Vì vậy lịch sử chỉ là **ngữ cảnh để hiểu câu**, không bao giờ là căn cứ cho gợi ý: mọi gợi ý phải đến từ kết quả API của lượt hiện tại (luật G1). Lịch sử cũng đi qua bước che PII và dò injection như tin nhắn mới.
 - Muốn xem lại hội thoại trên máy khác thì cần core lưu. Việc này ngoài phạm vi pilot.
 
@@ -365,7 +363,7 @@ Các sự kiện trả về, theo thứ tự:
 | `get_post_itinerary` | `GET /api/v1/posts/{id}` | Không | 2 giây |
 
 - Cả 6 API đều công khai theo OpenAPI [CODE], nên trợ lý không cần quyền của người dùng để đọc.
-- Không có tool tạo đơn, tool sửa lộ trình, hay tool ghi nào khác.
+- Không có tool tạo đơn hoặc ghi nghiệp vụ vào core. Code có phép sửa bản nháp client và chốt kiểm lại phòng/vé; người dùng vẫn tự đặt qua UI. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) · [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47)
 - Client của core sinh từ OpenAPI theo TF14 (RULES: không sửa tay code sinh). Hiện `app/clients/core_api.py` viết tay cho tóm tắt [CẦN CHỐT, Bảo: sinh lại hay viết tiếp].
 
 ### 8.1. Nút đặt chỗ
@@ -395,7 +393,7 @@ Các sự kiện trả về, theo thứ tự:
 
 ## 10. Chi phí và hạn mức
 
-**Mỗi lần gọi LLM ghi một sự kiện `ai.usage.recorded`:** `feature="chat"`, `conversationId`, số lượt, bước (`understand` hoặc `write`), mô hình, token vào, token ra, `costUsd`. Hiện ai-service mới ghi log có cấu trúc; phần đẩy lên stream cho analytics vẫn là việc đang chờ từ TF14.
+**Mỗi lần gọi LLM phát `ai.usage.recorded` vào stream:ai:** feature=chat, conversationId, bước controller/responder, mô hình, token và costUsd; nay thêm turnId/latencyMs. Lượt đăng nhập phát thêm ai.chat.turn.recorded với câu hỏi đã che/rút gọn. BE đã có consumer và API chi phí theo người/trace. [AI #48](https://github.com/Sukemcute/tripflix-ai/pull/48) · [AI #50](https://github.com/Sukemcute/tripflix-ai/pull/50) · [BE #272](https://github.com/Sukemcute/tripflix-be/pull/272) · [BE #278](https://github.com/Sukemcute/tripflix-be/pull/278) · [BE #280](https://github.com/Sukemcute/tripflix-be/pull/280)
 
 **Ước tính một lượt [HIỆU CHỈNH, chưa đo]:**
 
@@ -413,11 +411,11 @@ Các sự kiện trả về, theo thứ tự:
 
 | Đối tượng | Hạn mức | Lý do |
 |---|---|---|
-| Đã đăng nhập | 30 lượt mỗi ngày, 20 lượt mỗi cuộc | Pilot 5–10 người dùng thử |
-| Chưa đăng nhập (nếu cho phép) | 5 lượt mỗi ngày theo IP | Chặn lạm dụng |
+| Đã đăng nhập | Mặc định code 500 lượt/ngày; ngữ cảnh gửi tối đa 20 tin | [AI #42](https://github.com/Sukemcute/tripflix-ai/pull/42) |
+| Chưa đăng nhập | Staging: khách 300 lượt/ngày theo IP băm, người dùng 500, trần 3 USD/ngày (anh Phong xác nhận 18/11: `sha-9cd62d2`, AI #46; 19/11: `sha-ea0a96a`, AI #48). `sha-3819dc0` (AI #50) và bản `/embed` (AI #49) chờ đổi `AI_TAG` | [AI #42](https://github.com/Sukemcute/tripflix-ai/pull/42) · [BE #268](https://github.com/Sukemcute/tripflix-be/pull/268) |
 | Toàn hệ thống | Trần chi phí mỗi ngày; chạm trần thì chuyển sang chế độ thẻ kết quả | Không vượt ngân sách |
 
-- Đếm hạn mức cần nơi lưu bộ đếm. [CẦN CHỐT, Dũng]: gateway giới hạn theo người dùng, hay ai-service đếm bằng Redis có hạn giờ (bộ đếm kỹ thuật, không phải dữ liệu nghiệp vụ, giống bộ hẹn giờ của worker tóm tắt).
+- Gateway giới hạn theo IP; ai-service đếm riêng người dùng/IP băm và trần 3 USD/ngày, có bộ đếm dùng chung và đường lui cục bộ. [AI #42](https://github.com/Sukemcute/tripflix-ai/pull/42)
 
 ---
 

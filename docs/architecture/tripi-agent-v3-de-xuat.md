@@ -1,6 +1,14 @@
 # Tripi v3: nghiên cứu, kiến trúc, kế hoạch và trạng thái triển khai
 
-- **Ngày** 2026-11-17 · **Người viết** Bảo (dùng AI) · **Trạng thái v1.0**. Giai đoạn A và B đã merge vào `develop` ở cả 3 repo.
+- **Ngày** 2026-11-19 · **Người viết** Bảo (dùng AI) · **Trạng thái v1.1**. Giai đoạn A và B đã merge vào `develop` ở cả 3 repo.
+- **v1.1 (19/11).** Đã đối chiếu trạng thái PR trên GitHub ngày 19/11; “đã merge” không thay cho xác nhận image đang chạy.
+  - ✅ Lộ trình lồng dịch vụ: hỏi nơi đi/ngày trước; đủ thì tìm song song vé đi sớm nhất còn chỗ, khách sạn Tripflix, điểm/thời tiết và vé về muộn nhất. `CardLine.service` đánh dấu `flight`/`stay`; `Card.actions` có `select`/`book`, Controller v9 có `confirm_booking`. Chốt kiểm lại phòng và vé cả chiều về. Nơi không có tuyến bay dùng xe tham khảo, không có nút combo. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) · [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47)
+  - ✅ Mobile và web đều có Tripi; quyết định “chỉ mobile” ngày 17/11 được thay từ 18/11. Mobile làm nổi dòng dịch vụ; kế hoạch hợp lệ nạp cả điểm, phòng và chuyến bay vào tab Đặt `/(tabs)/book`, thẻ khác vẫn mở `/trip-builder`. Web chưa có trang combo nên tách “Đặt phòng” `/hotels/{id}` và “Đặt vé” `/flights`. [FE #230](https://github.com/Sukemcute/tripflix-fe/pull/230) · [FE #235](https://github.com/Sukemcute/tripflix-fe/pull/235) · [FE #239](https://github.com/Sukemcute/tripflix-fe/pull/239) · [FE #241](https://github.com/Sukemcute/tripflix-fe/pull/241)
+  - ✅ Bảo chốt giữ thẻ khi mở lại: phiên lưu cả `cards`, lọc lại như thẻ từ server. Android chuyển từ SecureStore 2.048 byte sang file riêng của app, trần 64 KB; vẫn 7 ngày/20 tin, khách chỉ trong bộ nhớ. [FE #244](https://github.com/Sukemcute/tripflix-fe/pull/244)
+  - ✅ `ai.chat.turn.recorded`: mỗi lượt đã đăng nhập, câu hỏi che PII trước rồi cắt 120 ký tự, cùng intent/answerKind/isAction; khách không phát. `turnId` và `latencyMs` nối chi phí từng lần gọi LLM với cả lượt, có cả lỗi/huỷ. Một consumer `core-analytics` đọc chung `stream:ai`; BE có API hành vi, chi phí theo người và trace, admin có trang Hành vi người dùng. [AI #48](https://github.com/Sukemcute/tripflix-ai/pull/48) · [AI #50](https://github.com/Sukemcute/tripflix-ai/pull/50) · [BE #272](https://github.com/Sukemcute/tripflix-be/pull/272) · [BE #278](https://github.com/Sukemcute/tripflix-be/pull/278) · [BE #280](https://github.com/Sukemcute/tripflix-be/pull/280) · [FE #260](https://github.com/Sukemcute/tripflix-fe/pull/260) · [FE #262](https://github.com/Sukemcute/tripflix-fe/pull/262)
+  - ✅ ai-service có thêm `POST /embed` (Duy, không thuộc Tripi), multilingual-e5-small INT8, chỉ core gọi; phía discovery dùng caption cho For-you **đang mở**, chưa ghi là đã triển khai. [AI #49](https://github.com/Sukemcute/tripflix-ai/pull/49) · [BE #277](https://github.com/Sukemcute/tripflix-be/pull/277)
+  - ✅ Compose dev nhận biến LLM, `CHAT_LLM_ENABLED` mặc định false. Anh Phong xác nhận: 18/11 staging lên `sha-9cd62d2` (AI #46), hạn mức khách 300 lượt/ngày, người dùng 500, trần 3 USD/ngày; 19/11 lên `sha-ea0a96a` (AI #48). `sha-3819dc0` (AI #50) và bản có `/embed` (AI #49) chờ anh Phong đổi `AI_TAG`. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) · [AI #48](https://github.com/Sukemcute/tripflix-ai/pull/48) · [AI #50](https://github.com/Sukemcute/tripflix-ai/pull/50) · [AI #49](https://github.com/Sukemcute/tripflix-ai/pull/49) `ai-summary` chưa có trả 204 rỗng, bài không tồn tại/không được xem vẫn 404. [BE #270](https://github.com/Sukemcute/tripflix-be/pull/270) · [AI #42](https://github.com/Sukemcute/tripflix-ai/pull/42) · [BE #268](https://github.com/Sukemcute/tripflix-be/pull/268) · [BE #260](https://github.com/Sukemcute/tripflix-be/pull/260) · [AI #45](https://github.com/Sukemcute/tripflix-ai/pull/45)
+  - 🟡 Còn kiểm giờ tham quan chiều sát giờ đến, mặc định 2 người lớn và ảnh Android/web. Nhánh `phong/TF31-luna-reasoning` đã có ở `tripflix-be` (commit `942b4d5`) nhưng chưa mở PR; việc chuyển Controller sang `gpt-5.6-luna` trên staging **[CẦN NC]**. Cần `OPENAI_REASONING_EFFORT=none`. [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) · [FE #239](https://github.com/Sukemcute/tripflix-fe/pull/239) · [FE #244](https://github.com/Sukemcute/tripflix-fe/pull/244) · [BE #270](https://github.com/Sukemcute/tripflix-be/pull/270)
 - **v1.0 (17/11).**
   - Giai đoạn A còn lại: cờ tắt Responder và từng Skill, gắn cờ nghi prompt injection, bảng A/B một hay hai agent ([AI #36](https://github.com/Sukemcute/tripflix-ai/pull/36)); tìm sân bay theo tên thành phố, Controller v4 ([AI #37](https://github.com/Sukemcute/tripflix-ai/pull/37)); bấm thẻ chuyến bay mở màn chọn vé ([FE #170](https://github.com/Sukemcute/tripflix-fe/pull/170)); đủ 100 kịch bản trợ lý và 50 câu tìm kiếm ([AI #38](https://github.com/Sukemcute/tripflix-ai/pull/38)).
   - Giai đoạn B: điểm tham quan có toạ độ từ OpenStreetMap ([BE #227](https://github.com/Sukemcute/tripflix-be/pull/227)); khách sạn Vũng Tàu ([BE #222](https://github.com/Sukemcute/tripflix-be/pull/222)); Itinerary Engine, bản nháp chuyến đi (`trip` v2), nút Chọn/Bỏ/Hoàn tác chạy không cần LLM, Controller v5 ([AI #39](https://github.com/Sukemcute/tripflix-ai/pull/39)); thẻ kế hoạch trên mobile ([FE #175](https://github.com/Sukemcute/tripflix-fe/pull/175)).
@@ -45,7 +53,7 @@
 
 ---
 
-## Trạng thái triển khai (cập nhật 16/11)
+## Trạng thái triển khai (cập nhật 19/11, v1.1)
 
 **Ký hiệu:**
 - ✅ đã xong trong code và có trên `develop`
@@ -72,10 +80,10 @@
 | Khách sạn gọi tên thắng khách sạn của reel; bỏ luật `ROOM_QUESTION` | ✅ | PR5 (`skills/trip.py`) |
 | Thời tiết, checklist dùng chung dự báo đúng ngày; `packing.v2.yaml` | ✅ | PR5 (`skills/weather.py`) |
 | Verifier v3 (V8 số đúng ngày, tên theo từng chữ, ≤ 4 câu), Responder v2 (câu chính do code viết) | ✅ | PR5 (`verifier.py`, `responder.py`, `assistant-responder.v2.md`) |
-| Đọc bài trước rồi mới đọc `ai-summary` | ✅ | AI #30. Với bài còn hiển thị, `404` hoặc `200` có summary/content null và danh sách takeaway rỗng đều là chưa có tóm tắt |
+| Đọc bài trước rồi mới đọc `ai-summary` | ✅ | 204 rỗng khi chưa có bản; 404 cho bài thiếu/không được xem, vẫn nhận 404 từ core cũ. [BE #260](https://github.com/Sukemcute/tripflix-be/pull/260) · [AI #45](https://github.com/Sukemcute/tripflix-ai/pull/45) |
 | Eval v2 (30 ca từ báo cáo, kiểm request gửi core) + chế độ `chain` | ✅ | PR5; ci 70/70, live 95,2% / pass^3 90,0%, chain 91,7% |
 | Mobile gửi `kind`, `contextPostId`, `trip`, hiện chi tiết thẻ và xử lý 409/429/503 | ✅ | FE #164 đã merge. App đọc trọn body SSE rồi mới hiển thị |
-| Quay lại Tripi sau đăng nhập, lưu phiên 7 ngày khi còn đăng nhập, chip 44, lọc lượt bị từ chối | ✅ | FE #165 đã merge. Native giới hạn 2.048 byte UTF-8. Đã kiểm Expo Web và export bundle Android, còn thiếu ảnh thiết bị |
+| Quay lại Tripi sau đăng nhập, lưu phiên 7 ngày khi còn đăng nhập, chip 44, lọc lượt bị từ chối | ✅ | Lưu cả thẻ; native chuyển sang file riêng 64 KB, web localStorage. Ảnh luồng mới còn chờ. [FE #244](https://github.com/Sukemcute/tripflix-fe/pull/244) |
 | Hạn mức riêng và CORS của `/ai/chat` | ✅ | BE #206 và #214 đã merge. `POST` dùng `rate-limit-chat` 20/phút/IP, burst 5. `OPTIONS` dùng `rate-limit-api`. `CORS_ORIGINS` nhận từ `AUTH_WEB_ORIGINS` |
 | Biến `CHAT_*` để trống không làm ai-service ngừng chạy | ✅ | AI #31 có `env_ignore_empty` và test hồi quy cho giá bỏ trống |
 | Lời chào sau checklist, ngày tương đối rõ ràng và SSE lộ trình | ✅ | AI #32 có test hồi quy và kiểm lại live local. Dự báo trực tiếp vẫn có ca trả fallback |
@@ -85,8 +93,15 @@
 | Consumer usage và số liệu Admin | ✅ | BE #228 (`analytics.ai_usage_events`, `GET /api/analytics/ai-usage`), FE #176 (trang Chi phí AI). Chat trên web không làm |
 | Cờ `CHAT_RESPONDER_ENABLED`, `CHAT_SKILLS_DISABLED` | ✅ | AI #36. Skill bị tắt ghi vào `done.degraded` |
 | Gắn cờ injection (`match_injection`) vào luồng chat | ✅ | AI #36: đánh dấu `suspectedInjection` cho Controller và ghi log; không chặn cứng, an toàn chính vẫn dựa vào cấu trúc (mục 3.7) |
-| Sân bay theo tên qua `/api/suggest?types=airport` (T8) | ✅ | AI #37 (Controller v4). Thành phố không có sân bay thì nói rõ; nhiều sân bay thì hỏi lại |
+| Sân bay theo tên qua `/api/suggest?types=airport` (T8) | ✅ | Lọc sân bay mơ hồ bằng tuyến có thật; không còn tuyến thì báo rõ, không nhầm với hết chỗ. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) |
 | Giai đoạn B: Itinerary Engine, Trip Draft, chỉ đường, xe khách, chỗ ở ngoài | ✅ | AI #39, BE #227, FE #175. Quãng đường và xe khách là ước tính/tham khảo. Eval live v5: 97,6%, pass^3 94,6% |
+
+| Lộ trình hỏi trước, ghép vé đi/phòng/điểm/vé về; chọn và chốt | ✅ | `TripPlanner`, Controller v9; re-check khi chốt. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) · [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) |
+| Nút đặt và dòng dịch vụ trên mobile/web | ✅ | `Card.actions`, `CardLine.service`; mobile kế hoạch vào tab Đặt, web tách phòng/vé. [FE #235](https://github.com/Sukemcute/tripflix-fe/pull/235) · [FE #239](https://github.com/Sukemcute/tripflix-fe/pull/239) · [FE #241](https://github.com/Sukemcute/tripflix-fe/pull/241) |
+| Khung Tripi trên web | ✅ | Dũng làm, apps/web do Thành phụ trách; thay quyết định chỉ mobile. [FE #230](https://github.com/Sukemcute/tripflix-fe/pull/230) |
+| Giữ thẻ khi mở lại trên cùng máy | ✅ | Native file riêng 64 KB, web localStorage; parse lại cards. [FE #244](https://github.com/Sukemcute/tripflix-fe/pull/244) |
+| Hành vi, chi phí AI theo người, trace lượt | ✅ | AI phát sự kiện; BE chung consumer, API superadmin; trang hành vi FE. [AI #48](https://github.com/Sukemcute/tripflix-ai/pull/48) · [AI #50](https://github.com/Sukemcute/tripflix-ai/pull/50) · [BE #272](https://github.com/Sukemcute/tripflix-be/pull/272) · [BE #278](https://github.com/Sukemcute/tripflix-be/pull/278) · [BE #280](https://github.com/Sukemcute/tripflix-be/pull/280) · [FE #260](https://github.com/Sukemcute/tripflix-fe/pull/260) |
+| Caption vectors, ngoài phạm vi Tripi | 🟡 | Endpoint AI đã merge, consumer For-you BE đang mở. [AI #49](https://github.com/Sukemcute/tripflix-ai/pull/49) · [BE #277](https://github.com/Sukemcute/tripflix-be/pull/277) |
 
 **Khác thiết kế** (đã ghi trong evidence):
 - **Controller ra ý định và thông tin, không ra danh sách bước.**
@@ -94,7 +109,7 @@
   - Chuỗi bước do code quyết định (`turn.py`); "Plan checker" và "Executor" nằm trong `planner.py` và `turn.py`.
 - **`build_llm` không chuyển chỗ.** Chat có hàm riêng `get_role_llm(role)`.
 - **Cache thời tiết nằm trong process**, chưa nằm trong Redis.
-- **Hạn mức token đã hiệu chỉnh theo số đo:** người đăng nhập 150.000, khách 20.000 mỗi ngày.
+- **Hạn mức code đã nới để test:** người đăng nhập 2.000.000 token, khách 1.000.000 mỗi ngày; staging đã áp dụng hạn mức này từ 18/11 theo xác nhận của anh Phong. [AI #42](https://github.com/Sukemcute/tripflix-ai/pull/42) · [BE #268](https://github.com/Sukemcute/tripflix-be/pull/268)
 - **LLM không ghi năm** (v0.7): live run đã gửi năm 2126, 2108 cho core rồi báo hết phòng sai. Code gán năm, kiểm khoảng ngày.
 - **Có lớp kiểm bằng code ngay sau Controller** (v0.7): eval live đầu tiên của v3 chỉ đạt 78,6% vì model tự điền "hôm nay", bịa tên khách sạn. Sau khi kiểm lại: 95,2%.
 - **`gpt-5-nano` đã bị OpenAI đánh dấu deprecated** trên trang model. Giá hiện tại: 0,05 / 0,005 / 0,40 USD mỗi 1M token (input / cached / output). Bản kế nhiệm `gpt-5.4-nano` đắt hơn (0,20 / 0,02 / 1,25). Đổi model thì phải chạy lại eval live.
@@ -162,7 +177,7 @@ Ghi lại theo lời Bảo; ví dụ là của Bảo. Phần này **mở rộng*
 | R9 | Có chuyến bay thì đề xuất vé; không có thì đề xuất **nhà xe** | | ✅ AI #39; xe khách là tuyến mẫu, nhãn "Tham khảo", không giá, không tên nhà xe |
 | R10 | Đề xuất nơi ở (khách sạn, nhà nghỉ, resort): **ưu tiên dịch vụ Tripflix có bán trước, ngoài hệ thống sau** | | ✅ AI #39; chỗ ngoài có nhãn "Ngoài Tripflix", không giá |
 | R11 | Xếp lộ trình thuận đường **tính từ nơi ở** | resort → Hải Đăng → Mũi Nghinh Phong → biển | ✅ AI #39 (vòng ngắn nhất từ nơi ở, ≤ 40 km/ngày) |
-| R12 | **Sửa kế hoạch theo yêu cầu**, agent tự gợi ý phương án thay | đổi máy bay sang xe, đổi hãng bay, đổi nơi ở | ✅ AI #39, FE #175: đổi chỗ ở (nút Chọn), bỏ điểm, hoàn tác. 🟡 Đổi hãng bay chưa có |
+| R12 | **Sửa kế hoạch theo yêu cầu**, agent tự gợi ý phương án thay | đổi máy bay sang xe, đổi hãng bay, đổi nơi ở | ✅ Đổi phòng/chuyến rồi chọn sẽ dựng lại lịch và nút đặt; bỏ điểm, hoàn tác có sẵn. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) · [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) |
 | R13 | Responder diễn đạt theo giọng Tripi | | ✅ Responder và Verifier đã merge. Kiểm thử live còn gặp câu phụ lệch trọng tâm khi đổi Reel |
 
 **Giả định của Bảo:** có API bản đồ (kiểu Google Maps: tìm địa điểm, khoảng cách, chỉ đường) và API thời tiết.
@@ -193,24 +208,24 @@ Ghi lại theo lời Bảo; ví dụ là của Bảo. Phần này **mở rộng*
 ### 1.1. Đường chạy đã đối chiếu trong code
 
 ~~~text
-Mobile develop (FE #164–#165)
+Mobile và web develop (FE #230, #239, #241, #244)
   → POST /chat { conversationId, message, history[{role,text,kind}], contextPostId, trip }
   (POST qua rate-limit-chat 20/phút mỗi IP, burst 5; web có preflight riêng)
-Tripi AI develop (AI #30–#33)
+Tripi AI develop (AI #46–#50)
   → khách theo IP băm hoặc người dùng có token đã kiểm
   → khóa một lượt, hạn mức, trần ngày và giới hạn đồng thời
-  → Controller v3 trả ý định + trường dữ liệu (ngày/tháng, không năm)
+  → Controller v9 trả ý định + trường dữ liệu (ngày/tháng, không năm)
   → apply_guards bỏ thông tin tin nhắn không nói; to_understanding gán năm, gộp với trip
   → planner.py kiểm khoảng ngày; turn.py chọn Skill, chọn reel, xử lý lỗi riêng
   → Responder diễn đạt sau câu chính do code viết, Verifier v3 lọc câu, dùng câu mẫu nếu cần
   → SSE status, text theo câu, cards, suggestions, trip, done{kind,usage,degraded} hoặc error
-Mobile
+Mobile / web
   → chờ body SSE hoàn tất, nối text.delta, hiện thẻ có dòng và nguồn, chip; giữ trip cho lượt sau
   → lưu phiên 7 ngày khi còn đăng nhập; khách chỉ giữ trong bộ nhớ app
   → hết lượt khách: đăng nhập rồi quay lại /assistant, bỏ lượt bị từ chối khỏi history
 ~~~
 
-Nút «Đặt theo lộ trình» mở màn bài viết. App tạo checkout khi người dùng thao tác đặt chỗ.
+Nút «Đặt theo lộ trình» do code tạo, path `/trip-builder`, params không có giá hoặc mã phòng/vé. Mobile chuyển kế hoạch hợp lệ sang tab Đặt `/(tabs)/book` với cả các điểm; thẻ khác vẫn mở `/trip-builder`. Web tách thành link đặt phòng và vé. FE mới gọi checkout khi người dùng xác nhận. [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) · [FE #235](https://github.com/Sukemcute/tripflix-fe/pull/235) · [FE #241](https://github.com/Sukemcute/tripflix-fe/pull/241)
 
 ### 1.2. Cái đã tốt, giữ nguyên
 
@@ -366,7 +381,7 @@ class PV,K3 partbuilt
 
 - **Trạng thái sơ đồ trên:** xanh đậm là đã xây.
 - Plan checker là xây một phần: nằm trong `planner.py` và `turn.py`, Controller không ra danh sách bước.
-- Skill chuyến bay là xây một phần: tìm sân bay theo tên chưa có.
+- Skill chuyến bay đã tìm sân bay theo tên và lọc theo tuyến; không có tuyến khác với hết chỗ trong ngày. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46)
 
 - **Vì sao Skill là code mà không phải agent LLM:** mỗi Skill chỉ là "tham số đã rõ → gọi 1–3 API → lọc". Không có gì cần LLM suy luận. Biến chúng thành agent LLM là thêm lần gọi, thêm chỗ hỏng (MAST), và thêm cửa cho chen lệnh.
 - **Khi nào nâng một Skill thành agent LLM:** khi eval chỉ ra có nghiệp vụ cần suy luận nhiều bước mà code không viết được. Ví dụ sau pilot: "sửa lộ trình cho rẻ hơn mà vẫn gần biển". Skill đó vẫn giữ cùng interface, nên Controller và Responder không phải sửa.
@@ -556,12 +571,14 @@ Xanh đậm: đã xây. Xanh nhạt viền đứt: xây một phần ("tag injec
 |---|---|---|
 | `search`, `find_reel` | Câu hỏi hoặc điểm đến | Thẻ tìm kiếm hoặc video từ Core |
 | `find_stay` | Nơi ở (từ câu hoặc `trip`), ngày đi, số người, trần giá tùy chọn | Thẻ `stay` với ngày và giá thật. Chỉ có ngày nhận thì tính 1 đêm và nói rõ; quá trần thì hỏi nới ngân sách |
-| `find_flight` | Mã sân bay đi/đến, ngày, số người lớn/trẻ em/em bé, giờ sau/trước tùy chọn | Thẻ `flight` đã lọc giờ, gộp hạng vé. Khứ hồi thì hỏi lại. Tìm mã sân bay theo tên còn thiếu |
+| `find_flight` | Nơi đi/đến, ngày, số khách và giờ tùy chọn | Tìm sân bay qua core, chỉ chuyến còn chỗ, có nút Chọn; không có tuyến khác hết chỗ. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) |
 | `post_itinerary` | Reel đang mở, hoặc chọn từ thẻ vừa hiện (thứ tự, tên) | Thẻ `itinerary`; hỏi ngày N hay số ngày thì câu chính trả lời thẳng |
 | `check_room` | Khách sạn gọi tên, hoặc khách sạn của reel; ngày đi | Thẻ `stay` và tình trạng phòng; lời và thẻ nói cùng một khách sạn, đúng ngày |
 | `post_reviews` | Reel đang mở (đọc bài trước; 200 mà `summary`/`content` null cũng là chưa có) | Thẻ `summary` khi có tóm tắt đã lưu; bài ẩn thì báo không còn hiển thị; còn lại báo chưa có tóm tắt |
 | `weather`, `packing` | Điểm đến, ngày đi từ câu hỏi, `trip` hoặc reel | Thẻ `weather` đúng ngày được hỏi (ngày đã qua, ngoài 16 ngày thì nói rõ); thẻ `checklist` theo luật v2, có lý do từng món |
 | `greeting`, `identity`, `thanks`, `ack`, `goodbye` | — | Câu ngắn theo tình huống, 0 thẻ, 0 Skill (v0.7, thay `small_talk`) |
+| `plan_trip` | Điểm đến, nơi xuất phát và ngày; thiếu thì hỏi trước | Một thẻ itinerary lồng dịch vụ, gốc là khách sạn; đổi lựa chọn thì dựng lại. [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) |
+| `confirm_booking` | Phòng/chuyến đã chọn | Kiểm lại phòng, vé đi và về; chỉ đưa phần còn bán vào nút đặt. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) · [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) |
 | `clarify`, `refusal` | — | Hỏi lại (tối đa một lần) hoặc từ chối |
 
 Planner dùng ngày Việt Nam, đọc `history[].kind` và `trip.asked` để tránh hỏi lại.
@@ -572,12 +589,14 @@ Planner dùng ngày Việt Nam, đọc `history[].kind` và `trip.asked` để t
 |---|---|---|
 | Request | `conversationId`, `message`, `history[].kind`, `contextPostId` tùy chọn, `trip` tùy chọn | Gửi đủ các trường; `contextPostId` chỉ khi mở Tripi từ reel |
 | SSE | `status`, `text` theo câu, `cards`, `suggestions`, `trip`, `done.degraded`, `error` | Chờ hết body, đọc text/cards/suggestions/trip/degraded |
-| Thẻ | `weather`, `checklist`, `itinerary`, `summary` có `lines`, `source` | Hiện từng dòng và dòng nguồn; thẻ lộ trình có nút "Xem reel", "Đặt theo lộ trình"; thẻ lạ bỏ qua |
+| Thẻ | `lines`, `source`, `CardLine.service`, `Card.actions` select/book; có booking | Mobile/web tô dòng dịch vụ và xử lý nút; web chưa có trang combo. [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) · [FE #239](https://github.com/Sukemcute/tripflix-fe/pull/239) |
 | Admission | 409/429/503, `retryAfterSeconds`, `loginRequired` khi khách hết hạn mức ngày | Khách hết lượt được mời đăng nhập và quay lại `/assistant`. Lượt bị từ chối nằm trên màn hình và được lọc khỏi `history` và phiên lưu |
-| Bộ nhớ | `trip` v1 gồm nơi, ngày, số người, trần giá, Reel đang chọn, `lastCards` ≤ 5 và `asked` | Lưu 7 ngày khi còn đăng nhập, từ lần lưu gần nhất. Tối đa 20 tin và 2.048 byte UTF-8 trên native. Khách chỉ trong bộ nhớ app. Đăng xuất hoặc đổi tài khoản sẽ xoá phiên |
-| Bản nháp | `tripDraft`, `action`, sự kiện `draft` thuộc thiết kế Giai đoạn B | Chưa làm |
+| Bộ nhớ | `trip` v2 có stay, transport, returnTransport, days, pending, ops và awaiting | Lưu cả thẻ, 7 ngày/20 tin; native file riêng 64 KB, web localStorage. Khách trong bộ nhớ; logout/đổi tài khoản xoá phiên. [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) · [FE #244](https://github.com/Sukemcute/tripflix-fe/pull/244) |
+| Bản nháp | `action` và SSE `trip`, không cần SSE `draft`; vé về là trường bổ sung | Chọn/đổi phòng hoặc chuyến dựng lại lịch; không tạo đơn trong AI. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) · [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) · [FE #241](https://github.com/Sukemcute/tripflix-fe/pull/241) |
 
 Mọi trường mới đều là **thêm**, app cũ vẫn chạy với server mới và ngược lại.
+
+Params của action book là chuỗi: `destination`, `adults`, `startDate`, `days`, phần phòng `hotelId`, `hotelName`, `checkIn`, `nights`, phần vé đi `flightFrom`, `flightTo`, `flightDate`, phần vé về `returnFrom`, `returnTo`, `returnDate` khi có. Không gửi giá hoặc mã phòng/hạng vé; màn đặt định giá lại từ core. [AI #46](https://github.com/Sukemcute/tripflix-ai/pull/46) · [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47)
 
 `CHAT_REQUIRE_LOGIN` mặc định `false`. Server kiểm token khi có; khách dùng hạn mức theo IP đã băm.
 
@@ -617,8 +636,8 @@ Mọi trường mới đều là **thêm**, app cũ vẫn chạy với server m�
 
 | Đối tượng | Hạn mức | Nơi đếm |
 |---|---|---|
-| Đã đăng nhập | 6 lượt/phút; 40 lượt hoặc 150.000 token/ngày, chạm trần ngày thì dùng tìm kiếm dự phòng | Redis |
-| Khách vãng lai | 3 lượt/phút; 5 lượt hoặc 20.000 token/ngày theo IP đã băm, chạm trần ngày trả 429 | Redis |
+| Đã đăng nhập | 20 lượt/phút; 500 lượt hoặc 2.000.000 token/ngày; chạm trần ngày dùng tìm kiếm dự phòng | Redis; mặc định code, [AI #42](https://github.com/Sukemcute/tripflix-ai/pull/42) |
+| Khách vãng lai | 15 lượt/phút; 300 lượt hoặc 1.000.000 token/ngày theo IP băm; chạm trần ngày trả 429 | Redis; mặc định code, [AI #42](https://github.com/Sukemcute/tripflix-ai/pull/42) |
 | Toàn hệ thống | 3 USD/ngày; chạm trần thì dùng tìm kiếm dự phòng | Redis và bộ đếm trong tiến trình |
 | Đồng thời | `CHAT_MAX_INFLIGHT` = 30 lượt mỗi tiến trình | Bộ nhớ tiến trình |
 
@@ -639,6 +658,7 @@ Lượt chat có tối đa hai lần gọi LLM, tùy kết quả Skill và thờ
 **Ghi nhận chi phí (TF95/SCRUM-123)**
 - ✅ `done.usage` trả tổng theo lượt chat. AI #33 phát `ai.usage.recorded` v1 cho chat, tóm tắt và kiểm duyệt qua `stream:ai`.
 - ✅ Producer giữ `eventId` khi phát lại một envelope. Khi Redis lỗi, log `ai.usage.publish_failed` giữ envelope để đối soát.
+- ✅ Từ 19/11, usage có `turnId`/`latencyMs`: `GuardedLlmClient` đo từng lời gọi LLM, ChatTurn đo cả lượt từ lúc request tới. `ai.chat.turn.recorded` chỉ cho người đăng nhập; che PII rồi cắt question 120 ký tự; lỗi publish chỉ log eventId, không log question. BE ghi cả hành vi và chi phí theo người/trace bằng cùng consumer `core-analytics`; nhận được trường null. [AI #48](https://github.com/Sukemcute/tripflix-ai/pull/48) · [AI #50](https://github.com/Sukemcute/tripflix-ai/pull/50) · [BE #272](https://github.com/Sukemcute/tripflix-be/pull/272) · [BE #278](https://github.com/Sukemcute/tripflix-be/pull/278) · [BE #280](https://github.com/Sukemcute/tripflix-be/pull/280)
 - ✅ Consumer chống cộng trùng theo `eventId` (BE #228) và trang admin Chi phí AI (FE #176). Phần ingest chung của analytics vẫn thuộc TF60. [Schema v1](https://github.com/Sukemcute/tripflix-ai/blob/4e9bb7d/contracts/events/ai.usage.recorded.v1.schema.json) · [SCRUM-123](https://tripflix.atlassian.net/browse/SCRUM-123)
 
 ---
@@ -735,7 +755,7 @@ Mỗi bước là một commit nhỏ, build và test pass. Một nhánh mỗi ta
 | T15 | Thời tiết, checklist dùng chung dự báo; Verifier v3; Responder v2 | ✅ |
 | T16 | Eval v2 + chain; test hồi quy từng mã lỗi | ✅ |
 | T17 | Gateway `rate-limit-chat` và preflight Web | ✅ BE #206 và #214 đã merge. Preflight staging đã đạt |
-| T18 | Evidence Expo Web và Android | ✅ Có ảnh Expo Web và bundle Android. Ảnh thiết bị Android: Bảo bỏ (17/11) |
+| T18 | Evidence Expo Web và Android | 🟡 Ảnh cho luồng mới: chờ Bảo chụp, theo [FE #239](https://github.com/Sukemcute/tripflix-fe/pull/239) · [FE #244](https://github.com/Sukemcute/tripflix-fe/pull/244) |
 | T19 | Sửa hồi quy lời chào, ngày đi và SSE lộ trình | ✅ AI #32 đã merge |
 | T20 | Producer usage và hợp đồng v1 | ✅ AI #33 đã merge. Consumer thuộc phần việc analytics |
 
@@ -747,18 +767,23 @@ Mỗi bước là một commit nhỏ, build và test pass. Một nhánh mỗi ta
 
 | Việc | Ai | Cần trước |
 |---|---|---|
-| FE gửi `kind`, `contextPostId` và hiện thẻ mới | ✅ FE #164–#165 đã merge. Khung Tripi trong `apps/web` để sau pilot | — |
+| FE gửi `kind`, `contextPostId` và hiện thẻ mới | ✅ Có mobile và web, giữ thẻ khi mở lại; [FE #230](https://github.com/Sukemcute/tripflix-fe/pull/230) · [FE #239](https://github.com/Sukemcute/tripflix-fe/pull/239) · [FE #244](https://github.com/Sukemcute/tripflix-fe/pull/244) | — |
 | Xác nhận `GET /api/hotels/{id}` nhận `hotelId` | ✅ đã kiểm trong code core | — |
 | Hạn mức theo người và theo IP | ✅ ai-service đếm theo định danh. Gateway chặn theo IP qua BE #206 | — |
 | Cho khách vãng lai dùng trợ lý không | ✅ Bảo chốt 16/11: có, hạn mức nhỏ hơn | — |
-| Consumer `ai.usage.recorded` và số liệu Admin | Chị Trang, TF60/TF95. Producer AI đã merge | Chờ tích hợp |
+| Consumer `ai.usage.recorded` và số liệu Admin | ✅ Chị Trang: consumer chung, hành vi/chi phí theo người và API trace; [BE #272](https://github.com/Sukemcute/tripflix-be/pull/272) · [BE #278](https://github.com/Sukemcute/tripflix-be/pull/278) · [BE #280](https://github.com/Sukemcute/tripflix-be/pull/280) | Đã merge |
 | Deploy cấu hình `CHAT_*` và preflight Web | Anh Phong đã nạp cấu hình staging. Preflight đã đạt. Bảo kiểm chat khách, chat sau đăng nhập và log usage theo tag đang chạy | Trước demo |
 | Đo 10 rồi 30 lượt chat với `/moderate` | Anh Phong và Bảo. Hạ trần chi phí xuống 0,5 USD khi đo. Đạt khi p95 `/moderate` dưới 3 giây và ai-service không restart do hết RAM | Chờ staging |
-| Ý nghĩa 404 của `ai-summary` | ✅ Thành trả lời 16/11: 404 dùng chung cho bài ẩn, nên đọc bài trước (đã sửa ở PR5) | — |
+| Ý nghĩa 404 của `ai-summary` | ✅ 204 rỗng khi chưa có; 404 cho bài thiếu/không được xem; vẫn đọc bài trước. [BE #260](https://github.com/Sukemcute/tripflix-be/pull/260) · [AI #45](https://github.com/Sukemcute/tripflix-ai/pull/45) | — |
 
 ---
 
 ## 7. Quyết định trước khi code
+
+**Đối chiếu v1.1: việc còn lại.** Web chưa có trang đặt theo lộ trình; ngày đến buổi chiều vẫn có thể xếp điểm quá sát giờ đến; số khách mặc định 2 người lớn; ảnh luồng Android/web còn chờ. [FE #235](https://github.com/Sukemcute/tripflix-fe/pull/235) · [AI #47](https://github.com/Sukemcute/tripflix-ai/pull/47) · [FE #239](https://github.com/Sukemcute/tripflix-fe/pull/239) · [FE #244](https://github.com/Sukemcute/tripflix-fe/pull/244)
+
+Nhánh `phong/TF31-luna-reasoning` đã có ở `tripflix-be` (commit `942b4d5`) nhưng chưa mở PR; việc chuyển Controller sang `gpt-5.6-luna` trên staging **[CẦN NC]**. Cần `OPENAI_REASONING_EFFORT=none`. Anh Phong xác nhận: 18/11 staging lên `sha-9cd62d2` (AI #46), hạn mức khách 300 lượt/ngày, người dùng 500, trần 3 USD/ngày; 19/11 lên `sha-ea0a96a` (AI #48). `sha-3819dc0` (AI #50) và bản có `/embed` (AI #49) chờ anh Phong đổi `AI_TAG`. [BE #270](https://github.com/Sukemcute/tripflix-be/pull/270) · [BE #268](https://github.com/Sukemcute/tripflix-be/pull/268)
+
 
 1. ✅ Giai đoạn A dùng phương án Controller – Skills – Responder.
 2. ✅ Responder và ngữ cảnh Reel đều đã merge. Phạm vi sử dụng Giai đoạn A ghi trong mục 0A.
