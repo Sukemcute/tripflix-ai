@@ -257,3 +257,60 @@ def test_unavailable_visobert_keeps_openai_result(fake: FakeModerationClient) ->
     assert response.json()["results"][0]["flagged"] is False
     assert response.json()["results"][1]["flagged"] is True
     assert response.json()["model"] == FAKE_MODEL
+
+
+def test_parts_are_independent_and_keep_partial_results(fake: FakeModerationClient) -> None:
+    class PartialClient:
+        async def moderate(self, text: str, image_urls: Sequence[str]) -> ModerationResult:
+            if image_urls and "broken" in image_urls[0]:
+                raise ModerationUpstreamError("private URL must not leak")
+            if image_urls:
+                assert not text
+                assert len(image_urls) == 1
+                return ModerationResult(True, {"violence": True}, {"violence": 0.95}, FAKE_MODEL)
+            return await fake.moderate(text, image_urls)
+
+    app.dependency_overrides[get_moderation_client] = PartialClient
+    body = {
+        "items": [
+            {"id": "caption", "kind": "caption", "text": "Phòng đẹp"},
+            {"id": "image:1", "kind": "image", "imageUrl": "https://cdn.example/a.jpg"},
+            {"id": "image:2", "kind": "image", "imageUrl": "https://cdn.example/broken.jpg"},
+        ]
+    }
+    assert http.post("/moderate/parts", json=body).status_code == 401
+    response = http.post("/moderate/parts", json=body, headers=auth())
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert [r["status"] for r in results] == ["passed", "flagged", "error"]
+    assert results[2]["errorCode"] == "provider_error"
+    assert "private" not in response.text
+    assert fake.calls == [("Phòng đẹp", ())]
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        [{"id": "x", "kind": "caption", "text": ""}],
+        [{"id": "x", "kind": "image", "imageUrl": "http://cdn.example/a.jpg"}],
+        [{"id": "x", "kind": "image", "text": "mixed", "imageUrl": "https://cdn.example/a.jpg"}],
+        [{"id": "x", "kind": "caption", "text": "a"}] * 2,
+    ],
+)
+def test_parts_validate_input(fake: FakeModerationClient, items: list[Any]) -> None:
+    assert http.post("/moderate/parts", json={"items": items}, headers=auth()).status_code == 422
+
+
+def test_part_timeout_is_retryable_error(fake: FakeModerationClient) -> None:
+    app.dependency_overrides[get_moderation_client] = SlowClient
+    response = http.post(
+        "/moderate/parts",
+        json={
+            "items": [
+                {"id": "x", "kind": "image", "imageUrl": "https://cdn.example/a.jpg"},
+            ]
+        },
+        headers=auth(),
+    )
+    assert response.status_code == 200
+    assert response.json()["results"][0]["errorCode"] == "provider_timeout"
