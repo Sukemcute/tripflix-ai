@@ -57,6 +57,7 @@ PLAN_INTENTS = {
     "change_stay",
     "change_transport",
     "remove_stop",
+    "move_stop",
     "undo",
     "select_option",
     "confirm_booking",
@@ -475,6 +476,13 @@ class Turn:
                     ordinal=parsed.card_ordinal, message=self.request.message
                 ),
                 "remove_stop": lambda: trip_planner.remove_stop(name=parsed.stop_name),
+                "move_stop": lambda: trip_planner.move_stop(
+                    parsed.stop_name,
+                    anchor_name=parsed.anchor_name,
+                    placement=parsed.placement,
+                    target_day=parsed.target_day,
+                    target_slot=parsed.target_slot,
+                ),
                 "undo": trip_planner.undo,
                 "change_transport": lambda: trip_planner.transport(parsed),
                 "confirm_booking": trip_planner.confirm,
@@ -483,6 +491,15 @@ class Turn:
         if answer is None:
             return self._failed("plan")
         self.planned_trip = trip_planner.trip
+        before, after = self.memory, trip_planner.trip
+        answer.edit_applied = (
+            answer.kind == "answer"
+            and bool(before.days or action is not None or (parsed and parsed.intent != "plan_trip"))
+            and any(
+                getattr(before, field) != getattr(after, field)
+                for field in ("days", "stay", "transport", "return_transport")
+            )
+        )
         if (
             parsed is not None
             and parsed.intent == "plan_trip"

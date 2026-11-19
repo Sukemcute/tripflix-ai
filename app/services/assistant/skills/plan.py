@@ -11,6 +11,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
 import httpx
 
@@ -737,6 +738,107 @@ class TripPlanner:
 
     # ---- small edits on the plan
 
+    async def move_stop(
+        self,
+        name: str,
+        *,
+        anchor_name: str = "",
+        placement: Literal["before", "after"] | None = None,
+        target_day: int | None = None,
+        target_slot: Slot | None = None,
+    ) -> Answer:
+        if not self.trip.days:
+            return Answer(
+                kind="clarify", text="Mình chưa có lộ trình nào để sửa. Xếp lộ trình mới nha?"
+            )
+
+        def find(wanted: str) -> list[tuple[int, int, DraftStop]]:
+            folded = normalize_text(wanted)
+            matches = [
+                (day, position, stop)
+                for day, stops in enumerate(self.trip.days)
+                for position, stop in enumerate(stops)
+                if folded and folded in normalize_text(stop.name)
+            ]
+            exact = [item for item in matches if normalize_text(item[2].name) == folded]
+            return exact or matches
+
+        matches = find(name)
+        if len(matches) != 1:
+            return Answer(
+                kind="clarify",
+                text=f"Bạn nói rõ tên điểm «{name[:60]}» trong lộ trình giúp mình nha.",
+            )
+        day, position, stop = matches[0]
+        anchor = None
+        if anchor_name:
+            anchors = find(anchor_name)
+            if len(anchors) != 1 or not placement or anchors[0][2].id == stop.id:
+                return Answer(
+                    kind="clarify",
+                    text=f"Bạn nói rõ điểm mốc «{anchor_name[:60]}» và đặt trước hay sau nha.",
+                )
+            destination, _, anchor = anchors[0]
+            slot = anchor.slot
+        elif target_day is not None or target_slot is not None:
+            destination = target_day - 1 if target_day is not None else day
+            slot = target_slot or stop.slot
+        else:
+            return Answer(
+                kind="clarify", text="Bạn muốn chuyển điểm sang ngày, buổi hay trước điểm nào?"
+            )
+        if not 0 <= destination < len(self.trip.days):
+            return Answer(
+                kind="clarify", text="Ngày đó chưa có trong lộ trình, bạn chọn lại ngày nha."
+            )
+        outbound, inbound = self.trip.transport, self.trip.return_transport
+        allowed = travel_slots(
+            arrival=outbound.arrive_time if destination == 0 and outbound else None,
+            departure=(
+                inbound.depart_time if destination == len(self.trip.days) - 1 and inbound else None
+            ),
+        )
+        if slot not in allowed:
+            return Answer(
+                kind="clarify",
+                text=f"Khung giờ bay ngày {destination + 1} không đủ thời gian cho buổi {slot}. "
+                "Bạn chọn buổi khác để kịp giờ bay nha.",
+            )
+        days = [stops.copy() for stops in self.trip.days]
+        del days[day][position]
+        stops = days[destination]
+        if anchor is not None:
+            insertion = next(i for i, item in enumerate(stops) if item.id == anchor.id)
+            insertion += placement == "after"
+            relation = "lên trước" if placement == "before" else "ra sau"
+            note = f"Đã chuyển {stop.name} {relation} {anchor.name}."
+        else:
+            slots = ["sáng", "trưa", "chiều", "tối"]
+            same_slot = [i for i, item in enumerate(stops) if item.slot == slot]
+            insertion = (
+                same_slot[-1] + 1
+                if same_slot
+                else next(
+                    (
+                        i
+                        for i, item in enumerate(stops)
+                        if slots.index(item.slot) > slots.index(slot)
+                    ),
+                    len(stops),
+                )
+            )
+            note = f"Đã chuyển {stop.name} sang ngày {destination + 1}, buổi {slot}."
+        stops.insert(insertion, stop.model_copy(update={"slot": slot}))
+        if days == self.trip.days:
+            return Answer(kind="clarify", text=f"{stop.name} đã ở vị trí đó rồi nha.")
+        self.trip.ops = [
+            *self.trip.ops,
+            DraftOp(op="move_stop", stop=stop, day=day, position=position),
+        ][-5:]
+        self.trip.days = days
+        self.notes.append(note)
+        return await self._render()
+
     async def remove_stop(self, name: str = "", stop_id: str = "") -> Answer:
         wanted = normalize_text(name)
         for day_index, stops in enumerate(self.trip.days):
@@ -765,6 +867,13 @@ class TripPlanner:
             return Answer(kind="answer", text="Chưa có thay đổi nào để hoàn tác nè.")
         op = self.trip.ops[-1]
         self.trip.ops = self.trip.ops[:-1]
+        if op.op == "move_stop" and op.stop is not None and op.day is not None:
+            for stops in self.trip.days:
+                stops[:] = [stop for stop in stops if stop.id != op.stop.id]
+            if op.day < len(self.trip.days):
+                self.trip.days[op.day].insert(op.position or 0, op.stop)
+            self.notes.append(f"Đã trả {op.stop.name} về vị trí trước.")
+            return await self._render()
         if op.op == "remove_stop" and op.stop is not None and op.day is not None:
             if op.day < len(self.trip.days):
                 self.trip.days[op.day].insert(op.position or 0, op.stop)

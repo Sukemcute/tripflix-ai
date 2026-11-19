@@ -66,9 +66,9 @@ class DraftTransport(WireModel):
 class DraftOp(WireModel):
     """One edit, kept so "hoàn tác" can undo it; only what is needed to put things back."""
 
-    op: Literal["set_stay", "remove_stop"]
+    op: Literal["set_stay", "remove_stop", "move_stop"]
     stay: DraftChoice | None = None  # the stay before set_stay
-    stop: DraftStop | None = None  # the stop remove_stop took out
+    stop: DraftStop | None = None  # original stop, including its slot, for remove/move undo
     day: int | None = Field(default=None, ge=0, le=13)
     position: int | None = Field(default=None, ge=0, le=12)
 
@@ -175,6 +175,7 @@ class Understanding(WireModel):
         "change_stay",
         "change_transport",
         "remove_stop",
+        "move_stop",
         "undo",
         "select_option",
         "confirm_booking",
@@ -228,6 +229,10 @@ class Understanding(WireModel):
     # Stage B: what the trip should favour, the stop to drop, how full the days are.
     interests: list[str] = Field(default_factory=list, max_length=5)
     stop_name: str = Field(default="", max_length=120)
+    anchor_name: str = Field(default="", max_length=120)
+    placement: Literal["before", "after"] | None = None
+    target_day: int | None = Field(default=None, ge=1, le=7)
+    target_slot: Literal["sáng", "trưa", "chiều", "tối"] | None = None
     pace: Literal["relaxed", "packed"] | None = None
     # "lộ trình ăn uống", "chỉ quán ăn": food and drink stops only, by meal.
     meals_only: bool = False
@@ -331,6 +336,7 @@ class Card(WireModel):
 
 
 class Answer(WireModel):
+    edit_applied: bool = False
     kind: Literal["answer", "clarify", "refusal", "no_result", "fallback"]
     text: str  # fixed template: what the user sees when the Responder is off or fails
     cards: list[Card] = Field(default_factory=list)
