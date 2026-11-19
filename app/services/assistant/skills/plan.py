@@ -829,8 +829,14 @@ class TripPlanner:
             )
             note = f"Đã chuyển {stop.name} sang ngày {destination + 1}, buổi {slot}."
         stops.insert(insertion, stop.model_copy(update={"slot": slot}))
-        if days == self.trip.days:
-            return Answer(kind="clarify", text=f"{stop.name} đã ở vị trí đó rồi nha.")
+        if [[(s.id, s.slot) for s in day] for day in days] == [
+            [(s.id, s.slot) for s in day] for day in self.trip.days
+        ]:
+            text = f"{stop.name} đã ở vị trí đó rồi nha."
+            if anchor:
+                relation = "trước" if placement == "before" else "sau"
+                text = f"{stop.name} đã ở {relation} {anchor.name} rồi nha."
+            return Answer(kind="clarify", text=text)
         self.trip.ops = [
             *self.trip.ops,
             DraftOp(op="move_stop", stop=stop, day=day, position=position),

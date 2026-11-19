@@ -66,7 +66,8 @@ ITEM_LIMIT = r"\b(\d{1,2}) mon\b"
 PLAN_CUE = r"\b(xep|sap xep|len lich|lich trinh|lo trinh|ke hoach|plan|itinerary)\b"
 THIS_REEL = r"\b(video|reel|clip) (nay|do)\b"
 OFF_TOPIC_CUES = {
-    "math": r"\b(giai toan|bai toan|bai tap toan|dao ham|tich phan|phuong trinh)\b",
+    "math": r"\b(lam toan|tinh giup|giai giup|giai toan|bai toan|bai tap toan|"
+    r"dao ham|tich phan|phuong trinh)\b",
     "code": r"\b(viet code|lap trinh|viet ham|script|debug|"
     r"code (python|java|javascript|typescript|c\+\+|sql))\b",
     "writing": r"\b(bai van|viet van|lam van|viet tho|"
@@ -348,7 +349,91 @@ def _count(value: int | None, low: int, high: int) -> int | None:
     return value if value is not None and low <= value <= high else None
 
 
-def to_understanding(out: ControllerOutput, trip: TripContext | None, today: date) -> Understanding:
+def move_from_message(message: str, trip: TripContext) -> dict[str, str] | None:
+    aliases: dict[tuple[str, ...], set[str]] = {}
+    for day in trip.days:
+        for stop in day:
+            words = normalize_text(stop.name).split()
+            phrases = {
+                tuple(words[start:end])
+                for start in range(len(words))
+                for end in range(start + 2, len(words) + 1)
+            }
+            phrases.update(
+                tuple(normalize_text(part).split())
+                for part in re.findall(r"\(([^)]+)\)", stop.name)
+            )
+            for phrase in phrases:
+                if phrase:
+                    aliases.setdefault(phrase, set()).add(stop.id)
+    words = normalize_text(message).split()
+    matches = []
+    for start in range(len(words)):
+        for end in range(start + 1, len(words) + 1):
+            phrase = tuple(words[start:end])
+            ids = aliases.get(phrase, set())
+            if len(ids) == 1:
+                matches.append((start, end, next(iter(ids)), " ".join(phrase)))
+    mentioned: list[tuple[int, int, str, str]] = []
+    seen: set[str] = set()
+    last_end = 0
+    for match in sorted(matches, key=lambda item: (item[0], item[0] - item[1])):
+        start, end, stop_id, _ = match
+        if start < last_end:
+            continue
+        last_end = end
+        if stop_id not in seen:
+            seen.add(stop_id)
+            mentioned.append(match)
+    if len(mentioned) != 2:
+        return None
+    first, second = mentioned
+    between = " ".join(words[first[1] : second[0]])
+    if re.search(r"\b(truoc|roi moi(?: sang)?)\b", between):
+        placement = "before"
+    elif re.search(r"\bsau\b", between):
+        placement = "after"
+    else:
+        return None
+    return {"stop_name": first[3], "anchor_name": second[3], "placement": placement}
+
+
+def is_unspecified_edit(message: str, trip: TripContext) -> bool:
+    return bool(trip.days) and bool(
+        re.fullmatch(
+            r"(?:(?:toi|minh|em|tui) )?(?:(?:muon|can) )?"
+            r"(?:doi|sua|xep lai)(?: lai)? (?:lich trinh|lo trinh|lich)"
+            r"(?: di| nha| nhe| giup minh| giup toi)?",
+            normalize_text(message),
+        )
+    )
+
+
+def fix_plan_edit(parsed: Understanding, message: str, trip: TripContext) -> Understanding:
+    if not trip.days or is_unsafe(message):
+        return parsed
+    move = move_from_message(message, trip)
+    if move or is_unspecified_edit(message, trip):
+        return parsed.model_copy(
+            update={
+                "intent": "move_stop" if move else "clarify",
+                "place": trip.place,
+                "check_in": trip.date_from,
+                "check_out": trip.date_to,
+                "day_ref": "none",
+                "nights": None,
+                "target_day": None,
+                "target_slot": None,
+                "missing": "none",
+                **(move or {}),
+            }
+        )
+    return parsed
+
+
+def to_understanding(
+    out: ControllerOutput, trip: TripContext | None, today: date, *, message: str = ""
+) -> Understanding:
     trip = trip or TripContext()
     start = build_date(out.start, today)
     end = build_end(out.end, start, today)
@@ -410,7 +495,7 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
     )
     if out.missing == "origin":
         understood.from_airport, understood.from_city = None, ""
-    return understood
+    return fix_plan_edit(understood, message, trip)
 
 
 def apply_guards(

@@ -9,7 +9,7 @@ import pytest
 
 from app.clients.llm.base import LlmResult
 from app.services.assistant import responder
-from app.services.assistant.controller import apply_guards, to_understanding
+from app.services.assistant.controller import apply_guards, move_from_message, to_understanding
 from app.services.assistant.route import estimate_leg
 from app.services.assistant.schemas import (
     Answer,
@@ -75,8 +75,13 @@ def draft():
 
 
 def move(trip, **fields):
+    if fields.get("anchor_name"):
+        relation = "trước" if fields.get("placement") == "before" else "sau"
+        message = f"Cầu Rồng {relation} {fields['anchor_name']}"
+    else:
+        message = f"chuyển Cầu Rồng sang ngày {fields.get('target_day', 1)}"
     return run(
-        Understanding(intent="move_stop", stop_name="Cầu Rồng", **fields), trip, message=MESSAGE
+        Understanding(intent="move_stop", stop_name="Cầu Rồng", **fields), trip, message=message
     )
 
 
@@ -92,7 +97,7 @@ def test_move_before_or_after_in_same_slot(placement, stop, anchor, order):
     answer, changed, calls = run(
         Understanding(intent="move_stop", stop_name=stop, anchor_name=anchor, placement=placement),
         trip,
-        message=MESSAGE,
+        message=f"{stop} {'trước' if placement == 'before' else 'sau'} {anchor}",
     )
     assert [s.id for s in changed.days[0]] == order
     assert answer.cards[0].kind == "itinerary" and answer.edit_applied
@@ -376,3 +381,138 @@ def test_existing_edit_operations_mark_only_a_real_change(intent):
         _, trip, _ = move(trip, anchor_name="Bảo tàng", placement="before")
     answer, _, _ = run(Understanding(intent=intent, stop_name="Cầu Rồng"), trip)
     assert answer.edit_applied
+
+
+DALAT_MESSAGES = [
+    "Đổi lịch đi, tôi muốn đi Khu du lịch Thung Lũng trước Thiên Vương cổ sát",
+    "đổi ngày 1 Đà Lạt: Thung Lũng Tình Yêu trước, rồi Chùa Tàu",
+]
+
+
+def dalat_draft():
+    def stop(id, name, lat, slot):
+        return DraftStop(id=id, name=name, lat=lat, lng=108.45, slot=slot)
+
+    return TripContext(
+        place="Đà Lạt",
+        origin_city="TP.HCM",
+        date_from=date(2026, 11, 20),
+        date_to=date(2026, 11, 21),
+        days=[
+            [
+                stop("p1", "Thiên Vương Cổ Sát (Chùa Tàu)", 11.95, "chiều"),
+                stop("p2", "Khu du lịch Thung Lũng Tình Yêu", 11.98, "chiều"),
+                stop("p3", "German House", 11.94, "tối"),
+            ],
+            [stop("p4", "Bảo Tàng Lâm Đồng", 11.93, "sáng")],
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    ("message", "placement"),
+    [
+        *[(text, "before") for text in DALAT_MESSAGES],
+        ("Thung Lũng rồi mới Chùa Tàu", "before"),
+        ("Thung Lũng rồi mới sang Chùa Tàu", "before"),
+        ("Thung Lũng sau Thiên Vương Cổ Sát", "after"),
+    ],
+)
+def test_message_aliases_override_wrong_llm_anchor(message, placement):
+    trip = dalat_draft()
+    parsed = to_understanding(
+        controller_plan(
+            intent="move_stop",
+            stop_name="Khu du lịch Thung Lũng Tình Yêu",
+            anchor_name="German House",
+            placement="before",
+        ),
+        trip,
+        date(2026, 11, 19),
+        message=message,
+    )
+    assert parsed.intent == "move_stop" and parsed.placement == placement
+    assert parsed.anchor_name != "German House"
+    answer, changed, calls = run(parsed, trip, message=message)
+    assert [s.id for s in changed.days[0]] == (
+        ["p2", "p1", "p3"] if placement == "before" else ["p1", "p2", "p3"]
+    )
+    assert changed.days[0][0].slot == "chiều" and not calls
+    assert answer.kind == ("answer" if placement == "before" else "clarify")
+
+
+def test_da_nang_message_resolves_the_actual_points_without_llm_names():
+    trip = draft()
+    move = move_from_message(MESSAGE, trip)
+    assert move is not None and move["placement"] == "before"
+    parsed = to_understanding(
+        controller_plan(intent="search"), trip, date(2026, 11, 19), message=MESSAGE
+    )
+    answer, changed, calls = run(parsed, trip, message=MESSAGE)
+    assert [s.id for s in changed.days[0]] == ["dragon", "museum", "marina"]
+    assert answer.edit_applied and not calls
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["Thung Lũng", "Thung Lũng và Chùa Tàu", "Thung Lũng trước Chùa Tàu rồi German House"],
+)
+def test_message_parser_does_not_guess_without_two_distinct_ordered_points(message):
+    assert move_from_message(message, dalat_draft()) is None
+
+
+@pytest.mark.parametrize("message", ["Tôi muốn đổi lịch trình", "sửa lịch", "đổi lịch đi"])
+def test_unspecified_edit_asks_before_rebuilding(message):
+    trip = dalat_draft()
+    parsed = to_understanding(
+        controller_plan(intent="plan_trip", place="Đà Lạt"),
+        trip,
+        date(2026, 11, 19),
+        message=message,
+    )
+    assert parsed.intent == "clarify"
+    answer, changed, calls = run(parsed, trip, message=message)
+    assert answer.kind == "clarify" and not answer.cards and not calls
+    assert answer.suggestions == ["Đổi thứ tự điểm", "Bỏ một điểm", "Đổi chỗ ở", "Đổi ngày đi"]
+    assert changed == trip and not answer.edit_applied
+
+
+@pytest.mark.parametrize("placement", ["before", "after"])
+def test_noop_compares_ids_and_slots_despite_fields_set(placement):
+    a = DraftStop(id="a", name="Điểm Một", lat=11, lng=108)
+    b = DraftStop(id="b", name="Điểm Hai", lat=11.1, lng=108)
+    assert a.model_fields_set != a.model_copy(update={"slot": a.slot}).model_fields_set
+    trip = TripContext(place="Đà Lạt", days=[[a, b] if placement == "before" else [b, a]])
+    original = trip.model_dump()
+    notes = []
+
+    async def go():
+        async with fake_core() as core:
+            planner = TripPlanner(
+                core, FakePlaces(), FakeWeather(), date(2026, 11, 19), trip, notes
+            )
+            return await planner.move_stop("Điểm Một", anchor_name="Điểm Hai", placement=placement)
+
+    answer = asyncio.run(go())
+    assert (
+        answer.kind == "clarify"
+        and f"đã ở {'trước' if placement == 'before' else 'sau'}" in answer.text
+    )
+    assert trip.model_dump() == original and not trip.ops and not notes and not answer.edit_applied
+
+
+def test_dalat_repeated_move_is_noop_after_first_edit():
+    trip = dalat_draft()
+    _, changed, _ = run(Understanding(intent="plan_trip"), trip, message=DALAT_MESSAGES[0])
+    answer, unchanged, calls = run(
+        Understanding(intent="plan_trip"), changed, message=DALAT_MESSAGES[1]
+    )
+    assert answer.kind == "clarify" and "đã ở trước" in answer.text
+    assert unchanged.days == changed.days and unchanged.ops == changed.ops and not calls
+    assert not answer.edit_applied
+
+
+@pytest.mark.parametrize("message", ["hãy làm toán cho tôi", "tính giúp tôi", "giải giúp bài toán"])
+def test_math_cues_do_not_fall_through_to_search(message):
+    fixed = apply_guards(controller_plan(intent="search"), message, has_reel=False)
+    assert fixed.intent == "refusal"
