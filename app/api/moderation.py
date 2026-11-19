@@ -5,6 +5,8 @@ falls back to its regex step on any error, so errors are whole-request: 502 prov
 504 too slow, 503 not configured.
 """
 
+import base64
+import binascii
 from functools import cache
 from typing import Annotated, Literal
 
@@ -18,6 +20,7 @@ from app.clients.moderation.base import (
     ModerationTimeoutError,
     ModerationUpstreamError,
 )
+from app.clients.moderation.cover_ocr import CoverOcrError, OpenAICoverOcr
 from app.clients.moderation.openai import OpenAIModerationClient
 from app.clients.moderation.visobert import VisobertModeration, load_visobert
 from app.core.config import ModerationSettings, get_moderation_settings
@@ -104,6 +107,19 @@ class ModeratePartResult(_CamelModel):
 
 class ModeratePartsResponse(_CamelModel):
     results: list[ModeratePartResult]
+
+
+class CoverOcrRequest(_CamelModel):
+    image_base64: str = Field(min_length=4, max_length=2_800_000)
+
+
+class CoverOcrResponse(_CamelModel):
+    status: Literal["passed", "flagged", "error"]
+    extracted_text: str = Field(max_length=5000)
+    categories: dict[str, bool]
+    scores: dict[str, float]
+    model: str | None
+    error_code: str | None
 
 
 @cache
@@ -220,3 +236,62 @@ async def moderate_separate_parts(
             for result in results
         ]
     )
+
+
+@router.post("/moderate/cover-ocr", response_model=CoverOcrResponse)
+async def moderate_cover_ocr(
+    body: CoverOcrRequest,
+    _caller: Annotated[str, Depends(require_core_caller)],
+    client: Annotated[ModerationClient | None, Depends(get_moderation_client)],
+    settings: Annotated[ModerationSettings, Depends(get_moderation_settings)],
+) -> CoverOcrResponse:
+    if client is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "moderation is not configured")
+    try:
+        jpeg = base64.b64decode(body.image_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(422, "invalid image") from exc
+    if not 4 <= len(jpeg) <= 2_000_000 or not jpeg.startswith(b"\xff\xd8\xff"):
+        raise HTTPException(422, "expected JPEG poster up to 2 MB")
+    ocr = OpenAICoverOcr(
+        settings.openai_api_key,
+        model=settings.cover_ocr_model,
+        base_url=settings.openai_base_url,
+    )
+    try:
+        text = await ocr.read(jpeg)
+        if not text:
+            return CoverOcrResponse(
+                status="passed",
+                extracted_text="",
+                categories={},
+                scores={},
+                model=settings.cover_ocr_model,
+                error_code=None,
+            )
+        verdict = (
+            await moderate_parts(
+                [PartInput("cover", "caption", text, None)],
+                client,
+                settings.moderation_timeout_seconds,
+            )
+        )[0]
+        return CoverOcrResponse(
+            status=verdict.status,
+            extracted_text=text,
+            categories=verdict.categories,
+            scores=verdict.scores,
+            model=f"{settings.cover_ocr_model}+{verdict.model}" if verdict.model else None,
+            error_code=verdict.error_code,
+        )
+    except CoverOcrError:
+        return CoverOcrResponse(
+            status="error",
+            extracted_text="",
+            categories={},
+            scores={},
+            model=None,
+            error_code="ocr_unavailable",
+        )
+    finally:
+        await ocr.aclose()

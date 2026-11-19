@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 import time
 from collections.abc import Iterator, Sequence
@@ -68,6 +69,38 @@ def fake(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeModerationClient]:
 
 http = TestClient(app)
 BODY = {"items": [{"id": "post:1", "text": "Phòng đẹp"}, {"id": "cmt:2", "text": "đồ FLAG"}]}
+
+
+def test_cover_ocr_scans_only_extracted_poster_text(
+    fake: FakeModerationClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Ocr:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def read(self, jpeg: bytes) -> str:
+            assert jpeg == b"\xff\xd8\xff\xd9"
+            return "FLAG trên ảnh bìa"
+
+        async def aclose(self) -> None:
+            pass
+
+    monkeypatch.setattr(moderation_api, "OpenAICoverOcr", Ocr)
+    response = http.post(
+        "/moderate/cover-ocr",
+        json={"imageBase64": base64.b64encode(b"\xff\xd8\xff\xd9").decode()},
+        headers=auth(),
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "flagged"
+    assert response.json()["extractedText"] == "FLAG trên ảnh bìa"
+    assert response.json()["categories"]
+
+
+def test_cover_ocr_requires_core_and_jpeg(fake: FakeModerationClient) -> None:
+    body = {"imageBase64": base64.b64encode(b"plain text").decode()}
+    assert http.post("/moderate/cover-ocr", json=body).status_code == 401
+    assert http.post("/moderate/cover-ocr", json=body, headers=auth()).status_code == 422
 
 
 def test_core_gets_one_result_per_item_in_order_in_camel_case(fake: FakeModerationClient) -> None:

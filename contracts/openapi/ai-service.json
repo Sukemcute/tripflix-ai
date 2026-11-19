@@ -503,6 +503,87 @@
         "title": "ChatRequest",
         "type": "object"
       },
+      "CoverOcrRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "imageBase64": {
+            "maxLength": 2800000,
+            "minLength": 4,
+            "title": "Imagebase64",
+            "type": "string"
+          }
+        },
+        "required": [
+          "imageBase64"
+        ],
+        "title": "CoverOcrRequest",
+        "type": "object"
+      },
+      "CoverOcrResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Categories",
+            "type": "object"
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errorcode"
+          },
+          "extractedText": {
+            "maxLength": 5000,
+            "title": "Extractedtext",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "scores": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Scores",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "flagged",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "extractedText",
+          "categories",
+          "scores",
+          "model",
+          "errorCode"
+        ],
+        "title": "CoverOcrResponse",
+        "type": "object"
+      },
       "DraftAction": {
         "additionalProperties": false,
         "description": "A button the user tapped: run as a draft edit without the LLM (DeepResearch \u00a75.2).",
@@ -1600,6 +1681,52 @@
           }
         ],
         "summary": "Moderate",
+        "tags": [
+          "moderation"
+        ]
+      }
+    },
+    "/moderate/cover-ocr": {
+      "post": {
+        "operationId": "moderate_cover_ocr_moderate_cover_ocr_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverOcrRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverOcrResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Moderate Cover Ocr",
         "tags": [
           "moderation"
         ]
