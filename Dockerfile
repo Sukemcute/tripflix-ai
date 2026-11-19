@@ -15,7 +15,7 @@ FROM python:3.13-slim AS e5-model
 COPY --from=uv /uv /bin/uv
 WORKDIR /build
 # The checkpoint ships an ONNX graph: only quantize it, no torch.
-RUN uv pip install --system onnxruntime==1.31.1 onnx==1.23.2 numpy tokenizers==0.21.2
+RUN uv pip install --system onnxruntime==1.31.1 onnx==1.23.2 numpy==2.5.4 tokenizers==0.23.3
 COPY app ./app
 COPY scripts/export_e5.py ./scripts/export_e5.py
 RUN python -m scripts.export_e5 --out /models/e5_embedding

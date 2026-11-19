@@ -4,6 +4,7 @@ Core caches vectors by text hash and compares them with its own bin descriptions
 endpoint stays model-only. Core treats any error as "no vectors" and keeps tag-only bins.
 """
 
+import threading
 from functools import cache
 from typing import Annotated
 
@@ -32,15 +33,25 @@ class EmbedResponse(_CamelModel):
     vectors: list[list[float]]
 
 
+_LOAD_LOCK = threading.Lock()
+
+
 @cache
+def _load_embedder() -> E5Embedder:
+    # One thread: the box has 2 vCPU shared with every other service.
+    return load_embedder(get_moderation_settings().embedding_dir, threads=1, batch_size=16)
+
+
 def get_embedder() -> E5Embedder:
-    try:
-        # One thread: the box has 2 vCPU shared with every other service.
-        return load_embedder(get_moderation_settings().embedding_dir, threads=1, batch_size=16)
-    except (OSError, ValueError) as error:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "embedding bundle is unavailable"
-        ) from error
+    # Sync dependency runs in the thread pool and @cache does not lock while loading: two first
+    # requests at once would load the model twice (~880 MB). The lock keeps it to one load.
+    with _LOAD_LOCK:
+        try:
+            return _load_embedder()
+        except (OSError, ValueError) as error:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "embedding bundle is unavailable"
+            ) from error
 
 
 @router.post("/embed", response_model=EmbedResponse)

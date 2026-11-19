@@ -1,3 +1,5 @@
+import threading
+import time
 from collections.abc import Iterator
 
 import numpy as np
@@ -67,3 +69,26 @@ def test_missing_bundle_is_503_after_auth(fake: FakeEmbedder) -> None:
     app.dependency_overrides[get_embedder] = missing
     assert http.post("/embed", json={"texts": ["a"]}).status_code == 401
     assert http.post("/embed", json={"texts": ["a"]}, headers=auth()).status_code == 503
+
+
+def test_two_first_requests_at_once_load_the_model_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    loads: list[int] = []
+
+    def slow_load(*_args: object, **_kwargs: object) -> FakeEmbedder:
+        loads.append(1)
+        time.sleep(0.2)  # both threads arrive while the first load is still running
+        return FakeEmbedder()
+
+    monkeypatch.setattr(embedding_api, "load_embedder", slow_load)
+    embedding_api._load_embedder.cache_clear()  # pyright: ignore[reportPrivateUsage]
+    got: list[object] = []
+    threads = [threading.Thread(target=lambda: got.append(get_embedder())) for _ in range(2)]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        embedding_api._load_embedder.cache_clear()  # pyright: ignore[reportPrivateUsage]
+    assert len(loads) == 1
+    assert got[0] is got[1]
