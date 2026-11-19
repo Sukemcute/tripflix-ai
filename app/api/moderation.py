@@ -6,7 +6,7 @@ falls back to its regex step on any error, so errors are whole-request: 502 prov
 """
 
 from functools import cache
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -22,6 +22,7 @@ from app.clients.moderation.openai import OpenAIModerationClient
 from app.clients.moderation.visobert import VisobertModeration, load_visobert
 from app.core.config import ModerationSettings, get_moderation_settings
 from app.services.moderation import ModerationItem, moderate_items
+from app.services.moderation_parts import PartInput, moderate_parts
 from app.services.moderation_shadow import log_safety_shadow
 from app.services.usage_events import ModerationUsage, UsageEvent, publish_usage
 
@@ -65,6 +66,44 @@ class ModerateResult(_CamelModel):
 class ModerateResponse(_CamelModel):
     results: list[ModerateResult]
     model: str
+
+
+class ModeratePart(_CamelModel):
+    id: str = Field(min_length=1, max_length=200)
+    kind: Literal["caption", "image"]
+    text: str = Field(default="", max_length=20_000)
+    image_url: HttpsUrl | None = None
+
+    @model_validator(mode="after")
+    def separate_inputs(self) -> "ModeratePart":
+        if self.kind == "caption" and (not self.text.strip() or self.image_url):
+            raise ValueError("caption requires text only")
+        if self.kind == "image" and (self.text or not self.image_url):
+            raise ValueError("image requires exactly one URL and no caption")
+        return self
+
+
+class ModeratePartsRequest(_CamelModel):
+    items: list[ModeratePart] = Field(min_length=1, max_length=MAX_ITEMS)
+
+    @model_validator(mode="after")
+    def unique_ids(self) -> "ModeratePartsRequest":
+        if len({item.id for item in self.items}) != len(self.items):
+            raise ValueError("part IDs must be unique")
+        return self
+
+
+class ModeratePartResult(_CamelModel):
+    id: str
+    status: Literal["passed", "flagged", "error"]
+    categories: dict[str, bool]
+    scores: dict[str, float]
+    model: str | None
+    error_code: str | None
+
+
+class ModeratePartsResponse(_CamelModel):
+    results: list[ModeratePartResult]
 
 
 @cache
@@ -136,4 +175,48 @@ async def moderate(
             for item_id, r in pairs
         ],
         model=model,
+    )
+
+
+@router.post("/moderate/parts", response_model=ModeratePartsResponse)
+async def moderate_separate_parts(
+    body: ModeratePartsRequest,
+    background_tasks: BackgroundTasks,
+    _caller: Annotated[str, Depends(require_core_caller)],
+    client: Annotated[ModerationClient | None, Depends(get_moderation_client)],
+    settings: Annotated[ModerationSettings, Depends(get_moderation_settings)],
+    visobert: Annotated[VisobertModeration | None, Depends(get_visobert_client)],
+) -> ModeratePartsResponse:
+    if client is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "moderation is not configured")
+    results = await moderate_parts(
+        [PartInput(item.id, item.kind, item.text, item.image_url) for item in body.items],
+        client,
+        settings.moderation_timeout_seconds,
+        visobert,
+    )
+    background_tasks.add_task(
+        publish_usage,
+        [
+            UsageEvent(
+                payload=ModerationUsage(
+                    model=settings.moderation_model,
+                    items=len(body.items),
+                    images=sum(item.kind == "image" for item in body.items),
+                )
+            )
+        ],
+    )
+    return ModeratePartsResponse(
+        results=[
+            ModeratePartResult(
+                id=result.id,
+                status=result.status,
+                categories=result.categories,
+                scores=result.scores,
+                model=result.model,
+                error_code=result.error_code,
+            )
+            for result in results
+        ]
     )
