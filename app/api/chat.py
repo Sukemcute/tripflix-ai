@@ -25,7 +25,7 @@ from app.clients.llm.base import LlmResult
 from app.clients.llm.guarded import LlmUnavailableError
 from app.clients.weather import OpenMeteoWeather
 from app.core.config import ChatSettings, get_chat_settings
-from app.services.assistant import ChatRequest
+from app.services.assistant import ChatRequest, social
 from app.services.assistant.admission import (
     ChatRejectedError,
     Identity,
@@ -265,7 +265,7 @@ async def run_turn(
                 and settings.chat_responder_enabled
                 and parsed is not None
                 and answer.kind in {"answer", "no_result"}
-                and (answer.cards or answer.facts)
+                and (social.is_off_topic_answer(answer) or answer.cards or answer.facts)
                 and remaining >= RESPONDER_MIN_SECONDS
             ):
                 yield event("status", {"step": "writing"})

@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from app.clients.places import CorePlaces, PlacesClient
 from app.clients.weather import WeatherClient
 from app.services.assistant import planner, social
+from app.services.assistant.controller import is_harmless_off_topic, is_unsafe, off_topic_kind
 from app.services.assistant.schemas import (
     Answer,
     Awaiting,
@@ -124,6 +125,38 @@ class Turn:
     async def answer(self) -> Answer:
         answer = await self._answer()
         parsed = self.parsed
+        if (
+            answer.kind == "no_result"
+            and not answer.cards
+            and (
+                parsed is None
+                or parsed.intent in {"search", "find_reel", "find_stay", "find_flight"}
+            )
+        ):
+            intent = parsed.intent if parsed else "search"
+            kind = {"find_stay": "stay", "find_flight": "flight", "find_reel": "content"}.get(
+                intent, "content" if self.request.search_mode == "reel" else "search"
+            )
+            place = (parsed.place if parsed else "") or self.memory.place
+            subject = place or (parsed.query if parsed else "") or "chuyến đi của bạn"
+            if parsed and kind == "flight":
+                origin = parsed.from_city or parsed.from_airport or self.memory.origin_city
+                destination = parsed.to_city or parsed.to_airport or place
+                subject = f"{origin} → {destination}" if origin and destination else subject
+            if parsed:
+                start = parsed.flight_date if kind == "flight" else parsed.check_in
+                if start:
+                    subject += f" ngày {start:%d/%m}"
+                if kind == "stay" and parsed.check_out:
+                    subject += f" đến {parsed.check_out:%d/%m}"
+            answer = social.no_result_answer(
+                answer,
+                kind=kind,
+                subject=subject,
+                place=place,
+                seed=self._seed(),
+                history=self.request.history,
+            )
         move = parsed and social.choose_move(
             parsed.intent,
             self.request.message,
@@ -132,7 +165,12 @@ class Turn:
             has_request=social.names_its_target(self.request.message, parsed),
         )
         rude = parsed is not None and social.is_rude(self.request.message, said_rude=parsed.is_rude)
-        if not move and rude:
+        if (
+            not move
+            and rude
+            and answer.kind != "refusal"
+            and not social.is_off_topic_answer(answer)
+        ):
             # Rude but asking for something real: help, with one light reminder first.
             note = social.reminder(self._seed())
             answer.text = f"{note} {answer.text}"
@@ -145,6 +183,8 @@ class Turn:
     async def _answer(self) -> Answer:
         if self.request.action is not None:  # a button: no LLM was called
             return await self._plan_step(None)
+        if is_unsafe(self.request.message):
+            return social.refusal_answer(seed=self._seed(), history=self.request.history)
         if self.cancel_destination:
             return Answer(kind="clarify", text="Được nha. Bạn muốn đổi sang điểm đến nào?")
         if isinstance(self.short_stay_dates, planner.DateProblem):
@@ -165,6 +205,22 @@ class Turn:
             parsed.place = self.memory.place or parsed.place
             parsed.check_in, parsed.check_out = self.short_stay_dates
             parsed.day_ref, parsed.nights, parsed.is_past = "none", None, False
+        outside = off_topic_kind(self.request.message)
+        if (
+            parsed
+            and parsed.intent in {"refusal", "off_topic"}
+            and is_harmless_off_topic(self.request.message, parsed)
+            and (outside or not social.is_rude(self.request.message, said_rude=parsed.is_rude))
+            and not re.match(social.GREETING_TEXT, normalize_text(self.request.message))
+        ):
+            return social.off_topic_answer(
+                outside or "other",
+                place=self.memory.place,
+                seed=self._seed(),
+                history=self.request.history,
+            )
+        if parsed and parsed.intent == "refusal":
+            return social.refusal_answer(seed=self._seed(), history=self.request.history)
         if parsed is None or self.request.search_mode == "reel":
             return await self._discover()
         fixed = self._fixed(parsed)
@@ -268,9 +324,7 @@ class Turn:
                 move, place=self.memory.place, seed=self._seed(), history=self.request.history
             )
         if parsed.intent == "refusal":
-            return Answer(
-                kind="refusal", text="Mình hỗ trợ du lịch an toàn. Bạn muốn khám phá nơi nào?"
-            )
+            return social.refusal_answer(seed=self._seed(), history=self.request.history)
         if parsed.intent != "clarify":
             return None
         if self.is_asked:  # one question per conversation: go on with what we have

@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.clients.llm.base import LlmResult
 from app.services.assistant.schemas import Answer, ChatRequest
+from app.services.assistant.social import is_off_topic_answer, was_said
 from app.services.assistant.understand import get_role_llm
 from app.services.assistant.verifier import CARD_REF, MAX_SENTENCES, verify
 from app.services.summary.pii import mask_pii
@@ -25,7 +26,7 @@ from app.services.summary.schemas import strict_json_schema
 from app.services.summary.vi_text import normalize_text
 
 logger = logging.getLogger(__name__)
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-responder.v3.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-responder.v4.md"
 # The last messages, so "tại sao…" and small talk read the conversation (v3, 17/11).
 HISTORY_MESSAGES = 4
 TITLE_CHARS = 80  # titles are user-written: keep them short in the prompt
@@ -114,6 +115,23 @@ async def respond(
     titles = {c.ref: "" if c.kind in INFO_CARDS else c.title for c in answer.cards}
     kept = [_tidy(_name_refs(s, titles)) for s in kept]
     kept = [s for s in kept if s]
+    if is_off_topic_answer(answer):
+        kept = kept[:2]
+        text = " ".join(kept)
+        folded = normalize_text(text)
+        destination = next((f.get("place") for f in facts if f.get("offTopic")), "")
+        if (
+            not kept
+            or not re.search(r"\bkhong\b", folded)
+            or not re.search(
+                r"\b(du lich|chuyen di|lich trinh|chuyen|di choi|diem den)\b",
+                normalize_text(kept[-1]),
+            )
+            or was_said(text, request.history)
+            or (destination and normalize_text(destination) not in normalize_text(kept[-1]))
+        ):
+            return None, result
+        return kept, result
     if answer.lead:
         return [answer.lead, *kept][:MAX_SENTENCES], result
     if not kept:

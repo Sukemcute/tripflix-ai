@@ -94,6 +94,82 @@ POOLS: dict[str, list[str]] = {
         "nói rõ hơn giúp mình (nơi đến, mấy ngày) là mình làm lại liền nha.",
     ],
 }
+POOLS.update(
+    {
+        "refusal": [
+            "Tripi không hỗ trợ yêu cầu nguy hiểm hoặc can thiệp quy tắc. "
+            "Mình có thể giúp bạn lên chuyến đi an toàn.",
+            "Mình không làm theo yêu cầu gây hại hay bỏ qua hướng dẫn. "
+            "Bạn có thể hỏi Tripi về một chuyến du lịch an toàn.",
+            "Yêu cầu này Tripi không thể hỗ trợ. "
+            "Mình sẵn sàng giúp tìm lịch trình, phòng và vé cho chuyến đi an toàn.",
+            "Tripi giữ nguyên giới hạn an toàn và không hỗ trợ việc gây hại. "
+            "Mình quay lại chuyện du lịch nhé?",
+        ],
+        "off_topic_math": [
+            "Tripi không giải toán hay tính đáp án nha.",
+            "Bài toán này nằm ngoài phạm vi của Tripi, mình không làm lời giải đâu nè.",
+            "Mình không nhận giải bài tập toán, nghề của Tripi là lo chuyến đi nha.",
+            "Tripi xin nhường phần giải toán, mình không phải gia sư đâu nè.",
+        ],
+        "off_topic_code": [
+            "Tripi không viết code hay sửa chương trình nha.",
+            "Lập trình nằm ngoài phạm vi của mình, Tripi không làm bài code đâu nè.",
+            "Mình không nhận viết hàm hay gỡ lỗi phần mềm nha.",
+            "Tripi không làm trợ lý lập trình, mình chỉ chuyên chuyện đi chơi thôi nè.",
+        ],
+        "off_topic_writing": [
+            "Tripi không viết bài văn, làm bài hay dịch văn bản nha.",
+            "Viết bài và dịch câu nằm ngoài phạm vi của Tripi, mình không làm phần đó đâu nè.",
+            "Mình không nhận làm bài văn hay bài dịch, Tripi chuyên lo chuyến đi nha.",
+            "Phần văn và dịch thuật mình xin nhường, Tripi không làm bài hộ đâu nè.",
+        ],
+        "off_topic_knowledge": [
+            "Tripi không trả lời kiến thức chung ngoài du lịch nha.",
+            "Câu hỏi kiến thức này ngoài phạm vi của mình, Tripi không giải đáp phần đó đâu nè.",
+            "Mình không làm bách khoa toàn thư hay tư vấn tài chính nha.",
+            "Phần kiến thức ngoài du lịch mình xin nhường, Tripi không trả lời lĩnh vực đó đâu nè.",
+        ],
+        "off_topic_other": [
+            "Chuyện ngoài du lịch này Tripi không hỗ trợ nha.",
+            "Việc này ngoài phạm vi nên Tripi không làm phần đó, mình chỉ giúp chuyện đi chơi nè.",
+            "Mình không nhận xử lý yêu cầu ngoài du lịch nha.",
+            "Vụ ngoài lề này Tripi xin nhường, mình không làm phần đó đâu nè.",
+        ],
+        "empty_stay": [
+            "Chưa có chỗ ở phù hợp cho {subject}; bạn thử đổi ngày nhận phòng nha?",
+            "Tìm chỗ ở cho {subject} chưa ra lựa chọn phù hợp; mình xem nơi lân cận nhé?",
+            "Chưa tìm được phòng cho {subject}; bạn muốn nới ngân sách không?",
+            "Chỗ ở cho {subject} chưa có kết quả phù hợp; mình bớt điều kiện rồi tìm lại nha?",
+        ],
+        "empty_flight": [
+            "Chưa có vé phù hợp cho {subject}; bạn muốn đổi ngày bay không?",
+            "Tìm chuyến cho {subject} chưa có lựa chọn phù hợp; mình thử ngày gần đó nha?",
+            "Chưa tìm được vé cho {subject}; bạn muốn bỏ bớt điều kiện giờ bay không?",
+            "Chuyến bay cho {subject} chưa có kết quả phù hợp; mình xem sân bay lân cận nhé?",
+        ],
+        "empty_content": [
+            "Chưa thấy reel hay bài phù hợp cho {subject}; bạn thử tên nơi lân cận nha?",
+            "Tìm reel và bài về {subject} chưa có kết quả phù hợp; mình thử từ khóa ngắn hơn nhé?",
+            "Chưa có reel hay bài khớp {subject}; bạn muốn bỏ bớt điều kiện không?",
+            "Mình chưa thấy bài hay reel phù hợp cho {subject}; đổi điểm đến để xem thêm nha?",
+        ],
+        "empty_search": [
+            "Tìm {subject} chưa có kết quả phù hợp; bạn muốn thử nơi lân cận không?",
+            "Mình chưa tìm được lựa chọn phù hợp cho {subject}; bớt điều kiện rồi thử lại nha?",
+            "Chưa có kết quả khớp {subject}; bạn thử đổi ngày hoặc cách mô tả nhé?",
+            "Tìm {subject} chưa ra lựa chọn phù hợp; mình thử một điểm đến khác nha?",
+        ],
+    }
+)
+TRAVEL_STEERS = [
+    "Hay mình xem tiếp lịch {place} nha?",
+    "Mình quay lại chuyến đi {place} nhé?",
+    "Bạn muốn Tripi tìm chỗ ở cho chuyến {place} không?",
+    "Hay mình xem thời tiết cho chuyến {place} nha?",
+]
+
+
 REMINDERS = [
     "Mình nói chuyện nhẹ nhàng thôi nha 😊",
     "Bình tĩnh nha bạn, Tripi giúp liền đây.",
@@ -218,3 +294,78 @@ def social_answer(move: str, *, place: str, seed: str, history: Sequence[Turn]) 
     return Answer(
         kind="answer", text=text, facts=[facts], suggestions=chips(place) if steer else []
     )
+
+
+def was_said(text: str, history: Sequence[Turn]) -> bool:
+    recent = [turn.text for turn in history if turn.role == "assistant"][-3:]
+    said = {normalize_text(part) for line in recent for part in re.split(r"(?<=[.!?])\s+", line)}
+    return any(normalize_text(part) in said for part in re.split(r"(?<=[.!?])\s+", text))
+
+
+def pick_fresh(pool: list[str], seed: str, history: Sequence[Turn]) -> str:
+    start = zlib.crc32(seed.encode("utf-8")) % len(pool)
+    ordered = [pool[(start + i) % len(pool)] for i in range(len(pool))]
+    return next((text for text in ordered if not was_said(text, history)), ordered[0])
+
+
+def off_topic_answer(kind: str, *, place: str, seed: str, history: Sequence[Turn]) -> Answer:
+    steers = (
+        [line.format(place=place) for line in TRAVEL_STEERS]
+        if place
+        else [
+            "Hay mình lên lịch trình một chuyến đi nha?",
+            "Bạn muốn Tripi gợi ý chỗ đi chơi không?",
+            "Mình quay lại chuyện du lịch nhé?",
+            "Hay mình tìm một điểm đến cho cuối tuần nha?",
+        ]
+    )
+    pool = [f"{line} {steer}" for line in POOLS[f"off_topic_{kind}"] for steer in steers]
+    text = pick_fresh(pool, seed, history)
+    return Answer(
+        kind="answer",
+        text=text,
+        facts=[
+            {
+                "offTopic": kind,
+                "place": place,
+                "fallback": text,
+            }
+        ],
+        suggestions=chips(place),
+    )
+
+
+def is_off_topic_answer(answer: Answer) -> bool:
+    return any(
+        fact.get("offTopic") in {"math", "code", "writing", "knowledge", "other"}
+        for fact in answer.facts
+    )
+
+
+def refusal_answer(*, seed: str, history: Sequence[Turn]) -> Answer:
+    return Answer(kind="refusal", text=pick_fresh(POOLS["refusal"], seed, history))
+
+
+def no_result_answer(
+    answer: Answer, *, kind: str, subject: str, place: str, seed: str, history: Sequence[Turn]
+) -> Answer:
+    text = pick_fresh(
+        [line.format(subject=subject) for line in POOLS[f"empty_{kind}"]], seed, history
+    )
+    # Keep specific inventory/price/date reasons, not the generic empty-search sentence.
+    keep_reason = kind == "flight" or (
+        kind == "stay" and (answer.lead is not None or bool(re.search(r"\d", answer.text)))
+    )
+    answer.text = f"{answer.text} {text}" if keep_reason else text
+    answer.lead = answer.text
+    answer.facts = [{"noResult": kind, "place": place, "fallback": text}]
+    answer.suggestions = (
+        answer.suggestions
+        or {
+            "stay": ["Đổi ngày", "Nới ngân sách", "Tìm nơi lân cận"],
+            "flight": ["Đổi ngày bay", "Bỏ lọc giờ bay", "Tìm tuyến khác"],
+            "content": ["Đổi từ khóa", "Tìm nơi lân cận"],
+            "search": ["Bớt điều kiện", "Đổi điểm đến"],
+        }[kind]
+    )
+    return answer

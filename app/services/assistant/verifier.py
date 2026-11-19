@@ -18,6 +18,12 @@ from app.services.summary.vi_text import normalize_text
 
 MAX_SENTENCES = 4
 MAX_EMOJI = 2
+CODE_SHAPE = re.compile(
+    r"```|\bdef\s+|\breturn\s+|;\s*$|[{}]|=>|==|\bconsole\.|\bprint\s*\(", re.MULTILINE
+)
+MATH_SOLUTION = re.compile(
+    r"\d+(?:[.,]\d+)?\s*[+*/×÷-]\s*\d+(?:[.,]\d+)?\s*(?:=|bằng|bang)\s*\d+", re.I
+)
 EDIT_CLAIM = re.compile(
     r"\b(?:(?:da|vua)\s+(?:doi|sua|xep lai|chuyen|bo|them)|"
     r"(?:doi lai|sua lai|xep lai|chuyen lai|doi thu tu|dao lai)\b[^.!?…]*\broi)\b"
@@ -120,7 +126,8 @@ def verify(
         set(normalize_text(f"{facts_text} {question} {extra_grounding}").split())
         | ALWAYS_ALLOWED_WORDS
     )
-    allowed_numbers = _numbers(facts_text) | _numbers(question)
+    outside = any(f.get("offTopic") for f in facts)
+    allowed_numbers = _numbers(facts_text) | (set() if outside else _numbers(question))
     availability = [f.get("available") for f in facts if isinstance(f.get("available"), bool)]
     weather_days = _weather_days(facts, today)
     kept: list[str] = []
@@ -133,7 +140,11 @@ def verify(
         rule = _broken_rule(
             sentence, refs, allowed_numbers, grounded_words, availability, weather_days, today
         )
-        if not edit_applied and EDIT_CLAIM.search(normalize_text(sentence)):
+        if CODE_SHAPE.search(sentence):
+            rule = "V10_code_shape"
+        elif MATH_SOLUTION.search(sentence):
+            rule = "V11_math_solution"
+        elif not edit_applied and EDIT_CLAIM.search(normalize_text(sentence)):
             rule = "V9_unapplied_edit"
         emoji = len(EMOJI.findall(sentence))
         if rule is None and emoji_used + emoji > MAX_EMOJI:
