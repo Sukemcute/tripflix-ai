@@ -281,9 +281,21 @@ def actions_match(answer, expect: dict) -> bool:
     )
 
 
+def response_matches(answer, parsed: Understanding, expect: dict) -> bool:
+    card = answer.cards[0].kind if answer.cards else None
+    if "acceptedAnswers" in expect:
+        return parsed.intent in [expect["intent"], *expect.get("alsoOk", [])] and any(
+            parsed.intent == option["intent"]
+            and answer.kind == option["kind"]
+            and card == option["card"]
+            for option in expect["acceptedAnswers"]
+        )
+    return answer.kind == expect["kind"] and card == expect["card"]
+
+
 def answer_matches(answer, trip: TripContext, expect: dict) -> bool:
     return (
-        ("kind" not in expect or answer.kind == expect["kind"])
+        ("acceptedAnswers" in expect or "kind" not in expect or answer.kind == expect["kind"])
         and (
             "stopOrder" not in expect
             or [s.id for day in trip.days for s in day] == expect["stopOrder"]
@@ -306,8 +318,7 @@ async def run_ci(cases: list[dict]) -> int:
         card = answer.cards[0].kind if answer.cards else None
         problem = core_problem(expect, calls)
         if (
-            answer.kind != expect["kind"]
-            or card != expect["card"]
+            not response_matches(answer, turn.parsed, expect)
             or turn.degraded
             or problem
             or not actions_match(answer, expect)

@@ -556,3 +556,82 @@ def test_order_words_decide_the_visit_order(message, valley_first):
 @pytest.mark.parametrize("message", ["Thung Lũng và Chùa Tàu", "Thung Lũng, Chùa Tàu"])
 def test_two_points_without_order_words_are_not_guessed(message):
     assert move_from_message(message, dalat_draft()) is None
+
+
+@pytest.mark.parametrize(
+    ("message", "name"),
+    [
+        ("bỏ Tượng Chúa đi", "Tượng Chúa"),
+        ("không đi Tượng Chúa nữa", "Tượng Chúa"),
+        ("xoá Bảo tàng khỏi lịch", "Bảo tàng"),
+        ("bỏ Bãi Sau đi", "Bãi Sau"),
+    ],
+)
+def test_delete_named_stop_overrides_model_move(message, name):
+    trip = draft()
+    trip.days[0][0] = trip.days[0][0].model_copy(update={"name": name})
+    parsed = to_understanding(
+        controller_plan(intent="move_stop", stop_name=name, anchor_name="Marina Coffee"),
+        trip,
+        date(2026, 11, 19),
+        message=message,
+    )
+    assert parsed.intent == "remove_stop"
+    assert parsed.stop_name == normalize_text(name)
+    answer, changed, calls = run(parsed, trip, message=message)
+    assert answer.kind == "answer"
+    assert all(stop.id != "museum" for day in changed.days for stop in day)
+    assert not calls
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "bỏ qua Tượng Chúa, đi Bãi Sau trước",
+        "chuyển Tượng Chúa sang ngày 2",
+        "đổi Tượng Chúa sang buổi tối",
+    ],
+)
+def test_delete_guard_does_not_override_order_or_day_moves(message):
+    trip = draft()
+    trip.days[0][0] = trip.days[0][0].model_copy(update={"name": "Tượng Chúa"})
+    trip.days[0][1] = trip.days[0][1].model_copy(update={"name": "Bãi Sau"})
+    parsed = to_understanding(
+        controller_plan(intent="move_stop", stop_name="Tượng Chúa"),
+        trip,
+        date(2026, 11, 19),
+        message=message,
+    )
+    assert parsed.intent == "move_stop"
+
+
+@pytest.mark.parametrize(
+    ("message", "removes"),
+    [
+        ("đi bộ ra Cầu Rồng ngắm pháo hoa", False),
+        ("dạo bờ biển gần Cầu Rồng nha", False),
+        ("đi bo bo ra cau rong", False),
+        ("đi bộ Cầu Rồng", False),
+        ("bỏ Cầu Rồng đi", True),
+        ("bo cau rong di", True),
+        ("không đi Cầu Rồng nữa", True),
+        ("xoá Cầu Rồng khỏi lịch", True),
+        ("BO\u0309 Cầu Rồng đi", True),
+    ],
+)
+def test_delete_guard_preserves_accents_and_requires_adjacent_ascii_verb(message, removes):
+    trip = draft()
+    trip.days[1][0] = trip.days[1][0].model_copy(update={"name": "Bãi biển Mỹ Khê"})
+    parsed = to_understanding(
+        controller_plan(intent="search", query=message),
+        trip,
+        date(2026, 11, 19),
+        message=message,
+    )
+    assert (parsed.intent == "remove_stop") is removes
+    if removes:
+        assert parsed.stop_name == "cau rong"
+        answer, changed, calls = run(parsed, trip, message=message)
+        assert answer.edit_applied
+        assert all(stop.id != "dragon" for day in changed.days for stop in day)
+        assert not calls
