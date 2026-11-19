@@ -618,7 +618,8 @@
           "op": {
             "enum": [
               "set_stay",
-              "remove_stop"
+              "remove_stop",
+              "move_stop"
             ],
             "title": "Op",
             "type": "string"

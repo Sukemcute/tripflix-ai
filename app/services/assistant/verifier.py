@@ -18,6 +18,10 @@ from app.services.summary.vi_text import normalize_text
 
 MAX_SENTENCES = 4
 MAX_EMOJI = 2
+EDIT_CLAIM = re.compile(
+    r"\b(?:(?:da|vua)\s+(?:doi|sua|xep lai|chuyen|bo|them)|"
+    r"(?:doi lai|sua lai|xep lai|chuyen lai|doi thu tu|dao lai)\b[^.!?…]*\broi)\b"
+)
 # Weekday names ("Thứ Bảy", "Chủ nhật") and app words are never invented places.
 ALWAYS_ALLOWED_WORDS = {
     "tripi",
@@ -109,6 +113,7 @@ def verify(
     *,
     today: date | None = None,
     extra_grounding: str = "",
+    edit_applied: bool = False,
 ) -> tuple[list[str], Counter[str]]:
     facts_text = json.dumps(facts, ensure_ascii=False)
     grounded_words = (
@@ -128,6 +133,8 @@ def verify(
         rule = _broken_rule(
             sentence, refs, allowed_numbers, grounded_words, availability, weather_days, today
         )
+        if not edit_applied and EDIT_CLAIM.search(normalize_text(sentence)):
+            rule = "V9_unapplied_edit"
         emoji = len(EMOJI.findall(sentence))
         if rule is None and emoji_used + emoji > MAX_EMOJI:
             rule = "V7_emoji"

@@ -40,7 +40,7 @@ import httpx
 from app.clients.weather import DayWeather, Place
 from app.services.assistant.controller import ControllerOutput, to_understanding
 from app.services.assistant.planner import today_in_vietnam
-from app.services.assistant.schemas import ChatRequest, Understanding
+from app.services.assistant.schemas import ChatRequest, TripContext, Understanding
 from app.services.assistant.schemas import Turn as HistoryTurn
 from app.services.assistant.turn import Turn
 from app.services.summary.vi_text import normalize_text
@@ -225,7 +225,9 @@ SUGGEST = {
 AIRPORT_BY_CITY = {"TP.HCM": "SGN", "Hà Nội": "HAN", "Đà Nẵng": "DAD", "Đà Lạt": "DLI"}
 
 
-def fake_core(calls: list[tuple[str, dict]] | None = None) -> httpx.AsyncClient:
+def fake_core(
+    calls: list[tuple[str, dict]] | None = None, *, overrides: dict | None = None
+) -> httpx.AsyncClient:
     def handle(request: httpx.Request) -> httpx.Response:
         params = dict(request.url.params)
         if calls is not None:
@@ -236,7 +238,7 @@ def fake_core(calls: list[tuple[str, dict]] | None = None) -> httpx.AsyncClient:
             return httpx.Response(200, json={"items": items})
         if request.url.path == "/api/suggest":
             return httpx.Response(200, json=SUGGEST.get(params.get("types", ""), {"items": []}))
-        for prefix, body in CORE.items():
+        for prefix, body in (CORE | (overrides or {})).items():
             if request.url.path.startswith(prefix):
                 return httpx.Response(404) if body is None else httpx.Response(200, json=body)
         return httpx.Response(404)
@@ -282,7 +284,7 @@ async def run_ci(cases: list[dict]) -> int:
     for case in cases:
         expect = case["expect"]
         calls: list[tuple[str, dict]] = []
-        async with fake_core(calls) as core:
+        async with fake_core(calls, overrides=case.get("core")) as core:
             request = request_of(case)
             turn = Turn(
                 request, plan_of(case, request), core=core, weather=FakeWeather(), today=TODAY
@@ -296,6 +298,11 @@ async def run_ci(cases: list[dict]) -> int:
             or turn.degraded
             or problem
             or not actions_match(answer, expect)
+            or (
+                "stopOrder" in expect
+                and [s.id for day in turn.next_trip(answer).days for s in day]
+                != expect["stopOrder"]
+            )
         ):
             got = f"{answer.kind}/{card}" + (f", {problem}" if problem else "")
             failures.append((case["id"], f"{expect['kind']}/{expect['card']}", got))
@@ -363,8 +370,8 @@ async def run_chain(chains: list[dict], runs: int) -> int:
         is_stable = True
         for _ in range(runs):
             history: list[HistoryTurn] = []
-            trip = None
-            async with fake_core() as core:
+            trip = TripContext.model_validate(chain["trip"]) if chain.get("trip") else None
+            async with fake_core(overrides=chain.get("core")) as core:
                 for step in chain["turns"]:
                     request = ChatRequest.model_validate(
                         {
@@ -513,17 +520,19 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["ci", "live", "chain", "search", "ab"], default="ci")
     parser.add_argument(
-        "--cases", choices=["v1", "v2", "v3", "v4", "v5", "v6", "v7", "all"], default="all"
+        "--cases", choices=["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "all"], default="all"
     )
     parser.add_argument("--runs", type=int, default=3)
     args = parser.parse_args()
     if args.mode == "chain":
-        chains = [read_jsonl(f"chains.v{n}.jsonl") for n in (1, 2, 3, 4, 5)]
+        chains = [read_jsonl(f"chains.v{n}.jsonl") for n in (1, 2, 3, 4, 5, 6)]
         chains = [chain for group in chains for chain in group]
         return asyncio.run(run_chain(chains, args.runs))
     if args.mode == "search":
         return asyncio.run(run_search(read_jsonl("search.v1.jsonl")))
-    versions = ["v1", "v2", "v3", "v4", "v5", "v6", "v7"] if args.cases == "all" else [args.cases]
+    versions = (
+        ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"] if args.cases == "all" else [args.cases]
+    )
     cases = [case for version in versions for case in load_cases(version)]
     if args.mode == "ci":
         return asyncio.run(run_ci(cases))
