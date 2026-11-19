@@ -168,4 +168,4 @@ async def understand(
         ),
         awaiting=trip.awaiting if trip else None,
     )
-    return to_understanding(out, trip, today_in_vietnam()), result
+    return to_understanding(out, trip, today_in_vietnam(), message=request.message), result

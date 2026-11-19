@@ -117,7 +117,9 @@ def request_of(case: dict) -> ChatRequest:
 def plan_of(case: dict, request: ChatRequest) -> Understanding:
     expect = case["expect"]
     if "controller" in expect:
-        return to_understanding(controller_plan(**expect["controller"]), request.trip, TODAY)
+        return to_understanding(
+            controller_plan(**expect["controller"]), request.trip, TODAY, message=request.message
+        )
     return Understanding.model_validate(expect["plan"])
 
 
@@ -279,6 +281,17 @@ def actions_match(answer, expect: dict) -> bool:
     )
 
 
+def answer_matches(answer, trip: TripContext, expect: dict) -> bool:
+    return (
+        ("kind" not in expect or answer.kind == expect["kind"])
+        and (
+            "stopOrder" not in expect
+            or [s.id for day in trip.days for s in day] == expect["stopOrder"]
+        )
+        and all(text in answer.text for text in expect.get("textContains", []))
+    )
+
+
 async def run_ci(cases: list[dict]) -> int:
     failures = []
     for case in cases:
@@ -303,11 +316,8 @@ async def run_ci(cases: list[dict]) -> int:
                 and not any(f.get("offTopic") == expect["offTopic"] for f in answer.facts)
             )
             or any(text in answer.text for text in expect.get("neverContains", []))
-            or (
-                "stopOrder" in expect
-                and [s.id for day in turn.next_trip(answer).days for s in day]
-                != expect["stopOrder"]
-            )
+            or not answer_matches(answer, turn.next_trip(answer), expect)
+            or ("fixedIntent" in expect and turn.parsed.intent != expect["fixedIntent"])
         ):
             got = f"{answer.kind}/{card}" + (f", {problem}" if problem else "")
             failures.append((case["id"], f"{expect['kind']}/{expect['card']}", got))
@@ -397,14 +407,26 @@ async def run_chain(chains: list[dict], runs: int) -> int:
                         parsed, _ = await understand(request, max_turns=6)
                         turn = Turn(request, parsed, core=core, weather=FakeWeather(), today=today)
                         answer = await turn.answer()
+                        next_trip = turn.next_trip(answer)
                         card = answer.cards[0].kind if answer.cards else None
                         is_right = (
                             parsed.intent in [expect["intent"], *expect.get("alsoOk", [])]
                             and slots_match(parsed, expect.get("slots", {}))
                             and ("card" not in expect or card == expect["card"])
                             and actions_match(answer, expect)
+                            and answer_matches(answer, next_trip, expect)
                         )
                         got = f"{parsed.intent}/{card}"
+                        if not is_right:
+                            got += " " + json.dumps(
+                                {
+                                    "slots": parsed.model_dump(mode="json", exclude_defaults=True),
+                                    "kind": answer.kind,
+                                    "stopOrder": [s.id for day in next_trip.days for s in day],
+                                    "text": answer.text,
+                                },
+                                ensure_ascii=False,
+                            )
                     except Exception as error:  # noqa: BLE001  # an eval run reports, never stops
                         is_right, got = False, type(error).__name__
                     turns_total += 1
@@ -414,7 +436,7 @@ async def run_chain(chains: list[dict], runs: int) -> int:
                         print(f"  MISS {chain['id']} «{step['message']}»: got {got}")
                     if answer is None:
                         break
-                    trip = turn.next_trip(answer)
+                    trip = next_trip
                     replies.append(answer.text)
                     history += [
                         HistoryTurn(role="user", text=step["message"]),
@@ -535,19 +557,19 @@ def main() -> int:
     parser.add_argument("--mode", choices=["ci", "live", "chain", "search", "ab"], default="ci")
     parser.add_argument(
         "--cases",
-        choices=["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "all"],
+        choices=["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "all"],
         default="all",
     )
     parser.add_argument("--runs", type=int, default=3)
     args = parser.parse_args()
     if args.mode == "chain":
-        chains = [read_jsonl(f"chains.v{n}.jsonl") for n in (1, 2, 3, 4, 5, 6, 7)]
+        chains = [read_jsonl(f"chains.v{n}.jsonl") for n in (1, 2, 3, 4, 5, 6, 7, 8)]
         chains = [chain for group in chains for chain in group]
         return asyncio.run(run_chain(chains, args.runs))
     if args.mode == "search":
         return asyncio.run(run_search(read_jsonl("search.v1.jsonl")))
     versions = (
-        ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9"]
+        ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10"]
         if args.cases == "all"
         else [args.cases]
     )

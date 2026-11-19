@@ -19,6 +19,7 @@ from evals.assistant.run import load_cases, read_jsonl, run_ci
         ("v7", 4),
         ("v8", 6),
         ("v9", 20),
+        ("v10", 8),
     ],
 )
 def test_every_labelled_case_matches_in_ci_mode(version, count):
@@ -30,5 +31,5 @@ def test_every_labelled_case_matches_in_ci_mode(version, count):
 
 
 def test_chains_are_well_formed():
-    for chain in [c for n in (1, 2, 3, 4, 5, 6, 7) for c in read_jsonl(f"chains.v{n}.jsonl")]:
+    for chain in [c for n in (1, 2, 3, 4, 5, 6, 7, 8) for c in read_jsonl(f"chains.v{n}.jsonl")]:
         assert chain["turns"] and all("intent" in t["expect"] for t in chain["turns"])
