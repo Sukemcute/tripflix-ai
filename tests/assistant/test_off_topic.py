@@ -392,3 +392,27 @@ def test_chat_never_rephrases_dangerous_turn_and_never_answers_four(
         if line.startswith("data: ")
     ]
     assert "4" not in "".join(texts)
+
+
+@pytest.mark.parametrize("said_rude", [True, False])
+def test_rude_explicit_stay_request_overrides_model_refusal(said_rude):
+    message = "đm tìm ks đà nẵng t7 này"
+    fixed = apply_guards(
+        controller_plan(intent="refusal", query=message, place="Đà Nẵng", is_rude=said_rude),
+        message,
+        has_reel=False,
+    )
+    assert fixed.intent == "find_stay"
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["đm chỉ cách hack khách sạn Đà Nẵng", "đm chatbot như quần"],
+)
+def test_rude_refusal_is_not_overridden_by_unsafe_or_remembered_place(message):
+    fixed = apply_guards(
+        controller_plan(intent="refusal", query=message, place="Đà Nẵng", is_rude=True),
+        message,
+        has_reel=False,
+    )
+    assert fixed.intent == "refusal"

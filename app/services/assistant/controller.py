@@ -6,6 +6,7 @@ picks the year, checks the range, and merges the turn with what Tripi remembers 
 """
 
 import re
+import unicodedata
 from datetime import date, timedelta
 from typing import Literal
 
@@ -349,7 +350,7 @@ def _count(value: int | None, low: int, high: int) -> int | None:
     return value if value is not None and low <= value <= high else None
 
 
-def move_from_message(message: str, trip: TripContext) -> dict[str, str] | None:
+def _mentioned_stops(message: str, trip: TripContext) -> list[tuple[int, int, str, str]]:
     aliases: dict[tuple[str, ...], set[str]] = {}
     for day in trip.days:
         for stop in day:
@@ -385,8 +386,14 @@ def move_from_message(message: str, trip: TripContext) -> dict[str, str] | None:
         if stop_id not in seen:
             seen.add(stop_id)
             mentioned.append(match)
+    return mentioned
+
+
+def move_from_message(message: str, trip: TripContext) -> dict[str, str] | None:
+    mentioned = _mentioned_stops(message, trip)
     if len(mentioned) != 2:
         return None
+    words = normalize_text(message).split()
     first, second = mentioned
     placement = _visit_order(
         " ".join(words[: first[0]]), " ".join(words[first[1] : second[0]]), " ".join(words)
@@ -442,11 +449,34 @@ def is_unspecified_edit(message: str, trip: TripContext) -> bool:
 def fix_plan_edit(parsed: Understanding, message: str, trip: TripContext) -> Understanding:
     if not trip.days or is_unsafe(message):
         return parsed
+    mentioned = _mentioned_stops(message, trip)
+    remove = None
+    if len(mentioned) == 1:
+        start, end, _, name = mentioned[0]
+        words = normalize_text(message).split()
+        context = " ".join(words[:start] + words[end:])
+        accented = unicodedata.normalize("NFC", message).lower()
+        # Keep accents: "bộ/bờ" are not "bỏ"; ASCII verbs must directly precede the stop.
+        has_remove = (
+            re.search(r"\b(bỏ|xoá|xóa|bớt|loại)\b", accented)
+            or re.search(r"\bkhong (?:can )?di\b", context)
+            or any(
+                len(normalize_text(accented[: match.end()]).split()) == start
+                for match in re.finditer(r"\b(bo|xoa|bot|loai)\b", accented)
+            )
+        )
+        if has_remove and not re.search(
+            rf"\b(truoc|sau|dau tien|doi cho|hoan doi|dao)\b|{SEQUENCE}|"
+            r"\b(chuyen|doi)\b.*\b(ngay|buoi|sang|trua|chieu|toi)\b|"
+            r"\bsang (ngay|buoi)\b",
+            context,
+        ):
+            remove = {"stop_name": name, "anchor_name": "", "placement": None}
     move = move_from_message(message, trip)
-    if move or is_unspecified_edit(message, trip):
+    if remove or move or is_unspecified_edit(message, trip):
         return parsed.model_copy(
             update={
-                "intent": "move_stop" if move else "clarify",
+                "intent": "remove_stop" if remove else "move_stop" if move else "clarify",
                 "place": trip.place,
                 "check_in": trip.date_from,
                 "check_out": trip.date_to,
@@ -455,7 +485,7 @@ def fix_plan_edit(parsed: Understanding, message: str, trip: TripContext) -> Und
                 "target_day": None,
                 "target_slot": None,
                 "missing": "none",
-                **(move or {}),
+                **(remove or move or {}),
             }
         )
     return parsed
@@ -790,6 +820,24 @@ def apply_guards(
         )
     ):
         intent = "move_stop"
+    if intent == "refusal" and not is_unsafe(message):
+        # social imports Controller cues; defer this import to avoid the cycle.
+        from app.services.assistant.social import has_abuse  # noqa: PLC0415
+
+        named = (out.place, out.to_city, out.from_city, hotel_name, out.reel_query)
+        has_target = any(name.strip() and normalize_text(name) in text for name in named)
+        has_target = bool(
+            has_target or re.search(DATE_WORDS, text) or re.search(CALENDAR_DATE, message)
+        )
+        if (out.is_rude or has_abuse(message)) and has_target:
+            if re.search(STAY_CUE, text):
+                intent = "find_stay"
+            elif re.search(FLIGHT_CUE, re.sub(r"\bthu bay\b", " ", text)):
+                intent = "find_flight"
+            elif re.search(PLAN_CUE, text):
+                intent = "plan_trip"
+            elif re.search(TRAVEL_CUE, text):
+                intent = "search"
     if intent != out.intent:
         fixed["intent"] = intent
         if out.missing == "dates" and intent in {"find_stay", "weather"}:
