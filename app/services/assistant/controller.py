@@ -196,6 +196,7 @@ class ControllerOutput(BaseModel):
         "change_stay",
         "change_transport",
         "remove_stop",
+        "move_stop",
         "undo",
         "select_option",
         "confirm_booking",
@@ -242,6 +243,10 @@ class ControllerOutput(BaseModel):
     is_beach_trip: bool | None
     interests: list[str]
     stop_name: str
+    anchor_name: str = ""
+    placement: Literal["before", "after"] | None = None
+    target_day: int | None = None
+    target_slot: Literal["sáng", "trưa", "chiều", "tối"] | None = None
     pace: Literal["relaxed", "packed"] | None
     meals_only: bool
     is_rude: bool
@@ -394,6 +399,10 @@ def to_understanding(out: ControllerOutput, trip: TripContext | None, today: dat
         is_beach_trip=out.is_beach_trip,
         interests=[s[:30] for s in out.interests[:5]],
         stop_name=out.stop_name.strip()[:120],
+        anchor_name=out.anchor_name.strip()[:120],
+        placement=out.placement,
+        target_day=_count(out.target_day, 1, 7),
+        target_slot=out.target_slot,
         pace=out.pace,
         meals_only=out.meals_only,
         is_rude=out.is_rude,
@@ -655,10 +664,24 @@ def apply_guards(
         and not re.search(STAY_CUE, text)
     ):
         intent = "weather"  # W14 "mai da lat co mua k"
+    if (
+        in_plan
+        and out.stop_name.strip()
+        and (
+            (out.anchor_name.strip() and re.search(r"\b(truoc|sau)\b", text))
+            or re.search(
+                r"\b(chuyen|doi|de)\b.*\b(ngay\s+\d+|buoi\s+(sang|trua|chieu|toi))\b", text
+            )
+        )
+    ):
+        intent = "move_stop"
     if intent != out.intent:
         fixed["intent"] = intent
         if out.missing == "dates" and intent in {"find_stay", "weather"}:
             fixed["missing"] = "none"
+    if intent == "move_stop":
+        # A numbered plan day is not a new travel date or destination.
+        fixed |= {"start": None, "end": None, "day_ref": "none", "place": "", "nights": None}
     if intent in {"weather", "packing"} and not re.search(CALENDAR_DATE, message, re.IGNORECASE):
         explicit_days = {
             day

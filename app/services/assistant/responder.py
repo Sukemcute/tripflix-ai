@@ -85,6 +85,7 @@ async def respond(
         "question": question,
         "facts": facts,
         "alreadySaid": answer.lead,
+        "editApplied": answer.edit_applied,
         "history": history,
     }
     result = await get_role_llm("responder").agenerate(
@@ -105,6 +106,7 @@ async def respond(
         question,
         today=today,
         extra_grounding=f"{place} {answer.lead or ''}",
+        edit_applied=answer.edit_applied,
     )
     if dropped:
         logger.info("chat.verifier.dropped", extra={"rules": dict(dropped)})
