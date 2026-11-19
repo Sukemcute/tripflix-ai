@@ -76,6 +76,7 @@ class ModerationSettings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")  # empty: /moderate answers 503
     openai_base_url: str = "https://api.openai.com/v1"
     moderation_model: str = "omni-moderation-latest"
+    cover_ocr_model: str = "gpt-4.1-mini"
     # Core waits 3 s, then falls back to its regex: answer (or give up) before that.
     moderation_timeout_seconds: float = Field(default=2.5, gt=0)
     is_moderation_safety_shadow_enabled: bool = False
