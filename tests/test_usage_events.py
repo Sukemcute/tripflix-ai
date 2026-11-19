@@ -65,6 +65,30 @@ def test_checked_in_contract_matches_chat_turn_events() -> None:
     assert expected["$defs"]["ChatTurn"]["properties"]["question"]["maxLength"] == 120
 
 
+@pytest.mark.parametrize("event", [_chat_usage(), _chat_turn()])
+def test_old_events_without_turn_metadata_still_validate(event) -> None:
+    data = event.model_dump(mode="json", by_alias=True)
+    data["payload"].pop("turnId")
+    data["payload"].pop("latencyMs")
+    restored = type(event).model_validate(data)
+    assert isinstance(restored.payload, (ChatUsage, ChatTurn))
+    assert restored.payload.turn_id is None and restored.payload.latency_ms is None
+
+
+@pytest.mark.parametrize("event", [_chat_usage(), _chat_turn()])
+def test_latency_must_be_nonnegative_and_uses_camel_case(event) -> None:
+    turn_id = uuid4()
+    data = event.model_dump(mode="json", by_alias=True)
+    data["payload"].update(turnId=str(turn_id), latencyMs=123)
+    restored = type(event).model_validate(data)
+    assert isinstance(restored.payload, (ChatUsage, ChatTurn))
+    assert restored.payload.turn_id == turn_id and restored.payload.latency_ms == 123
+    assert restored.model_dump(mode="json", by_alias=True)["payload"]["turnId"] == str(turn_id)
+    data["payload"]["latencyMs"] = -1
+    with pytest.raises(ValidationError):
+        type(event).model_validate(data)
+
+
 @pytest.mark.parametrize("user", [{}, {"userId": None}])
 def test_chat_turn_requires_a_user(user) -> None:
     data = _chat_turn().model_dump(mode="json", by_alias=True)

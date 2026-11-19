@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import jwt
@@ -216,10 +216,13 @@ def test_sse_refusal_uses_fixed_text(monkeypatch):
         assert json.loads(events[-1].split("data: ")[1])["kind"] == "refusal"
         [usage] = published
         assert usage.user_id is None
-        assert usage.model_dump(mode="json", by_alias=True)["payload"] == {
+        payload = usage.model_dump(mode="json", by_alias=True)["payload"]
+        UUID(payload.pop("turnId"))  # one id per turn, joins the LLM steps (SCRUM-179)
+        assert payload == {
             "feature": "chat",
             "step": "controller",
             "conversationId": str(conversation_id),
+            "latencyMs": None,  # the fake LLM skips GuardedLlmClient, which measures it
             "model": "test",
             "inputTokens": 10,
             "outputTokens": 5,

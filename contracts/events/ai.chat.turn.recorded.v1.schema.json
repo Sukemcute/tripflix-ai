@@ -27,10 +27,36 @@
           "title": "Isaction",
           "type": "boolean"
         },
+        "latencyMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latencyms"
+        },
         "question": {
           "maxLength": 120,
           "title": "Question",
           "type": "string"
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turnid"
         }
       },
       "required": [
@@ -38,7 +64,9 @@
         "question",
         "intent",
         "answerKind",
-        "isAction"
+        "isAction",
+        "turnId",
+        "latencyMs"
       ],
       "title": "ChatTurn",
       "type": "object"

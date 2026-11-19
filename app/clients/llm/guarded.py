@@ -4,6 +4,8 @@ worker can put the post back for later instead of waiting ~96 s of timeouts per 
 """
 
 import asyncio
+import dataclasses
+import time
 from typing import Any
 
 from app.clients.llm.base import LlmClient, LlmResult
@@ -39,14 +41,16 @@ class GuardedLlmClient:
             raise LlmUnavailableError(self.breaker.seconds_left())
         native = getattr(self.inner, "agenerate", None)
         try:
+            start = time.perf_counter()
             if native is not None:
                 result = await native(system, user, schema)
             else:
                 result = await asyncio.to_thread(self.inner.generate, system, user, schema)
+            end = time.perf_counter()
         except asyncio.CancelledError:
             raise  # the client left: not a provider failure
         except Exception:
             self.breaker.record_failure()
             raise
         self.breaker.record_success()
-        return result
+        return dataclasses.replace(result, latency_ms=round((end - start) * 1000))

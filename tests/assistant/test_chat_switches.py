@@ -23,7 +23,7 @@ from app.services.assistant.admission import (
 from app.services.assistant.schemas import ChatRequest, Understanding
 from app.services.assistant.understand import build_understanding_input
 from app.services.summary.pii import mask_pii
-from app.services.usage_events import ChatTurnEvent
+from app.services.usage_events import ChatTurnEvent, ChatUsage, UsageEvent
 
 VIDEO = {"id": "post:1", "refId": "1", "kind": "video", "title": "Săn mây Đà Lạt"}
 
@@ -106,7 +106,9 @@ def turn_event_client(monkeypatch):
     publish = AsyncMock()
 
     async def classify(request, *, max_turns, on_usage):
-        result = LlmResult(output="", model_name="test", input_tokens=10, output_tokens=5)
+        result = LlmResult(
+            output="", model_name="test", input_tokens=10, output_tokens=5, latency_ms=17
+        )
         on_usage(result)
         return Understanding(intent="search", query="Đà Lạt"), result
 
@@ -164,6 +166,39 @@ def test_guest_does_not_record_a_chat_turn(turn_event_client, monkeypatch):
     assert not any(isinstance(e, ChatTurnEvent) for e in publish.await_args.args[0])
 
 
+def test_llm_calls_share_the_turn_id_and_keep_their_latency(turn_event_client, monkeypatch):
+    client, publish, _, _ = turn_event_client
+
+    async def write(request, answer, *, today, on_usage):
+        result = LlmResult(
+            output="", model_name="test", input_tokens=20, output_tokens=10, latency_ms=29
+        )
+        on_usage(result)
+        return ["Gợi ý đây nè."], result
+
+    monkeypatch.setattr(chat_api, "respond", write)
+    settings = ChatSettings.model_construct(chat_llm_enabled=True, chat_responder_enabled=True)
+    app.dependency_overrides[get_chat_settings] = lambda: settings
+    body = {"conversationId": str(uuid4()), "message": "Đà Lạt"}
+    turn_ids = []
+    for _ in range(2):
+        response = client.post("/chat", json=body)
+        assert "event: done" in response.text
+        events = publish.await_args.args[0]
+        turn = next(e.payload for e in events if isinstance(e, ChatTurnEvent))
+        usages = [
+            e.payload
+            for e in events
+            if isinstance(e, UsageEvent) and isinstance(e.payload, ChatUsage)
+        ]
+        assert [u.step for u in usages] == ["controller", "responder"]
+        assert [u.latency_ms for u in usages] == [17, 29]
+        assert turn.turn_id is not None and all(u.turn_id == turn.turn_id for u in usages)
+        assert isinstance(turn.latency_ms, int) and turn.latency_ms >= 0
+        turn_ids.append(turn.turn_id)
+    assert publish.await_count == 2 and turn_ids[0] != turn_ids[1]
+
+
 def test_failed_turn_records_error_kind(turn_event_client, monkeypatch):
     client, publish, _, _ = turn_event_client
     monkeypatch.setattr(chat_api.Turn, "answer", AsyncMock(side_effect=ValueError("failed")))
@@ -172,6 +207,8 @@ def test_failed_turn_records_error_kind(turn_event_client, monkeypatch):
     turns = [e for e in publish.await_args.args[0] if isinstance(e, ChatTurnEvent)]
     assert len(turns) == 1 and turns[0].payload.answer_kind == "error"
     assert turns[0].payload.intent == "search"
+    assert turns[0].payload.turn_id is not None
+    assert isinstance(turns[0].payload.latency_ms, int) and turns[0].payload.latency_ms >= 0
 
 
 def test_action_turn_records_no_controller_intent(turn_event_client):
@@ -193,10 +230,10 @@ def test_closing_stream_mid_turn_records_error(turn_event_client):
         ticket = await gate.enter(user_identity(str(user_id)))
         stream = chat_api.run_turn(
             ChatRequest(conversation_id=uuid4(), message="Đà Lạt"),
-            ChatSettings.model_construct(),
+            ChatSettings.model_construct(chat_timeout_seconds=10),
             gate,
             ticket,
-            asyncio.get_running_loop().time() + 10,
+            asyncio.get_running_loop().time() + 8,
         )
         await anext(stream)
         await stream.aclose()
@@ -205,6 +242,8 @@ def test_closing_stream_mid_turn_records_error(turn_event_client):
     turns = [e for e in publish.await_args.args[0] if isinstance(e, ChatTurnEvent)]
     assert len(turns) == 1 and turns[0].payload.answer_kind == "error"
     assert turns[0].payload.intent is None and gate.inflight == 0
+    assert turns[0].payload.turn_id is not None
+    assert isinstance(turns[0].payload.latency_ms, int) and turns[0].payload.latency_ms >= 2000
 
 
 @pytest.mark.parametrize("status", [409, 429, 503])

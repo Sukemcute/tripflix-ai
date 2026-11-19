@@ -9,7 +9,7 @@ import json
 from contextlib import suppress
 from functools import cache, partial
 from typing import Annotated, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import anyio
 import httpx
@@ -184,6 +184,8 @@ async def run_turn(
     request: ChatRequest, settings: ChatSettings, gate: TurnGate, ticket: Ticket, deadline: float
 ):
     loop = asyncio.get_running_loop()
+    turn_id = uuid4()
+    started = deadline - settings.chat_timeout_seconds
     usage = {"inputTokens": 0, "outputTokens": 0, "costUsd": 0.0, "estimated": True}
     events: list[UsageEvent | ChatTurnEvent] = []
     parsed = None
@@ -204,6 +206,8 @@ async def run_turn(
                 user_id=user_id,
                 payload=ChatUsage(
                     conversation_id=request.conversation_id,
+                    turn_id=turn_id,
+                    latency_ms=result.latency_ms,
                     step=step,
                     model=result.model_name,
                     input_tokens=result.input_tokens,
@@ -308,6 +312,8 @@ async def run_turn(
                         user_id=user_id,
                         payload=ChatTurn(
                             conversation_id=request.conversation_id,
+                            turn_id=turn_id,
+                            latency_ms=max(0, round((loop.time() - started) * 1000)),
                             question=mask_pii(request.message)[:120],
                             intent=parsed.intent if parsed is not None else None,
                             answer_kind=answer_kind,

@@ -30,6 +30,19 @@
           "title": "Inputtokens",
           "type": "integer"
         },
+        "latencyMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latencyms"
+        },
         "model": {
           "title": "Model",
           "type": "string"
@@ -46,6 +59,19 @@
           ],
           "title": "Step",
           "type": "string"
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turnid"
         }
       },
       "required": [
@@ -56,7 +82,9 @@
         "estimated",
         "feature",
         "conversationId",
-        "step"
+        "step",
+        "turnId",
+        "latencyMs"
       ],
       "title": "ChatUsage",
       "type": "object"
