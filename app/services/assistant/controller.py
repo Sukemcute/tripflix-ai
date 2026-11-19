@@ -65,7 +65,17 @@ ITEM_LIMIT = r"\b(\d{1,2}) mon\b"
 # "lên cho tôi lịch trình", "gợi ý lộ trình" were demoted to search with the narrower list (17/11).
 PLAN_CUE = r"\b(xep|sap xep|len lich|lich trinh|lo trinh|ke hoach|plan|itinerary)\b"
 THIS_REEL = r"\b(video|reel|clip) (nay|do)\b"
-OFF_TOPIC = r"\b(bai van|viet code|lap trinh|giai toan|bai tap|co phieu|chung khoan|crypto)\b"
+OFF_TOPIC_CUES = {
+    "math": r"\b(giai toan|bai toan|bai tap toan|dao ham|tich phan|phuong trinh)\b",
+    "code": r"\b(viet code|lap trinh|viet ham|script|debug|"
+    r"code (python|java|javascript|typescript|c\+\+|sql))\b",
+    "writing": r"\b(bai van|viet van|lam van|viet tho|"
+    r"bai tap (ve nha|toan|ly|hoa|tieng anh|lap trinh))\b|\btranslate\b|"
+    r"\bdich(?!\s+vu\b)\s+(?:(cau|doan|bai|van ban|tu|giup)\b|"
+    r"(?:\S+\s+){0,8}sang tieng\b)",
+    "knowledge": r"\b(kien thuc|ai phat minh|he mat troi|quang hop|"
+    r"co phieu|chung khoan|crypto)\b",
+}
 # "ở X" alone is also where you stay or eat ("ăn gì ở huế"): it needs a subject.
 ORIGIN_CUE = (
     r"\b(?:(?:minh|em|toi|tui|tao|nha|nha minh)\s+(?:dang\s+)?o|tu|xuat phat tu|di tu)"
@@ -94,13 +104,36 @@ DATE_WORDS = (
 # Live eval of v7 (17/11): the model put unsafe asks and travel questions in off_topic.
 UNSAFE_CUE = (
     r"\b(thuoc ngu|thuoc (doc|chuot)|ma tuy|can sa|vu khi|sung|dao gam|tu tu|tu sat|trom"
-    r"|an cap|lua dao|hack|lam gia|ve gia|giay to gia|tron ve|danh bac|ca do|mai dam)\b"
+    r"|an cap|lua dao|hack|lam bom|che tao bom|lam gia|ve gia|giay to gia|tron ve"
+    r"|danh bac|ca do|mai dam)\b"
 )  # [HIỆU CHỈNH]
 # Chat-only injection words; the comment lexicon feeds the summary input_hash, so not there.
 CHAT_INJECTION_CUE = (
     r"\b((bo qua|quen|phot lo)( \w+){0,3} (luat|quy tac|huong dan|lenh|chi dan)"
     r"|in( ra)? prompt|prompt he thong|system prompt|ignore (all|previous|the))\b"
 )
+
+
+def is_unsafe(message: str) -> bool:
+    text = normalize_text(message)
+    return bool(
+        match_injection(message)
+        or re.search(CHAT_INJECTION_CUE, text)
+        or re.search(UNSAFE_CUE, text)
+        or re.search(r"\bghi vao cau tra loi\b", text)
+    )
+
+
+def off_topic_kind(message: str) -> str | None:
+    text = normalize_text(message)
+    if re.search(r"\d\s*[+*/×÷-]\s*\d", message) and (
+        re.search(r"\b(bang may|bang bao nhieu|tinh giup|giai)\b", text)
+        or re.search(r"=\s*\??\s*$", message)
+    ):
+        return "math"
+    return next((kind for kind, cue in OFF_TOPIC_CUES.items() if re.search(cue, text)), None)
+
+
 TRAVEL_CUE = (
     r"\b(di dau|choi gi|an gi|uong gi|di choi|du lich|phuot|chill|check in|bien|nui|tour"
     r"|lich trinh|lo trinh)\b"
@@ -212,6 +245,39 @@ class ControllerOutput(BaseModel):
     pace: Literal["relaxed", "packed"] | None
     meals_only: bool
     is_rude: bool
+
+
+def is_harmless_off_topic(
+    message: str, out: ControllerOutput | Understanding | None = None
+) -> bool:
+    if is_unsafe(message):
+        return False
+    kind = off_topic_kind(message)
+    if not kind and not (out and out.intent == "off_topic"):
+        return False
+    text = normalize_text(message)
+    travel_text = text
+    # An essay's beach and a sorting exercise are not requests to plan a trip.
+    if kind == "writing":
+        travel_text = re.sub(r"\b(bien|nui)\b", " ", travel_text)
+    elif kind == "code":
+        travel_text = re.sub(r"\b(sap xep|xep)\b", " ", travel_text)
+    names = (out.place, out.to_city, out.hotel_name) if out else ()
+    # Remembered places copied by the Controller must not turn math into a travel request.
+    named = any(name and normalize_text(name) in text for name in names)
+    travel = named or any(
+        re.search(cue, travel_text)
+        for cue in (
+            TRAVEL_CUE,
+            STAY_CUE,
+            PLAN_CUE,
+            FLIGHT_CUE,
+            WEATHER_CUE,
+            PACKING_CUE,
+            r"\b(chuyen bay|ve|dich vu|tour|xe)\b",
+        )
+    )
+    return not travel
 
 
 def build_date(day_month: DayMonth | None, today: date) -> date | None:
@@ -518,12 +584,7 @@ def apply_guards(
         intent = "search" if re.search(TRAVEL_CUE, text) or out.place else "clarify"
     if intent == "off_topic":
         # Unsafe asks, prompt injection and homework stay refused; travel asks stay travel.
-        if (
-            match_injection(message)
-            or re.search(CHAT_INJECTION_CUE, text)
-            or re.search(UNSAFE_CUE, text)
-            or re.search(OFF_TOPIC, text)
-        ):
+        if is_unsafe(message) or (off_topic_kind(message) and is_harmless_off_topic(message, out)):
             intent = "refusal"
         elif re.search(PACKING_CUE, text):
             intent = "packing"
@@ -555,7 +616,7 @@ def apply_guards(
         and (out.to_airport or out.to_city)
     ):
         intent = "find_flight"  # flight-02: both airports read, then refused
-    elif intent in {"search", "find_reel"} and re.search(OFF_TOPIC, text):
+    elif intent in {"search", "find_reel"} and is_harmless_off_topic(message, out):
         intent = "refusal"  # "làm giúp bài văn tả cảnh biển" was a search 2/3 (v5)
     elif intent == "plan_trip" and not plans_already and not re.search(PLAN_CUE, text):
         # "muốn đi vũng tàu 2n1đ", "đặt phòng giúp mình" are not "plan it for me" (v5).
@@ -649,4 +710,6 @@ def apply_guards(
         only = [o for o in out.packing_only if not re.fullmatch(ITEM_LIMIT, normalize_text(o))]
         if only != out.packing_only:
             fixed["packing_only"] = only
+    if is_unsafe(message) or (off_topic_kind(message) and is_harmless_off_topic(message, out)):
+        fixed["intent"] = "refusal"
     return out.model_copy(update=fixed) if fixed else out

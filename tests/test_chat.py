@@ -13,7 +13,7 @@ from app.api import chat as chat_api
 from app.api.chat import ChatSettings, get_chat_settings, get_gate, verify_user_token
 from app.clients.llm.base import LlmResult
 from app.main import app
-from app.services.assistant import ChatRequest, search
+from app.services.assistant import ChatRequest, search, social
 from app.services.assistant.admission import TurnGate
 from app.services.usage_events import UsageEvent
 
@@ -212,7 +212,8 @@ def test_sse_refusal_uses_fixed_text(monkeypatch):
             for part in events
             if part.startswith("event: text")
         )
-        assert "Mình hỗ trợ du lịch an toàn" in text
+        # A refusal comes from a fixed pool (no LLM); the pool varies it turn to turn.
+        assert text.strip() in social.POOLS["refusal"]
         assert json.loads(events[-1].split("data: ")[1])["kind"] == "refusal"
         [usage] = published
         assert usage.user_id is None
