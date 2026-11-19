@@ -295,7 +295,7 @@ async def run_turn(
                 {"items": [card.model_dump(mode="json", by_alias=True) for card in answer.cards]},
             )
             if answer.suggestions:
-                yield event("suggestions", {"items": answer.suggestions[:3]})
+                yield event("suggestions", {"items": answer.suggestions[:4]})
             # What Tripi remembers; the app sends it back next turn (trip memory, v3.1).
             yield event("trip", turn.next_trip(answer).model_dump(mode="json", by_alias=True))
             answer_kind = answer.kind

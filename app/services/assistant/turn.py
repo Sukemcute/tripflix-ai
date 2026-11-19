@@ -19,7 +19,13 @@ from pydantic import ValidationError
 from app.clients.places import CorePlaces, PlacesClient
 from app.clients.weather import WeatherClient
 from app.services.assistant import planner, social
-from app.services.assistant.controller import is_harmless_off_topic, is_unsafe, off_topic_kind
+from app.services.assistant.controller import (
+    fix_plan_edit,
+    is_harmless_off_topic,
+    is_unsafe,
+    is_unspecified_edit,
+    off_topic_kind,
+)
 from app.services.assistant.schemas import (
     Answer,
     Awaiting,
@@ -205,6 +211,15 @@ class Turn:
             parsed.place = self.memory.place or parsed.place
             parsed.check_in, parsed.check_out = self.short_stay_dates
             parsed.day_ref, parsed.nights, parsed.is_past = "none", None, False
+        if parsed is not None:
+            parsed = fix_plan_edit(parsed, self.request.message, self.memory)
+            self.parsed = parsed
+        if is_unspecified_edit(self.request.message, self.memory):
+            return Answer(
+                kind="clarify",
+                text="Bạn muốn đổi phần nào trong lịch trình nè?",
+                suggestions=["Đổi thứ tự điểm", "Bỏ một điểm", "Đổi chỗ ở", "Đổi ngày đi"],
+            )
         outside = off_topic_kind(self.request.message)
         if (
             parsed
