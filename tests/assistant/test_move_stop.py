@@ -516,3 +516,43 @@ def test_dalat_repeated_move_is_noop_after_first_edit():
 def test_math_cues_do_not_fall_through_to_search(message):
     fixed = apply_guards(controller_plan(intent="search"), message, has_reel=False)
     assert fixed.intent == "refusal"
+
+
+# "Thung Lũng" (p2) should end up before or after "Chùa Tàu" (p1); day 1 starts p1, p2, p3.
+VISIT_ORDER = [
+    ("Tôi muốn đi Thung Lũng trước Chùa Tàu", True),
+    ("đi Chùa Tàu sau Thung Lũng", True),
+    ("Thung Lũng rồi Chùa Tàu", True),
+    ("Thung Lũng xong rồi mới qua Chùa Tàu", True),
+    ("đi Thung Lũng, sau đó tới Chùa Tàu", True),
+    ("sau khi đi Thung Lũng thì ghé Chùa Tàu", True),
+    ("trước Chùa Tàu thì đi Thung Lũng", True),
+    ("đầu tiên đi Thung Lũng rồi Chùa Tàu", True),
+    ("Chùa Tàu sau khi đi Thung Lũng", True),
+    ("đổi chỗ Chùa Tàu và Thung Lũng", True),
+    ("Chùa Tàu trước Thung Lũng", False),
+    ("Thung Lũng sau Chùa Tàu", False),
+    ("Chùa Tàu rồi mới tới Thung Lũng", False),
+]
+
+
+@pytest.mark.parametrize(("message", "valley_first"), VISIT_ORDER)
+def test_order_words_decide_the_visit_order(message, valley_first):
+    trip = dalat_draft()
+    parsed = to_understanding(
+        controller_plan(intent="move_stop", stop_name="German House", anchor_name="Bảo Tàng"),
+        trip,
+        date(2026, 11, 19),
+        message=message,
+    )
+    answer, changed, calls = run(parsed, trip, message=message)
+    order = [s.id for s in changed.days[0]]
+    assert (order.index("p2") < order.index("p1")) is valley_first, (message, order)
+    assert order[-1] == "p3" and not calls
+    # Already in that order: say so, never claim an edit.
+    assert answer.edit_applied is valley_first
+
+
+@pytest.mark.parametrize("message", ["Thung Lũng và Chùa Tàu", "Thung Lũng, Chùa Tàu"])
+def test_two_points_without_order_words_are_not_guessed(message):
+    assert move_from_message(message, dalat_draft()) is None
