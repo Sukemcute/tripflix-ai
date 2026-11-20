@@ -20,14 +20,14 @@ from app.clients.moderation.base import (
     ModerationTimeoutError,
     ModerationUpstreamError,
 )
-from app.clients.moderation.cover_ocr import CoverOcrError, OpenAICoverOcr
+from app.clients.moderation.cover_ocr import CoverOcrError, OpenAICoverOcr, estimate_cost
 from app.clients.moderation.openai import OpenAIModerationClient
 from app.clients.moderation.visobert import VisobertModeration, load_visobert
 from app.core.config import ModerationSettings, get_moderation_settings
 from app.services.moderation import ModerationItem, moderate_items
 from app.services.moderation_parts import PartInput, moderate_parts
 from app.services.moderation_shadow import log_safety_shadow
-from app.services.usage_events import ModerationUsage, UsageEvent, publish_usage
+from app.services.usage_events import CoverOcrUsage, ModerationUsage, UsageEvent, publish_usage
 
 MAX_ITEMS = 20
 MAX_TEXT_CHARS = 10_000  # core caps comments at 2,000; posts are longer
@@ -241,6 +241,7 @@ async def moderate_separate_parts(
 @router.post("/moderate/cover-ocr", response_model=CoverOcrResponse)
 async def moderate_cover_ocr(
     body: CoverOcrRequest,
+    background_tasks: BackgroundTasks,
     _caller: Annotated[str, Depends(require_core_caller)],
     client: Annotated[ModerationClient | None, Depends(get_moderation_client)],
     settings: Annotated[ModerationSettings, Depends(get_moderation_settings)],
@@ -258,8 +259,10 @@ async def moderate_cover_ocr(
         model=settings.cover_ocr_model,
         base_url=settings.openai_base_url,
     )
+    completed = False
     try:
         text = await ocr.read(jpeg)
+        completed = True
         if not text:
             return CoverOcrResponse(
                 status="passed",
@@ -294,4 +297,29 @@ async def moderate_cover_ocr(
             error_code="ocr_unavailable",
         )
     finally:
+        if ocr.called:
+            tokens = ocr.usage
+            background_tasks.add_task(
+                publish_usage,
+                [
+                    UsageEvent(
+                        payload=CoverOcrUsage(
+                            model=tokens.model if tokens else settings.cover_ocr_model,
+                            step=("completed" if completed else "error")
+                            if tokens
+                            else "usage_missing",
+                            input_tokens=tokens.input_tokens if tokens else None,
+                            output_tokens=tokens.output_tokens if tokens else None,
+                            cost_usd=estimate_cost(
+                                tokens,
+                                input_price=settings.cover_ocr_price_input,
+                                cached_price=settings.cover_ocr_price_cached_input,
+                                output_price=settings.cover_ocr_price_output,
+                            )
+                            if tokens
+                            else 0,
+                        )
+                    )
+                ],
+            )
         await ocr.aclose()

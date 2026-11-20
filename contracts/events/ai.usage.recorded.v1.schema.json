@@ -89,6 +89,78 @@
       "title": "ChatUsage",
       "type": "object"
     },
+    "CoverOcrUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "costUsd": {
+          "minimum": 0,
+          "title": "Costusd",
+          "type": "number"
+        },
+        "estimated": {
+          "const": true,
+          "default": true,
+          "title": "Estimated",
+          "type": "boolean"
+        },
+        "feature": {
+          "const": "cover_ocr",
+          "default": "cover_ocr",
+          "title": "Feature",
+          "type": "string"
+        },
+        "inputTokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputtokens"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "outputTokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outputtokens"
+        },
+        "step": {
+          "enum": [
+            "completed",
+            "error",
+            "usage_missing"
+          ],
+          "title": "Step",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "model",
+        "step",
+        "inputTokens",
+        "outputTokens",
+        "costUsd",
+        "estimated"
+      ],
+      "title": "CoverOcrUsage",
+      "type": "object"
+    },
     "ModerationUsage": {
       "additionalProperties": false,
       "properties": {
@@ -224,6 +296,9 @@
         },
         {
           "$ref": "#/$defs/ModerationUsage"
+        },
+        {
+          "$ref": "#/$defs/CoverOcrUsage"
         }
       ],
       "title": "Payload"
