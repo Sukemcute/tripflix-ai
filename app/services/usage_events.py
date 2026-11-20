@@ -66,6 +66,16 @@ class ModerationUsage(_WireModel):
     images: int = Field(ge=0)
 
 
+class CoverOcrUsage(_WireModel):
+    feature: Literal["cover_ocr"] = "cover_ocr"
+    model: str
+    step: Literal["completed", "error", "usage_missing"]
+    input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
+    cost_usd: float = Field(ge=0, allow_inf_nan=False)
+    estimated: Literal[True] = True
+
+
 class UsageEvent(_WireModel):
     event_id: UUID = Field(default_factory=uuid4)
     type: Literal["ai.usage.recorded"] = "ai.usage.recorded"
@@ -73,7 +83,7 @@ class UsageEvent(_WireModel):
     occurred_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
     producer: Literal["ai-service"] = "ai-service"
     user_id: UUID | None = None
-    payload: ChatUsage | SummaryUsage | ModerationUsage
+    payload: ChatUsage | SummaryUsage | ModerationUsage | CoverOcrUsage
 
 
 class ChatTurn(_WireModel):

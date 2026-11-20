@@ -77,6 +77,12 @@ class ModerationSettings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     moderation_model: str = "omni-moderation-latest"
     cover_ocr_model: str = "gpt-4.1-mini"
+    # USD per 1M tokens (GPT-4.1 mini standard, 2026-11-20);
+    # https://developers.openai.com/api/docs/models/gpt-4.1-mini
+    # Override all three when changing model or provider pricing.
+    cover_ocr_price_input: float = Field(default=0.40, ge=0)
+    cover_ocr_price_cached_input: float = Field(default=0.10, ge=0)
+    cover_ocr_price_output: float = Field(default=1.60, ge=0)
     # Core waits 3 s, then falls back to its regex: answer (or give up) before that.
     moderation_timeout_seconds: float = Field(default=2.5, gt=0)
     is_moderation_safety_shadow_enabled: bool = False

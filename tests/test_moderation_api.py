@@ -74,12 +74,24 @@ BODY = {"items": [{"id": "post:1", "text": "Phòng đẹp"}, {"id": "cmt:2", "te
 def test_cover_ocr_scans_only_extracted_poster_text(
     fake: FakeModerationClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from app.clients.moderation.cover_ocr import CoverOcrTokens
+
+    events: list[UsageEvent] = []
+
+    async def publish(batch: list[UsageEvent]) -> None:
+        events.extend(batch)
+
+    monkeypatch.setattr(moderation_api, "publish_usage", publish)
+
     class Ocr:
         def __init__(self, *args: object, **kwargs: object) -> None:
-            pass
+            self.called = False
+            self.usage = None
 
         async def read(self, jpeg: bytes) -> str:
             assert jpeg == b"\xff\xd8\xff\xd9"
+            self.called = True
+            self.usage = CoverOcrTokens(1000, 200, 20, "gpt-4.1-mini")
             return "FLAG trên ảnh bìa"
 
         async def aclose(self) -> None:
@@ -95,12 +107,66 @@ def test_cover_ocr_scans_only_extracted_poster_text(
     assert response.json()["status"] == "flagged"
     assert response.json()["extractedText"] == "FLAG trên ảnh bìa"
     assert response.json()["categories"]
+    assert len(events) == 1
+    assert events[0].payload.model_dump(by_alias=True) == {
+        "feature": "cover_ocr",
+        "model": "gpt-4.1-mini",
+        "step": "completed",
+        "inputTokens": 1000,
+        "outputTokens": 20,
+        "costUsd": pytest.approx(0.000372),
+        "estimated": True,
+    }
 
 
 def test_cover_ocr_requires_core_and_jpeg(fake: FakeModerationClient) -> None:
     body = {"imageBase64": base64.b64encode(b"plain text").decode()}
     assert http.post("/moderate/cover-ocr", json=body).status_code == 401
     assert http.post("/moderate/cover-ocr", json=body, headers=auth()).status_code == 422
+
+
+def test_cover_ocr_records_unpriced_provider_attempt(
+    fake: FakeModerationClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.clients.moderation.cover_ocr import CoverOcrError
+
+    events: list[UsageEvent] = []
+
+    async def publish(batch: list[UsageEvent]) -> None:
+        events.extend(batch)
+
+    monkeypatch.setattr(moderation_api, "publish_usage", publish)
+
+    class Ocr:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.called = False
+            self.usage = None
+
+        async def read(self, jpeg: bytes) -> str:
+            self.called = True
+            raise CoverOcrError("provider failed")
+
+        async def aclose(self) -> None:
+            pass
+
+    monkeypatch.setattr(moderation_api, "OpenAICoverOcr", Ocr)
+    response = http.post(
+        "/moderate/cover-ocr",
+        json={"imageBase64": base64.b64encode(b"\xff\xd8\xff\xd9").decode()},
+        headers=auth(),
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "error"
+    assert len(events) == 1
+    assert events[0].payload.model_dump(by_alias=True) == {
+        "feature": "cover_ocr",
+        "model": "gpt-4.1-mini",
+        "step": "usage_missing",
+        "inputTokens": None,
+        "outputTokens": None,
+        "costUsd": 0,
+        "estimated": True,
+    }
 
 
 def test_core_gets_one_result_per_item_in_order_in_camel_case(fake: FakeModerationClient) -> None:
