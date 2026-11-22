@@ -1,0 +1,183 @@
+from functools import cache
+from pathlib import Path
+from typing import Literal
+
+from pydantic import Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    core_api_url: str = "http://localhost:3000"
+    jwks_url: str = "http://localhost:3000/.well-known/jwks.json"
+    log_level: str = "INFO"
+
+    # No default: a missing or misspelled LLM_PROVIDER must stop startup, never fall back to fake.
+    # Only providers with an adapter: a new one is a new LlmClient class plus its name here.
+    llm_provider: Literal["fake", "deepseek", "openai", "anthropic"]
+    llm_model: str = ""  # empty: the adapter's default (openai has none and requires it)
+    llm_timeout_seconds: float = 30.0
+    llm_max_output_tokens: int = 3000  # 1500 cut big posts mid-JSON (real LLM trial 2026-11-05)
+    # env name kept (SUMMARY_LLM_KILL); field named as a question (RULES §4.1)
+    is_summary_llm_killed: bool = Field(default=False, validation_alias="SUMMARY_LLM_KILL")
+    deepseek_api_key: SecretStr = SecretStr("")
+    deepseek_base_url: str = "https://api.deepseek.com"
+    openai_api_key: SecretStr = SecretStr("")  # same variable as /moderate uses
+    openai_base_url: str = "https://api.openai.com/v1"
+    # Reasoning models (gpt-5 family, o-series) need it or spend the output cap on thinking;
+    # empty for models without reasoning, which reject the field.
+    openai_reasoning_effort: str = "minimal"
+    anthropic_api_key: SecretStr = SecretStr("")
+    # USD per 1M tokens for LLM_MODEL; required for openai, optional elsewhere (the adapter
+    # knows its default model's price). Every LLM call records its cost (RULES §10).
+    llm_price_input: float | None = None
+    llm_price_cached_input: float | None = None
+    llm_price_output: float | None = None
+
+    # Service client created with core's auth:create-service-client (secret printed once).
+    service_client_id: str = "ai-service"
+    service_client_secret: SecretStr = SecretStr("")
+    redis_url: str = "redis://localhost:6379/0"
+    # Fixed consumer names, like video-worker's VIDEO_WORKER_CONSUMER_NAME (Phong, 2026-11-11):
+    # hostname-PID adds a dead consumer to the group on every container rebuild. Empty means
+    # hostname-PID. Two replicas of one worker need different names: one name shares one
+    # pending list, so a dead replica's events would not be handed over.
+    summary_worker_consumer_name: str = ""
+    label_worker_consumer_name: str = ""
+
+    # Comment classifier bundle, baked into the image (scripts/fetch_classifier.py); missing
+    # means rules. Threads set explicitly: onnxruntime defaults to the host's physical cores,
+    # not the container's CPU limit. 2 threads, batch 8: ~19 comments/s (BAO_CAO benchmark).
+    classifier_dir: Path = Path(__file__).resolve().parents[1] / "models" / "comment_classifier"
+    classifier_threads: int = Field(default=2, ge=1)
+    classifier_batch: int = Field(default=8, ge=1)
+    # Unplug the classifier without a rebuild: false means rules only.
+    is_classifier_enabled: bool = Field(default=True, validation_alias="CLASSIFIER_ENABLED")
+    # ~15 s at the 34 comments/s measured on 2 threads (BENCH_AI_SUMMARY), so one big post cannot
+    # hold the worker; the rest use rules.
+    classifier_max_comments: int = Field(default=500, ge=1)  # [HIỆU CHỈNH]
+
+
+@cache
+def get_settings() -> Settings:
+    return Settings()  # pyright: ignore[reportCallIssue]  # required fields come from env
+
+
+class ModerationSettings(BaseSettings):
+    """Settings of the API process's POST /moderate (TF32).
+
+    Separate from Settings: the ai-service container gets no LLM_PROVIDER (core's compose sets
+    only CORE_API_URL, REDIS_URL, OPENAI_API_KEY), and moderation must not need it.
+    """
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    openai_api_key: SecretStr = SecretStr("")  # empty: /moderate answers 503
+    openai_base_url: str = "https://api.openai.com/v1"
+    moderation_model: str = "omni-moderation-latest"
+    cover_ocr_model: str = "gpt-4.1-mini"
+    # USD per 1M tokens (GPT-4.1 mini standard, 2026-11-20);
+    # https://developers.openai.com/api/docs/models/gpt-4.1-mini
+    # Override all three when changing model or provider pricing.
+    cover_ocr_price_input: float = Field(default=0.40, ge=0)
+    cover_ocr_price_cached_input: float = Field(default=0.10, ge=0)
+    cover_ocr_price_output: float = Field(default=1.60, ge=0)
+    # Core waits 3 s, then falls back to its regex: answer (or give up) before that.
+    moderation_timeout_seconds: float = Field(default=2.5, gt=0)
+    is_moderation_safety_shadow_enabled: bool = False
+    is_visobert_enabled: bool = False
+    visobert_dir: Path = Path(__file__).resolve().parents[1] / "models" / "visobert_moderation"
+    visobert_threshold: float = Field(default=0.97, ge=0, le=1)
+    visobert_threads: int = Field(default=1, ge=1)
+    visobert_batch_size: int = Field(default=4, ge=1, le=20)
+    visobert_timeout_seconds: float = Field(default=1.5, gt=0)
+    # POST /embed (TF28): loaded on first call, so the RAM is only used once core calls it.
+    embedding_dir: Path = Path(__file__).resolve().parents[1] / "models" / "e5_embedding"
+
+    # Core's service tokens (libs/auth/src/service-token.ts): ES256, typ "service".
+    core_api_url: str = "http://localhost:3000"
+    jwks_url: str = ""  # empty: {core_api_url}/.well-known/jwks.json
+    auth_jwt_issuer: str = "tripflix-core"
+    service_audience: str = "ai-service"
+    moderation_callers: tuple[str, ...] = ("core-api",)
+
+    @property
+    def resolved_jwks_url(self) -> str:
+        return self.jwks_url or f"{self.core_api_url.rstrip('/')}/.well-known/jwks.json"
+
+
+@cache
+def get_moderation_settings() -> ModerationSettings:
+    return ModerationSettings()
+
+
+class ChatSettings(BaseSettings):
+    """Settings of POST /chat (Tripi, TF31). Separate from Settings for the same reason as
+    ModerationSettings: the API container gets no LLM_PROVIDER. Limits are [HIỆU CHỈNH]."""
+
+    # An empty line such as CHAT_CONTROLLER_PRICE_INPUT= (as in .env.example) means "not set":
+    # parsing "" as a float stopped the whole service, /moderate included (anh Phong 16/11).
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
+
+    core_api_url: str = "http://localhost:3000"
+    jwks_url: str = ""
+    auth_jwt_issuer: str = "tripflix-core"
+    auth_jwt_audience: str = "tripflix"
+    redis_url: str = "redis://localhost:6379/0"
+
+    # Kill switch: false means every turn uses Core's own search, no LLM.
+    chat_llm_enabled: bool = False
+    # Turn off one role or some Skills without a deploy (v3 §3.3). Responder off = one agent
+    # with fixed text (the A side of the TF14 comparison). Skills: comma list, e.g. "flight,stay".
+    chat_responder_enabled: bool = True
+    chat_skills_disabled: str = ""
+    # Controller on OpenAI, Responder on DeepSeek (Bảo, 2026-11-16). OpenAI has no default
+    # model or price in its adapter, so both must be set; cost is recorded for every call.
+    chat_controller_provider: Literal["openai", "deepseek", "fake"] = "openai"
+    chat_controller_model: str = ""
+    chat_controller_price_input: float | None = None
+    chat_controller_price_cached_input: float | None = None
+    chat_controller_price_output: float | None = None
+    chat_responder_provider: Literal["openai", "deepseek", "fake"] = "deepseek"
+    chat_responder_model: str = ""  # empty: the adapter's default (deepseek-flash)
+    chat_responder_price_input: float | None = None
+    chat_responder_price_cached_input: float | None = None
+    chat_responder_price_output: float | None = None
+    openai_api_key: SecretStr = SecretStr("")
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_reasoning_effort: str = "minimal"
+    deepseek_api_key: SecretStr = SecretStr("")
+    deepseek_base_url: str = "https://api.deepseek.com"
+    chat_llm_timeout_seconds: float = Field(default=5, gt=0, le=30)
+    chat_max_output_tokens: int = Field(default=350, ge=50, le=2000)
+    # Whole turn, counted from the moment the request arrives (auth included).
+    chat_timeout_seconds: float = Field(default=12, gt=0, le=60)
+
+    # Guests may chat (Bảo, 2026-11-16) on a much smaller budget; true restores login-only.
+    chat_require_login: bool = False
+    # Hashes the guest's IP into a counter key; set a long random value in every environment.
+    chat_identity_salt: SecretStr = SecretStr("")
+    chat_max_inflight: int = Field(default=30, ge=1)
+    # TEST LIMITS (Bảo, 2026-11-17): wide on purpose while the team tests Tripi; the real
+    # caps are decided before release. A two-agent turn measured ~3,500 tokens (2026-11-16),
+    # so 2M tokens is ~570 turns. The system USD cap still stops runaway spend.
+    chat_user_turns_per_minute: int = Field(default=20, ge=1)
+    chat_guest_turns_per_minute: int = Field(default=15, ge=1)
+    chat_user_daily_turns: int = Field(default=500, ge=1)
+    chat_user_daily_tokens: int = Field(default=2_000_000, ge=1)
+    chat_guest_daily_turns: int = Field(default=300, ge=1)
+    chat_guest_daily_tokens: int = Field(default=1_000_000, ge=1)
+    chat_system_daily_usd: float = Field(default=3.0, gt=0)
+    # Messages (not pairs) the Controller reads; the request carries at most 30.
+    chat_user_history_turns: int = Field(default=20, ge=0, le=30)
+    chat_guest_history_turns: int = Field(default=20, ge=0, le=30)
+
+    @property
+    def resolved_jwks_url(self) -> str:
+        return self.jwks_url or f"{self.core_api_url.rstrip('/')}/.well-known/jwks.json"
+
+
+@cache
+def get_chat_settings() -> ChatSettings:
+    return ChatSettings()

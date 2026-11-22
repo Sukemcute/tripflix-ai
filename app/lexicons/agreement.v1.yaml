@@ -1,0 +1,36 @@
+# Replies that agree or disagree with the comment they answer (BAO_CAO "Luồng reply").
+# Cue-word baseline as in ARGUE (Walker et al. 2012: "yes", "I know", "really", "no") and
+# the agree/disagree/neither labels of ABCD (Rosenthal & McKeown 2015).
+# Vietnamese cue list has no published source [CẦN NC]: refit once real threads exist.
+# "dung roi" also folds "dùng rồi" (used it) and "sử dụng rồi": anchored at the start.
+# v1: drafted by Claude, pending review by Bảo, 2026-11-05.
+name: agreement
+version: 1
+groups:
+  agree:
+    patterns:
+      - '^(dung|chuan|chinh xac|that|qua dung) (roi|vay|that|day|luon|the|qua)'
+      - '^(chinh xac|dong y|cong nhan|same|agree|chuan)'
+      - '(minh|toi|tui|em|t|nha minh) cung (vay|the|bi|thay|gap|nghi vay|dinh)'
+      - 'xac nhan (luon|la dung)'
+    match:
+      - 'dung roi minh cung thay phong cu that'
+      - 'dung vay'
+      - 'chuan luon'
+      - 'minh cung bi y chang'
+      - 'dong y nhan vien hoi cham'
+    no_match:
+      - 'minh su dung roi thay on'
+      - 'phong nay minh dung roi'
+      - 'khach san dung gan bien'
+  disagree:
+    patterns:
+      - 'sai (roi|bet|het)'
+      - 'khong (dung|phai vay|phai the|he)'
+      - 'dau co'
+      - 'lam gi co'
+    match:
+      - 'sai roi minh an may lan khong sao ca'
+      - 'dau co ban oi phong sach ma'
+    no_match:
+      - 'dung roi minh cung bi'

@@ -1,0 +1,40 @@
+# Rule L12: comments that only react to the video, not to the real place.
+# Seed patterns from QT Bước 5 (L12); the LLM still flags harder cases via `excluded`.
+# v2: "clip hai" and other clip/video praise slipped through v1 (seen on the local demo).
+# v2: drafted by Claude, pending review by Bảo, 2026-11-04.
+name: video_reaction
+version: 2
+groups:
+  speculation:
+    patterns:
+      - 'nhin co ve'
+      - 'chac la'
+      - 'nghe don'
+    match:
+      - 'nhin co ve sau lam'
+    no_match:
+      - 'nuoc sau lam nha'
+  wish:
+    patterns:
+      - 'uoc (gi )?(duoc )?di'
+      - 'mong (mot|1) lan'
+      - 'them di'
+    match:
+      - 'uoc duoc di 1 lan'
+      - 'them di qua'
+    no_match:
+      - 'minh di roi dep lam'
+  video_praise:
+    patterns:
+      - 'nhac hay'
+      - 'edit (dinh|xin|cuon)'
+      - 'flycam muot'
+      - '(clip|video|vid) (hai|hay|cuon|xinh|dinh|chill|dep)'
+      - 'quay dep'
+    match:
+      - 'nhac hay qua ad oi'
+      - 'flycam muot ghe'
+      - 'clip hai qua cuoi dau bung luon'
+      - 'video chill that su'
+    no_match:
+      - 'phong dep view bien'

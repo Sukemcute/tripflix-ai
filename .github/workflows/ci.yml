@@ -2,15 +2,21 @@ name: ci
 
 on:
   pull_request:
-  push:
-    branches: [develop, main]
+  # Khi push lên develop, main hoặc tag, publish.yml gọi CI trước rồi mới build image, nên không chạy riêng để khỏi chạy hai lần.
+  workflow_call:
 
 permissions:
   contents: read
 
+# PR: lần push mới huỷ lần chạy cũ. Nhánh develop, main không huỷ để commit nào cũng được kiểm đủ.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -27,4 +33,3 @@ jobs:
       - run: uv run pytest
       - name: Verify generated OpenAPI contract
         run: uv run python -m scripts.export_openapi && git diff --exit-code contracts/
-

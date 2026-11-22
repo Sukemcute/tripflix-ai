@@ -1,0 +1,20 @@
+# Complaints get selection tier 2 (QT Bước 9). Content is [CẦN NC]; v1 is a seed list.
+# v1: drafted by Claude, pending review by Bảo, 2026-11-04.
+name: complaint
+version: 1
+groups:
+  complaint:
+    patterns:
+      - 'ban (qua|lam|kinh)'
+      - '(dat|mac) (qua|lam|cat co)'
+      - 'that vong'
+      - 'khong (sach|dang tien|nhu hinh)'
+      - '(ko|k|hong) (sach|dang tien)'
+      - 'phuc vu (te|kem|cham)'
+      - 'cho (lau|qua lau)'
+      - 'thai do (te|kem|lon)'
+    match:
+      - 'phong ban qua'
+      - 'ko dang tien chut nao'
+    no_match:
+      - 'phong sach dep dang tien'

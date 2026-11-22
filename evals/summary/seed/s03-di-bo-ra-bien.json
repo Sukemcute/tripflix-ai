@@ -1,0 +1,164 @@
+{
+  "post_id": "s03-di-bo-ra-bien",
+  "is_simulated": true,
+  "scenario": "reality_gap",
+  "caption": "Homestay xinh ở Quy Nhơn, đi bộ 2 phút là ra biển 🏖️",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Mây Homestay Quy Nhơn",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s03-c01",
+      "author_id": "s03-a1",
+      "parent_id": null,
+      "body": "Mình ở đây cuối tháng 9, đi bộ ra biển mất gần 15 phút, trưa nắng đi mệt lắm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s03-c02",
+      "author_id": "s03-a2",
+      "parent_id": null,
+      "body": "2 phút là nói quá nha, tụi mình ở 3 hôm phải thuê xe máy để ra biển",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s03-c03",
+      "author_id": "s03-a3",
+      "parent_id": null,
+      "body": "Chủ nhà thân thiện, chỉ quán ăn ngon cho tụi mình",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s03-c04",
+      "author_id": "s03-a4",
+      "parent_id": null,
+      "body": "cô chủ dễ thương, cho mượn xe đạp free",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s03-c05",
+      "author_id": "s03-a5",
+      "parent_id": null,
+      "body": "Phòng hơi nhỏ nhưng sạch sẽ",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s03-c06",
+      "author_id": "s03-a6",
+      "parent_id": null,
+      "body": "phòng sạch, máy lạnh mát, ngủ ngon",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s03-c07",
+      "author_id": "s03-a7",
+      "parent_id": null,
+      "body": "Tháng 11 đi Quy Nhơn có mưa nhiều không mọi người?",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T15:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s03-c08",
+      "author_id": "s03-a8",
+      "parent_id": "s03-c07",
+      "body": "tháng 11 hay mưa chiều á bạn, nên đi tầm tháng 4 tới tháng 6",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T16:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s03-c09",
+      "author_id": "s03-a9",
+      "parent_id": null,
+      "body": "Giá phòng mùa này sao vậy ạ, sinh viên đi được không",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T17:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s03-c10",
+      "author_id": "s03-a10",
+      "parent_id": "s03-c09",
+      "body": "mình ở hồi tháng 9 giá mềm lắm, hợp sinh viên",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-23T18:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {},
+    "safety": [],
+    "not_safety": [],
+    "points": [
+      {
+        "polarity": "pro",
+        "aspect": "phuc_vu",
+        "comment_ids": [
+          "s03-c03",
+          "s03-c04"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "ve_sinh",
+        "comment_ids": [
+          "s03-c05",
+          "s03-c06"
+        ]
+      }
+    ],
+    "reality_gaps": [
+      {
+        "claim": "Đi bộ 2 phút là ra biển",
+        "comment_ids": [
+          "s03-c01",
+          "s03-c02"
+        ]
+      }
+    ],
+    "topics": [
+      {
+        "label": "Thời tiết tháng 11",
+        "comment_ids": [
+          "s03-c07",
+          "s03-c08"
+        ]
+      },
+      {
+        "label": "Giá phòng cho sinh viên",
+        "comment_ids": [
+          "s03-c09",
+          "s03-c10"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "post_id": "s04-buffet",
+  "is_simulated": true,
+  "scenario": "reality_gap",
+  "caption": "Buffet sáng hơn 50 món, ăn no tới trưa 🍳",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Golden Sand Đà Nẵng",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s04-c01",
+      "author_id": "s04-a1",
+      "parent_id": null,
+      "body": "Mình ở 3 đêm, buffet tầm 15 món thôi, ngày nào cũng y chang",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-24T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s04-c02",
+      "author_id": "s04-a2",
+      "parent_id": null,
+      "body": "50 món chắc tính cả nước chấm 😅 mình đi tuần trước thấy ít món lắm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-24T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s04-c03",
+      "author_id": "s04-a3",
+      "parent_id": null,
+      "body": "Buffet sáng ít món, đồ ăn nguội nữa",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-24T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s04-c04",
+      "author_id": "s04-a4",
+      "parent_id": null,
+      "body": "Phòng view sông Hàn đẹp, tối nhìn thấy cầu Rồng",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-24T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s04-c05",
+      "author_id": "s04-a5",
+      "parent_id": null,
+      "body": "view đẹp thật, ban đêm lên rooftop chụp hình xịn",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-24T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s04-c06",
+      "author_id": "s04-a6",
+      "parent_id": null,
+      "body": "Check-in lâu, đợi gần 1 tiếng mới có phòng",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-24T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s04-c07",
+      "author_id": "s04-a7",
+      "parent_id": null,
+      "body": "lễ tân làm thủ tục chậm, mình đứng đợi lâu lắm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-24T15:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s04-c08",
+      "author_id": "s04-a8",
+      "parent_id": null,
+      "body": "Có ai biết resort có đưa đón sân bay không ạ?",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-24T16:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s04-c09",
+      "author_id": "s04-a9",
+      "parent_id": "s04-c08",
+      "body": "có xe đưa đón nhưng phải đặt trước 1 ngày nha",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-24T17:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {},
+    "safety": [],
+    "not_safety": [],
+    "points": [
+      {
+        "polarity": "con",
+        "aspect": "do_an",
+        "comment_ids": [
+          "s04-c01",
+          "s04-c02",
+          "s04-c03"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "canh_quan",
+        "comment_ids": [
+          "s04-c04",
+          "s04-c05"
+        ]
+      },
+      {
+        "polarity": "con",
+        "aspect": "phuc_vu",
+        "comment_ids": [
+          "s04-c06",
+          "s04-c07"
+        ]
+      }
+    ],
+    "reality_gaps": [
+      {
+        "claim": "Buffet sáng hơn 50 món",
+        "comment_ids": [
+          "s04-c01",
+          "s04-c02"
+        ]
+      }
+    ],
+    "topics": [
+      {
+        "label": "Đưa đón sân bay",
+        "comment_ids": [
+          "s04-c08",
+          "s04-c09"
+        ]
+      },
+      {
+        "label": "Bữa sáng",
+        "comment_ids": [
+          "s04-c01",
+          "s04-c02",
+          "s04-c03"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,50 @@
+{"id": "q-01", "message": "muốn đi đà lạt 2n1đ", "anyOf": ["da lat"]}
+{"id": "q-02", "message": "da lat san may", "anyOf": ["da lat"]}
+{"id": "q-03", "message": "vung tau cuoi tuan di dau", "anyOf": ["vung tau"]}
+{"id": "q-04", "message": "đi biển gần sài gòn", "anyOf": ["vung tau", "phan thiet", "mui ne", "long hai", "ho tram"]}
+{"id": "q-05", "message": "hoi an 3 ngay 2 dem", "anyOf": ["hoi an"]}
+{"id": "q-06", "message": "đà nẵng ăn gì ngon", "anyOf": ["da nang"]}
+{"id": "q-07", "message": "nha trang lặn biển", "anyOf": ["nha trang"]}
+{"id": "q-08", "message": "phú quốc resort view biển", "anyOf": ["phu quoc"]}
+{"id": "q-09", "message": "sapa mùa lúa chín", "anyOf": ["sa pa", "sapa"]}
+{"id": "q-10", "message": "ha giang mua hoa tam giac mach", "anyOf": ["ha giang"]}
+{"id": "q-11", "message": "hạ long du thuyền", "anyOf": ["ha long"]}
+{"id": "q-12", "message": "hue di dau 1 ngay", "anyOf": ["hue"]}
+{"id": "q-13", "message": "hà nội phố cổ ăn vặt", "anyOf": ["ha noi"]}
+{"id": "q-14", "message": "sài gòn về đêm đi đâu chill", "anyOf": ["ho chi minh", "sai gon", "tp.hcm", "tp hcm"]}
+{"id": "q-15", "message": "quy nhon bien dep", "anyOf": ["quy nhon"]}
+{"id": "q-16", "message": "mộc châu đồi chè", "anyOf": ["moc chau"]}
+{"id": "q-17", "message": "ninh bình tràng an", "anyOf": ["ninh binh"]}
+{"id": "q-18", "message": "côn đảo 3 ngày", "anyOf": ["con dao"]}
+{"id": "q-19", "message": "cần thơ chợ nổi", "anyOf": ["can tho"]}
+{"id": "q-20", "message": "mũi né đồi cát", "anyOf": ["mui ne", "phan thiet"]}
+{"id": "q-21", "message": "dl 2n1d ít tiền", "anyOf": ["da lat"]}
+{"id": "q-22", "message": "vt 1 ngày đi về", "anyOf": ["vung tau"]}
+{"id": "q-23", "message": "dn hoi an 4n3d", "anyOf": ["da nang", "hoi an"]}
+{"id": "q-24", "message": "pq 3n2d cho cap doi", "anyOf": ["phu quoc"]}
+{"id": "q-25", "message": "nt di dau choi", "anyOf": ["nha trang"]}
+{"id": "q-26", "message": "trip đà lạt cho hội bạn thân 5 người", "anyOf": ["da lat"]}
+{"id": "q-27", "message": "chỗ check in đẹp ở đà nẵng", "anyOf": ["da nang"]}
+{"id": "q-28", "message": "homestay đà lạt view đồi", "anyOf": ["da lat"]}
+{"id": "q-29", "message": "khách sạn vũng tàu gần biển", "anyOf": ["vung tau"]}
+{"id": "q-30", "message": "resort phú quốc cho gia đình", "anyOf": ["phu quoc"]}
+{"id": "q-31", "message": "cafe đẹp hội an", "anyOf": ["hoi an"]}
+{"id": "q-32", "message": "đà lạt mùa mưa có nên đi", "anyOf": ["da lat"]}
+{"id": "q-33", "message": "đi sapa tháng 12 lạnh không", "anyOf": ["sa pa", "sapa"]}
+{"id": "q-34", "message": "hà giang loop bao nhiêu ngày", "anyOf": ["ha giang"]}
+{"id": "q-35", "message": "huế ăn bún bò ở đâu", "anyOf": ["hue"]}
+{"id": "q-36", "message": "nha trang vinwonders", "anyOf": ["nha trang"]}
+{"id": "q-37", "message": "quy nhơn eo gió", "anyOf": ["quy nhon"]}
+{"id": "q-38", "message": "ninh binh hang mua", "anyOf": ["ninh binh"]}
+{"id": "q-39", "message": "ha long ngu dem tren vinh", "anyOf": ["ha long"]}
+{"id": "q-40", "message": "đà nẵng bà nà hills", "anyOf": ["da nang", "ba na"]}
+{"id": "q-41", "message": "weekend trip from saigon", "anyOf": ["ho chi minh", "sai gon", "vung tau", "tp.hcm"]}
+{"id": "q-42", "message": "dalat chill cafe", "anyOf": ["da lat"]}
+{"id": "q-43", "message": "best beach in vietnam phu quoc", "anyOf": ["phu quoc"]}
+{"id": "q-44", "message": "hanoi street food tour", "anyOf": ["ha noi"]}
+{"id": "q-45", "message": "đi đâu tháng 11 đẹp miền bắc", "anyOf": ["ha noi", "ha giang", "moc chau", "sa pa", "ninh binh", "ha long"]}
+{"id": "q-46", "message": "biển miền trung tháng 3", "anyOf": ["da nang", "hoi an", "quy nhon", "nha trang"]}
+{"id": "q-47", "message": "du lịch tiết kiệm 2 triệu đà lạt", "anyOf": ["da lat"]}
+{"id": "q-48", "message": "vũng tàu ăn hải sản", "anyOf": ["vung tau"]}
+{"id": "q-49", "message": "phú yên hoa vàng cỏ xanh", "anyOf": ["phu yen", "tuy hoa"]}
+{"id": "q-50", "message": "tây ninh núi bà đen", "anyOf": ["tay ninh"]}

@@ -1,0 +1,140 @@
+{
+  "post_id": "s02-ho-boi",
+  "is_simulated": true,
+  "scenario": "reality_gap",
+  "caption": "Hồ bơi vô cực siêu rộng, bơi cả ngày không thấy ai 😍 #phuquoc",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Lagoon Hill Phú Quốc",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s02-c01",
+      "author_id": "s02-a1",
+      "parent_id": null,
+      "body": "Mình ở đây dịp lễ 2/9, hồ bơi nhỏ xíu, chiều đông như kiến luôn",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-22T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s02-c02",
+      "author_id": "s02-a2",
+      "parent_id": null,
+      "body": "hồ bơi bé hơn trong video nhiều, quay góc rộng thôi chứ mình đi rồi thấy chật",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-22T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s02-c03",
+      "author_id": "s02-a3",
+      "parent_id": null,
+      "body": "đi tháng trước thấy hồ đông lắm, phải canh sáng sớm mới bơi được",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-22T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s02-c04",
+      "author_id": "s02-a4",
+      "parent_id": null,
+      "body": "Bữa sáng ngon, có phở với bánh mì nóng",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-22T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s02-c05",
+      "author_id": "s02-a5",
+      "parent_id": null,
+      "body": "buffet sáng nhiều món Việt, ăn ok lắm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-22T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s02-c06",
+      "author_id": "s02-a6",
+      "parent_id": null,
+      "body": "Gần chợ đêm, đi bộ 5 phút là tới",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-22T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s02-c07",
+      "author_id": "s02-a7",
+      "parent_id": null,
+      "body": "vị trí tiện, tối đi bộ ra chợ đêm ăn hải sản được",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-22T15:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s02-c08",
+      "author_id": "s02-a8",
+      "parent_id": null,
+      "body": "Mê quá muốn đi ghê 😍",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-22T16:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {
+      "s02-c08": "wish"
+    },
+    "safety": [],
+    "not_safety": [],
+    "points": [
+      {
+        "polarity": "pro",
+        "aspect": "do_an",
+        "comment_ids": [
+          "s02-c04",
+          "s02-c05"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "vi_tri_di_lai",
+        "comment_ids": [
+          "s02-c06",
+          "s02-c07"
+        ]
+      },
+      {
+        "polarity": "con",
+        "aspect": "dong_duc",
+        "comment_ids": [
+          "s02-c01",
+          "s02-c03"
+        ]
+      }
+    ],
+    "reality_gaps": [
+      {
+        "claim": "Hồ bơi vô cực rộng, không đông",
+        "comment_ids": [
+          "s02-c01",
+          "s02-c02",
+          "s02-c03"
+        ]
+      }
+    ],
+    "topics": []
+  }
+}

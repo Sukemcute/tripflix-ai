@@ -1,10 +1,8 @@
 # Đề xuất cấu trúc repo — Tripflix
 
-**Phiên bản:** 1.1 · **Ngày:** 2026-11-04 · **Trạng thái:** Baseline v1.0 đã duyệt (còn chờ Q7: tên GitHub org); các thay đổi database ở v1.1 là đề xuất, chờ duyệt · **Người đọc:** cả team kỹ thuật · **Dựa trên:** [docs/10 v0.6](10-de-xuat-kien-truc-va-repo.md)
+**Phiên bản:** 1.1 · **Ngày:** 2026-11-04 · **Trạng thái:** Đã duyệt (còn chờ Q7: tên GitHub org); v1.1 (duyệt 04/11) gộp `commerce` vào database `core` và chuẩn bị đường tách `discovery` · **Người đọc:** cả team kỹ thuật · **Dựa trên:** [docs/10 v0.6](10-de-xuat-kien-truc-va-repo.md)
 
 > Tóm tắt: giữ **3 repo** như docs/10 (`tripflix-be`, `tripflix-fe`, `tripflix-ai`). Hai repo TypeScript dùng chung một bộ công cụ: **pnpm + Turborepo**. Backend dùng **NestJS + Drizzle**. Mỗi module của `core-api` có **kết nối database và transaction riêng**, nên không thể vô tình mở transaction chéo module. `core-api` chạy được 2 vai trò từ cùng code: `api` (nhận request) và `worker` (job, consumer, outbox relay). Hợp đồng giữa các repo (OpenAPI, schema sự kiện) được sinh ra và commit vào thư mục `contracts/` của repo phát hành. **Cả hệ thống chạy bằng Docker với một lệnh** `pnpm stack:up` từ repo BE (§7): build từ 3 repo đặt cạnh nhau, tự migrate và seed, có chế độ tự cập nhật khi sửa code.
-
-> **Phạm vi thay đổi v1.1 đang chờ duyệt:** gộp schema `commerce` vào database `core` và chuẩn bị đường tách `discovery`. Cho đến khi team chốt, kiến trúc đã duyệt vẫn là docs/10 v0.6 và sơ đồ v4.5 (Postgres `core` + `commerce`); các phần v1.1 liên quan database trong tài liệu này chỉ là phương án, chưa phải chỉ dẫn triển khai.
 
 ---
 
@@ -69,7 +67,7 @@ tripflix-be/
 │  │  │     ├─ access/             # auth, sessions, vai trò, JWKS
 │  │  │     ├─ content/            # social/ media/ feed/ moderation/
 │  │  │     ├─ discovery/          # search/ recommend/
-│  │  │     ├─ commerce/           # inventory/ booking/ payment/   → schema commerce (đề xuất v1.1)
+│  │  │     ├─ commerce/           # inventory/ booking/ payment/   → schema commerce
 │  │  │     └─ analytics/          # ingest/ marts/ api/
 │  │  ├─ scripts/                  # migrate.ts, seed.ts, export-openapi.ts
 │  │  ├─ test/                     # integration (Testcontainers), e2e
@@ -79,7 +77,7 @@ tripflix-be/
 │  │  ├─ src/
 │  │  │  ├─ consumers/             # consumer group "notification"
 │  │  │  ├─ inbox/                 # in-app: bảng inbox + WebSocket (Socket.IO, adapter Redis)
-│  │  │  ├─ delivery/              # out-app: hàng đợi push, email (BullMQ), thử lại, dead-letter
+│  │  │  ├─ outapp/                # out-app: email (Nodemailer); push + BullMQ chưa làm
 │  │  │  ├─ preferences/           # tắt từng loại, giờ im lặng, giới hạn mỗi giờ
 │  │  │  ├─ grouping/              # gom "Lan và 11 người khác…"
 │  │  │  └─ db/                    # schema, migrations của database notification
@@ -91,7 +89,8 @@ tripflix-be/
 │     │  ├─ transcode/             # thang chất lượng 360p/540p/720p, đoạn 2 giây, ảnh bìa
 │     │  └─ storage/               # đọc file gốc, ghi HLS vào thư mục r{n}/ trên S3
 │     ├─ Dockerfile                # base image có sẵn FFmpeg
-│     └─ package.json
+│     └─ package.json          # bản Node, chỉ dùng ở dev local
+│  └─ video-worker-go/             # bản Go chạy trên staging: cmd/, internal/, cùng sự kiện và bố cục S3
 ├─ libs/
 │  ├─ contracts/                   # zod: phong bì sự kiện + payload theo version; enum vai trò; xuất JSON Schema
 │  ├─ event-bus/                   # interface EventBus + adapter Redis Streams (XADD, XREADGROUP, XAUTOCLAIM, dead-letter)
@@ -113,7 +112,7 @@ tripflix-be/
 │  ├─ compose.yaml                 # chạy cả hệ thống, chia profile (§7)
 │  ├─ .env.example                 # cổng, đường dẫn 3 repo, thông tin bucket S3 dev; chép thành deploy/.env
 │  ├─ postgres/init/               # chạy 1 lần bằng superuser
-│  │  ├─ 01-databases.sql          # core, notification (phương án v1.1; baseline còn commerce)
+│  │  ├─ 01-databases.sql          # core, notification
 │  │  ├─ 02-roles-schemas.sql      # user và schema cho từng module
 │  │  └─ 03-extensions.sql         # vector, unaccent, pg_trgm
 │  ├─ traefik/                     # route, rate limit, kiểm JWT
@@ -181,8 +180,6 @@ Các module khác theo cùng khuôn: thư mục phần con (`content/social`, `c
 
 ### 3.3. Kết nối database và transaction theo module
 
-> **Đề xuất v1.1, chưa triển khai:** các kết nối trong bảng dưới đây đưa `commerce` vào database `core`. Baseline đã duyệt vẫn tách database `commerce` riêng; chỉ đổi sơ đồ và cấu hình khi team phê duyệt.
-
 | Tên kết nối | Database | User Postgres | Schema được phép | Pool (gợi ý) |
 |---|---|---|---|---|
 | `access` | `core` | `tf_access` | `access` | 5 |
@@ -237,7 +234,7 @@ Vì mỗi module là một kết nối riêng, một use case của `content` **
 | `APP_ROLE` | Chạy gì | Dùng khi |
 |---|---|---|
 | `api` | Controller HTTP, `/events` (nhận sự kiện hành vi từ app), Swagger | Deploy, scale theo request |
-| `worker` | Outbox relay của 5 module, consumer `core-discovery`, `core-analytics`, BullMQ processor, job định kỳ (hết hạn đơn, mở lịch trống, đối soát, làm mới `mart_*`, tạo partition) | Deploy, 1–2 replica |
+| `worker` | Outbox relay của 5 module, consumer `core-discovery`, `core-analytics`, job định kỳ (hết hạn đơn, mở lịch trống, đối soát, làm mới `mart_*`, tạo partition) | Deploy, 1–2 replica |
 | `all` | Cả hai | Dev local, demo |
 
 Cùng một Docker image, chỉ khác biến môi trường.
@@ -400,7 +397,7 @@ Cần GitHub username của từng người để điền file thật.
 
 | Repo | Khi mở PR | Khi merge vào `develop` (deploy staging); khi merge vào `main` (bản demo) |
 |---|---|---|
-| BE | `turbo run lint typecheck test build --affected`; integration test có Testcontainers; kiểm `contracts/` | Build và đẩy image `core-api`, `notification-service`, `video-worker` lên GHCR; deploy staging |
+| BE | `turbo run lint typecheck test build --affected`; integration test có Testcontainers; kiểm `contracts/` | Build và đẩy image `core-api`, `notification-service`, `video-worker`, `video-worker-go` lên GHCR; deploy staging |
 | FE | `turbo run lint typecheck test build --affected` | Build web, admin; mobile build APK bằng EAS khi gắn tag `mobile-v*` |
 | AI | `ruff check`, `ruff format --check`, `pyright`, `pytest`; kiểm `contracts/` | Build image lên GHCR; chạy `evals/` và lưu kết quả |
 
@@ -426,13 +423,13 @@ Kết hợp được: chạy `pnpm stack:up`, rồi `docker compose stop core-ap
 
 | Service | Profile | Cổng trên máy | Khởi động khi | Ghi chú |
 |---|---|---|---|---|
-| `postgres` | (luôn chạy) | 5432 | — | `pgvector/pgvector:pg17`; phương án v1.1 tạo 2 database (`core`, `notification`), user/schema/extension; baseline đã duyệt còn database `commerce` riêng |
+| `postgres` | (luôn chạy) | 5432 | — | `pgvector/pgvector:pg17`; lần đầu chạy `deploy/postgres/init/` tạo 2 database (`core`, `notification`), user và schema theo module, extension |
 | `redis` | (luôn chạy) | 6379 | — | AOF bật |
 | `mailpit` | (luôn chạy) | 8025 (web), 1025 (SMTP) | — | Xem email gửi đi |
 | `migrate` | be | — | `postgres` healthy | Chạy một lần: migrate mọi module + `notification`, seed nếu database trống |
 | `core-api` | be | 3000 | `migrate` xong, `redis` healthy | `APP_ROLE=all` |
 | `notification-service` | be | 3001 | `migrate` xong | |
-| `video-worker` | be | — | `redis` sẵn sàng | Image có FFmpeg; đọc file gốc, ghi HLS lên bucket S3 dev |
+| `video-worker` | be | — | `redis` sẵn sàng | Bản Node (`apps/video-worker`); image có FFmpeg; đọc file gốc, ghi HLS lên bucket S3 dev. Staging dùng bản Go |
 | `ai-service` | ai | 8000 | `core-api` healthy | Build từ `../tripflix-ai` |
 | `web`, `admin` | fe | 3100, 3200 | — | Build từ `../tripflix-fe` |
 | `traefik` | gateway | 8080, 8081 (dashboard) | — | Một địa chỉ cho FE và mobile |
@@ -461,7 +458,7 @@ x-be-env: &be-env
   NODE_ENV: development
   PG_HOST: postgres
   REDIS_URL: redis://redis:6379
-  AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+  AWS_REGION: ${AWS_REGION:-ap-southeast-2}
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}          # key riêng từng người, chỉ ghi được dev/<tên>/
   AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
   S3_MEDIA_BUCKET: tripflix-media-dev
@@ -532,7 +529,8 @@ Mỗi app một Dockerfile. App TypeScript build với context là gốc repo, �
 | App | Base image | Các stage |
 |---|---|---|
 | `core-api`, `notification-service` | `node:24-slim` | `prune` (`turbo prune <app> --docker`, chỉ lấy phần monorepo app cần) → `deps` (`pnpm install --frozen-lockfile`, cache pnpm store) → **`dev`** (toàn bộ mã nguồn, chạy chế độ watch) → `build` → **`prod`** (chỉ `dist` + dependency production, chạy bằng user không phải root) |
-| `video-worker` | `node:24-slim` + FFmpeg | Như trên |
+| `video-worker` | `node:24-slim` + FFmpeg | Như trên (bản Node, dev local) |
+| `video-worker-go` | `golang:1.27-bookworm` → `debian:bookworm-slim` + FFmpeg | `build` (biên dịch một file chạy) → `prod` (file chạy + FFmpeg) |
 | `web`, `admin` | `node:24-slim` | `prune` → `deps` → **`dev`** (`next dev`) → `build` (`next build`, output `standalone`) → **`prod`** (chỉ thư mục `standalone` + static) |
 | `ai-service` | `python:3.13-slim` + `uv` | `deps` (`uv sync --locked --no-install-project`, cache uv) → **`dev`** (`fastapi dev`, tự reload) → **`prod`** (`uv sync --no-dev`, `fastapi run`) |
 
@@ -592,7 +590,7 @@ Bước 2–3 nên xong trước khi các bước khác bắt đầu viết nghi
 | — | Thư mục `contracts/` ở BE và AI | Q5 |
 | `packages/ui` | Tách `ui-web` (web, admin) và `tokens` (dùng cả mobile) | Component web không dùng được trên React Native, nhưng màu, font thì dùng chung được |
 | — | `discovery` có `DB_DISCOVERY_URL` riêng, `statement_timeout` riêng, sẵn sàng tách instance khi đo thấy cần (v1.1) | Search là phần dùng nhiều; giữ đường tách ra mà chưa phải vận hành thêm máy ở pilot |
-| — | *(Đề xuất v1.1, chờ duyệt)* `commerce` là schema trong database `core`, không tách database riêng | Tồn kho do nền tảng tự quản lý, đơn hàng gắn với user và bài đăng; tách database chỉ thêm việc ghép dữ liệu |
+| — | `commerce` là schema trong database `core`, không tách database riêng (v1.1, duyệt 04/11) | Tồn kho do nền tảng tự quản lý, đơn hàng gắn với user và bài đăng; tách database chỉ thêm việc ghép dữ liệu |
 | Dev dùng MinIO thay S3 | Dev dùng bucket S3 dev + CloudFront dev, thêm `libs/storage` | Q9 |
 | `deploy/docker-compose.yml` chỉ có hạ tầng | `deploy/compose.yaml` chạy cả hệ thống (build từ 3 repo), profile `be`, `ai`, `fe`, `gateway`, `tools`; service `migrate` tự migrate, seed; Compose Watch; Dockerfile nhiều stage (`dev`, `prod`) cho mọi app; lệnh `pnpm stack:*` | Q8: ai cũng chạy được cả hệ thống bằng một lệnh |
 

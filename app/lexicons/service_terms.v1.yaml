@@ -1,0 +1,23 @@
+# Words about the real service; keeps mixed comments ("nhac hay ma phong ban") out of L12.
+# v1: drafted by Claude, pending review by Bảo, 2026-11-04.
+name: service_terms
+version: 1
+groups:
+  service:
+    patterns:
+      - 'phong'
+      - 'le tan'
+      - 'ho boi'
+      - 'buffet'
+      - 'bua sang'
+      - 'nhan vien'
+      - 'check ?(in|out)'
+      - '(bai|nuoc) bien'
+      - 'gia ve'
+      - 'gui xe'
+      - 'dua don'
+    match:
+      - 'nhac hay ma phong ban'
+      - 'check in nhanh'
+    no_match:
+      - 'nhac hay qua ad oi'

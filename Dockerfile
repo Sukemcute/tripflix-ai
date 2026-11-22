@@ -1,10 +1,31 @@
 # syntax=docker/dockerfile:1
 FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
 
+FROM python:3.12-slim AS visobert-model
+COPY --from=uv /uv /bin/uv
+WORKDIR /build
+RUN uv pip install --system --index-url https://download.pytorch.org/whl/cpu torch==2.5.1
+RUN uv pip install --system transformers==4.51.0 tokenizers==0.21.2 onnx==1.17.0 \
+    onnxruntime==1.31.1 numpy sentencepiece safetensors accelerate==1.6.0 ml-dtypes==0.6.0
+COPY app ./app
+COPY scripts/export_visobert.py ./scripts/export_visobert.py
+RUN python -m scripts.export_visobert --out /models/visobert_moderation
+
+FROM python:3.13-slim AS e5-model
+COPY --from=uv /uv /bin/uv
+WORKDIR /build
+# The checkpoint ships an ONNX graph: only quantize it, no torch.
+RUN uv pip install --system onnxruntime==1.31.1 onnx==1.23.2 numpy==2.5.4 tokenizers==0.23.3
+COPY app ./app
+COPY scripts/export_e5.py ./scripts/export_e5.py
+RUN python -m scripts.export_e5 --out /models/e5_embedding
+
 FROM python:3.13-slim AS base
 COPY --from=uv /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_CACHE_DIR=/tmp/uv-cache PYTHONUNBUFFERED=1
 WORKDIR /app
+COPY --from=visobert-model /models/visobert_moderation ./app/models/visobert_moderation
+COPY --from=e5-model /models/e5_embedding ./app/models/e5_embedding
 
 FROM base AS dependencies
 COPY pyproject.toml uv.lock ./

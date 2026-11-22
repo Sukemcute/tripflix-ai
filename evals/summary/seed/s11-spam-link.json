@@ -1,0 +1,154 @@
+{
+  "post_id": "s11-spam-link",
+  "is_simulated": true,
+  "scenario": "spam",
+  "caption": "Review khách sạn 3 sao ở Cần Thơ, đi chợ nổi Cái Răng 🛶",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Mekong Riverside Cần Thơ",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s11-c01",
+      "author_id": "s11-sp1",
+      "parent_id": null,
+      "body": "Inbox zalo mình để đặt phòng giá rẻ hơn 30% nha, uy tín",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s11-c02",
+      "author_id": "s11-sp2",
+      "parent_id": null,
+      "body": "Inbox zalo mình để đặt phòng giá rẻ hơn 30% nha, uy tín",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s11-c03",
+      "author_id": "s11-sp3",
+      "parent_id": null,
+      "body": "Inbox zalo mình để đặt phòng giá rẻ hơn 30% nha, uy tín!",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s11-c04",
+      "author_id": "s11-sp4",
+      "parent_id": null,
+      "body": "Xem thêm review khách sạn tại https://bit.ly/review-ct nhé",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s11-c05",
+      "author_id": "s11-a1",
+      "parent_id": null,
+      "body": "Khách sạn gần bến tàu, sáng sớm đi chợ nổi tiện",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s11-c06",
+      "author_id": "s11-a2",
+      "parent_id": null,
+      "body": "vị trí gần bến, đi chợ nổi không cần xe",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s11-c07",
+      "author_id": "s11-a3",
+      "parent_id": null,
+      "body": "Phòng cũ, máy lạnh kêu to",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T15:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s11-c08",
+      "author_id": "s11-a4",
+      "parent_id": null,
+      "body": "phòng hơi cũ, nội thất xuống cấp",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T16:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s11-c09",
+      "author_id": "s11-a5",
+      "parent_id": null,
+      "body": "Bữa sáng có hủ tiếu ngon",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T17:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s11-c10",
+      "author_id": "s11-a6",
+      "parent_id": null,
+      "body": "ăn sáng ở khách sạn ngon, có hủ tiếu với bánh xèo",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-31T18:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {
+      "s11-c01": "spam",
+      "s11-c02": "spam",
+      "s11-c03": "spam",
+      "s11-c04": "spam"
+    },
+    "safety": [],
+    "not_safety": [],
+    "points": [
+      {
+        "polarity": "pro",
+        "aspect": "vi_tri_di_lai",
+        "comment_ids": [
+          "s11-c05",
+          "s11-c06"
+        ]
+      },
+      {
+        "polarity": "con",
+        "aspect": "phong_o",
+        "comment_ids": [
+          "s11-c07",
+          "s11-c08"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "do_an",
+        "comment_ids": [
+          "s11-c09",
+          "s11-c10"
+        ]
+      }
+    ],
+    "reality_gaps": [],
+    "topics": []
+  }
+}

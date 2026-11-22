@@ -1,0 +1,126 @@
+{
+  "$defs": {
+    "ChatTurn": {
+      "additionalProperties": false,
+      "properties": {
+        "answerKind": {
+          "title": "Answerkind",
+          "type": "string"
+        },
+        "conversationId": {
+          "format": "uuid",
+          "title": "Conversationid",
+          "type": "string"
+        },
+        "intent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Intent"
+        },
+        "isAction": {
+          "title": "Isaction",
+          "type": "boolean"
+        },
+        "latencyMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latencyms"
+        },
+        "question": {
+          "maxLength": 120,
+          "title": "Question",
+          "type": "string"
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turnid"
+        }
+      },
+      "required": [
+        "conversationId",
+        "question",
+        "intent",
+        "answerKind",
+        "isAction",
+        "turnId",
+        "latencyMs"
+      ],
+      "title": "ChatTurn",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/ChatTurn"
+    },
+    "producer": {
+      "const": "ai-service",
+      "default": "ai-service",
+      "title": "Producer",
+      "type": "string"
+    },
+    "type": {
+      "const": "ai.chat.turn.recorded",
+      "default": "ai.chat.turn.recorded",
+      "title": "Type",
+      "type": "string"
+    },
+    "userId": {
+      "format": "uuid",
+      "title": "Userid",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "type",
+    "version",
+    "occurredAt",
+    "producer",
+    "userId",
+    "payload"
+  ],
+  "title": "ChatTurnEvent",
+  "type": "object"
+}

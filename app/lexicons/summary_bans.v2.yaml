@@ -1,0 +1,56 @@
+# Phrases the LLM must not write in a public summary sentence (validator V6/V8, QT Bước 13).
+# The system counts people itself ([NC §10.4]; Amazon: a point needs several customers, the
+# count is not the model's); numbers in a summary that the code did not compute are the
+# usual numeric hallucination (Belém et al. 2024 measure "numbers not in source").
+# to_norm drops symbols ("%", "$"): the validator checks those on the raw text.
+# Prices change and must stay real (đề bài §6), so money amounts are banned too.
+# Errs toward dropping: "phòng 3 người" (capacity) is dropped too; a lost point is safer
+# than a made-up count. "ít người", "đông khách" describe crowds and stay.
+# Vietnamese list has no published source [CẦN NC]; v1 drafted by Claude, 2026-11-05.
+# v2 (BAO_CAO "summary.v3"): "muoi ban" dropped a real con on seed s15: "muỗi ban đêm"
+# (mosquitoes at night) and "mười bạn" (ten friends) are the same without diacritics. Word
+# numbers no longer pair with "ban" (bạn, bán, bàn, ban đêm: "bày bán" -> "bay ban");
+# only plain count words do ("nhiều bạn", "một số bạn"), not before a time of day.
+# v2: drafted by Claude 2026-11-08, pending review by Bảo.
+name: summary_bans
+version: 2
+groups:
+  people_count:
+    patterns:
+      - '\d+ ?(nguoi|ban|khach|du khach|nguoi xem|reviewer)'
+      - '(mot|hai|ba|bon|nam|sau|bay|tam|chin|muoi|vai|mot vai|mot so|nhieu) (nguoi|reviewer)'
+      - '\b(vai|mot vai|mot so|nhieu) ban\b(?! (dem|ngay|trua|chieu|toi|sang|hang|trong))'
+      - 'da so|phan lon|hau het|dai da so|ai cung|moi nguoi deu|tat ca (moi )?nguoi|ca tram'
+      - '\d+ ?phan tram'
+    match:
+      - '3 nguoi che phong cu'
+      - 'nhieu ban khen view dep'
+      - 'da so thay gia hop ly'
+      - 'ai cung noi do an ngon'
+      - '70 phan tram binh luan khen'
+      - 'mot so ban phan nan'
+    no_match:
+      - 'view bien dep hoang hon nhin tu phong'
+      - 'check in cho lau le tan xu ly cham'
+      - 'phong 2 giuong phu hop cho moi nguoi'
+      - 'nen di truoc 7h sang'
+      - 'bai bien it nguoi buoi sang'
+      - 'cuoi tuan dong khach'
+      - 'co nhieu muoi phong phai bat vot muoi ban dem'
+      - 'hang rong bay ban khap noi'
+      - 'nha hang nhieu ban trong'
+      - 'troi mua nhieu ban ngay'
+  money:
+    patterns:
+      - '\d+ ?(k|d|dong|vnd|nghin|ngan|tr|trieu|usd)'
+      - '\d+ ?tr ?\d*'
+    match:
+      - 've vao cong 150k'
+      - 'phong 1 200 0d mot dem'
+      - 'gia 1tr2 mot dem'
+      - 'combo 2 trieu'
+    no_match:
+      - 'check in luc 14h'
+      - 'phong tang 5 nhin ra bien'
+      - 'cach san bay 25 km'
+      - 'troi nong 35 do'

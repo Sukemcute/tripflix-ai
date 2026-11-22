@@ -1,0 +1,289 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net" compressed="false" type="device">
+  <diagram id="tripi-use-cases" name="TF31 · Luồng người dùng">
+    <mxGraphModel dx="0" dy="0" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1952" background="#FFFFFF" adaptiveColors="none" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" value="Tripi v3 · Luồng người dùng trên mobile và web" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=42;fontColor=#14243B;fontStyle=1;">
+          <mxGeometry x="42" y="27" width="1836" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" value="TF31 · Cập nhật v1.1 (19/11) · Tripi có trên app và web" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=19;fontColor=#475974;fontStyle=0;">
+          <mxGeometry x="44" y="90" width="1832" height="31" as="geometry" />
+        </mxCell>
+        <mxCell id="stage-a" parent="1" value="" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E3EFFB;strokeColor=none;pointerEvents=0;rounded=1;absoluteArcSize=1;arcSize=18;">
+          <mxGeometry x="42" y="143" width="1836" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="stage-a-title" parent="1" value="Giai đoạn A · TF31" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=19;fontColor=#1C4C78;fontStyle=1;">
+          <mxGeometry x="62" y="148" width="615" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="stage-a-scope" parent="1" value="Chat trên mobile, gợi ý từ kho Tripflix, ngữ cảnh reel và chuẩn bị chuyến đi" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=15;fontColor=#1C4C78;fontStyle=0;">
+          <mxGeometry x="680" y="148" width="1168" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="reel-book" parent="1" value="" vertex="1" style="html=1;fontFamily=Arial;fillColor=#F9FBFE;strokeColor=#D2DBE9;pointerEvents=0;rounded=1;absoluteArcSize=1;arcSize=18;">
+          <mxGeometry x="42" y="209" width="1836" height="282" as="geometry" />
+        </mxCell>
+        <mxCell id="reel-book-title" parent="1" value="01   Chat → video → đặt theo lộ trình" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=23;fontColor=#14243B;fontStyle=1;">
+          <mxGeometry x="64" y="223" width="1800" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="book-ask" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Nhắn Tripi&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;“Muốn đi Đà Lạt 2N1Đ”&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="63" y="272" width="316" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="book-suggest" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Nhận tối đa 3 video&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Tripi gợi ý reel phù hợp với điểm đến và thời lượng.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="432" y="272" width="316" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="book-watch" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Mở video phù hợp&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Trên reel có lộ trình đính kèm, bấm «Xem lộ trình».&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="801" y="272" width="316" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="book-quote" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Chọn ngày và số người&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;App kiểm tra giá, phòng và vé theo lộ trình.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#F0EDFB;strokeColor=#9C8CC3;fontColor=#493773;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1170" y="272" width="316" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="book-checkout" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Bấm «Đặt ngay»&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Khi đã đăng nhập và đủ vé, phòng, app giữ chỗ và mở checkout.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#F0EDFB;strokeColor=#9C8CC3;fontColor=#493773;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1539" y="272" width="316" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="e-book-ask-book-suggest" parent="1" source="book-ask" target="book-suggest" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-book-suggest-book-watch" parent="1" source="book-suggest" target="book-watch" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-book-watch-book-quote" parent="1" source="book-watch" target="book-quote" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-book-quote-book-checkout" parent="1" source="book-quote" target="book-checkout" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="book-no-itin" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Reel chưa có lộ trình&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Xem video hoặc quay lại chọn reel khác.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#FFF5E5;strokeColor=#D6AC67;fontColor=#72521E;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="801" y="398" width="316" height="71" as="geometry" />
+        </mxCell>
+        <mxCell id="book-change" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Chưa đủ vé hoặc phòng&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Đổi ngày hoặc nhờ Tripi gợi ý phương án khác.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#FFF5E5;strokeColor=#D6AC67;fontColor=#72521E;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1170" y="398" width="316" height="71" as="geometry" />
+        </mxCell>
+        <mxCell id="book-login" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Khách cần đăng nhập&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Đăng nhập rồi quay lại reel để đặt.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#FFF5E5;strokeColor=#D6AC67;fontColor=#72521E;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1539" y="398" width="316" height="71" as="geometry" />
+        </mxCell>
+        <mxCell id="e-book-watch-book-no-itin" parent="1" source="book-watch" target="book-no-itin" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=0.5;exitY=1;entryX=0.5;entryY=0;dashed=1;dashPattern=5 4;strokeColor=#816844;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-book-quote-book-change" parent="1" source="book-quote" target="book-change" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=0.5;exitY=1;entryX=0.5;entryY=0;dashed=1;dashPattern=5 4;strokeColor=#816844;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-book-checkout-book-login" parent="1" source="book-checkout" target="book-login" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=0.5;exitY=1;entryX=0.5;entryY=0;dashed=1;dashPattern=5 4;strokeColor=#816844;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="guest-note" parent="1" value="Khách chat với hạn mức thấp. Hết lượt thì có nút Đăng nhập, quay lại Tripi vẫn giữ cuộc chat. Người đăng nhập lưu phiên 7 ngày trên máy; mở lại vẫn còn thẻ. Android dùng file riêng tối đa 64 KB." vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=17;fontColor=#475974;fontStyle=0;">
+          <mxGeometry x="63" y="398" width="685" height="71" as="geometry" />
+        </mxCell>
+        <mxCell id="reel-context" parent="1" value="" vertex="1" style="html=1;fontFamily=Arial;fillColor=#F9FBFE;strokeColor=#D2DBE9;pointerEvents=0;rounded=1;absoluteArcSize=1;arcSize=18;">
+          <mxGeometry x="42" y="513" width="1836" height="341" as="geometry" />
+        </mxCell>
+        <mxCell id="reel-context-title" parent="1" value="02   Hỏi về chính video đang xem" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=23;fontColor=#14243B;fontStyle=1;">
+          <mxGeometry x="64" y="527" width="1800" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="context-start" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Mở Tripi trên reel&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Câu “video này” trỏ tới reel đang xem.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="63" y="640" width="316" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="context-q-itinerary" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;“Lộ trình của video này?”&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Hỏi lịch trình của tác giả.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="500" y="572" width="494" height="67" as="geometry" />
+        </mxCell>
+        <mxCell id="context-a-itinerary" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Lộ trình đính kèm&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Hiện các điểm theo từng ngày. Nếu reel chưa gắn lộ trình, Tripi báo rõ.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1078" y="572" width="777" height="67" as="geometry" />
+        </mxCell>
+        <mxCell id="e-context-start-context-q-itinerary" parent="1" source="context-start" target="context-q-itinerary" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-context-q-itinerary-context-a-itinerary" parent="1" source="context-q-itinerary" target="context-a-itinerary" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="context-q-room" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;“Khách sạn này còn phòng?”&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Hỏi theo ngày và số người.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="500" y="656" width="494" height="67" as="geometry" />
+        </mxCell>
+        <mxCell id="context-a-room" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Tình trạng phòng của khách sạn trong reel&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Hiện còn hoặc hết phòng và giá thật khi có dữ liệu. Thiếu khách sạn thì báo rõ.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#FFF5E5;strokeColor=#D6AC67;fontColor=#72521E;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1078" y="656" width="777" height="67" as="geometry" />
+        </mxCell>
+        <mxCell id="e-context-start-context-q-room" parent="1" source="context-start" target="context-q-room" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-context-q-room-context-a-room" parent="1" source="context-q-room" target="context-a-room" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;dashed=1;dashPattern=5 4;strokeColor=#816844;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="context-q-voices" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;“Người đi rồi nói gì?”&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Hỏi đánh giá của cộng đồng về reel.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="500" y="740" width="494" height="67" as="geometry" />
+        </mxCell>
+        <mxCell id="context-a-voices" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Ý kiến đã tổng hợp&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Hiện điểm khen và chê nếu có bản tóm tắt. Chưa có bản sẵn sàng thì báo chưa đủ ý kiến.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#FFF5E5;strokeColor=#D6AC67;fontColor=#72521E;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1078" y="740" width="777" height="67" as="geometry" />
+        </mxCell>
+        <mxCell id="e-context-start-context-q-voices" parent="1" source="context-start" target="context-q-voices" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-context-q-voices-context-a-voices" parent="1" source="context-q-voices" target="context-a-voices" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;dashed=1;dashPattern=5 4;strokeColor=#816844;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="context-scope" parent="1" value="Hai nhánh màu vàng là phương án mở rộng theo reel trong đề xuất v3 §3.5." vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=14;fontColor=#475974;fontStyle=0;">
+          <mxGeometry x="1078" y="822" width="777" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="inventory" parent="1" value="" vertex="1" style="html=1;fontFamily=Arial;fillColor=#F9FBFE;strokeColor=#D2DBE9;pointerEvents=0;rounded=1;absoluteArcSize=1;arcSize=18;">
+          <mxGeometry x="42" y="878" width="1836" height="197" as="geometry" />
+        </mxCell>
+        <mxCell id="inventory-title" parent="1" value="03   Tìm phòng hoặc vé trực tiếp" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=23;fontColor=#14243B;fontStyle=1;">
+          <mxGeometry x="64" y="892" width="1800" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="stock-ask" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Nêu nhu cầu cụ thể&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;“Tìm khách sạn Đà Lạt cuối tuần”&lt;br&gt;hoặc “Bay từ Sài Gòn ra Hà Nội”.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="63" y="941" width="316" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="stock-clarify" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Hỏi khi còn thiếu&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Phòng cần nơi ở và ngày.&lt;br&gt;Vé cần nơi đi, nơi đến và ngày bay.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="432" y="941" width="316" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="stock-fill" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Bổ sung thông tin&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Ví dụ “Đi thứ Bảy, hai người”.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="801" y="941" width="316" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="stock-results" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Nhận thẻ chỗ ở hoặc vé&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Thẻ có giá từ kho Tripflix khi tìm được. Thiếu kết quả thì Tripi báo rõ.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1170" y="941" width="316" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="stock-open" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Chọn phương án phù hợp&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Xem chi tiết hoặc tiếp tục trên màn đặt dịch vụ của app.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1539" y="941" width="316" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="e-stock-ask-stock-clarify" parent="1" source="stock-ask" target="stock-clarify" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-stock-clarify-stock-fill" parent="1" source="stock-clarify" target="stock-fill" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-stock-fill-stock-results" parent="1" source="stock-fill" target="stock-results" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-stock-results-stock-open" parent="1" source="stock-results" target="stock-open" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-stock-ask-stock-results" parent="1" source="stock-ask" target="stock-results" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=0.5;exitY=0;entryX=0.5;entryY=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="221" y="929" />
+              <mxPoint x="1328" y="929" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="stock-ready" parent="1" value="Đủ thông tin thì tìm ngay" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=14;fontColor=#475974;fontStyle=0;">
+          <mxGeometry x="657" y="906" width="353" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="weather" parent="1" value="" vertex="1" style="html=1;fontFamily=Arial;fillColor=#F9FBFE;strokeColor=#D2DBE9;pointerEvents=0;rounded=1;absoluteArcSize=1;arcSize=18;">
+          <mxGeometry x="42" y="1097" width="1836" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="weather-title" parent="1" value="04   Xem thời tiết và hỏi cần mang gì" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=23;fontColor=#14243B;fontStyle=1;">
+          <mxGeometry x="64" y="1111" width="1800" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="weather-ask" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Hỏi dự báo cho chuyến đi&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;“Vũng Tàu thứ Bảy có mưa không?”&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="63" y="1160" width="316" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="weather-context" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Dùng điểm đến và ngày đi&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Tripi lấy ngữ cảnh đang chat hoặc hỏi nếu thiếu.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="432" y="1160" width="316" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="weather-result" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Nhận thẻ dự báo&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Xem dự báo cho ngày đi. Tripi báo rõ khi chưa có dữ liệu.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="801" y="1160" width="316" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="weather-follow" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Hỏi tiếp&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;“Vậy mình cần mang gì?”&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1170" y="1160" width="316" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="weather-tips" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Nhận checklist&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Gợi ý đồ theo kiểu chuyến, số ngày và thời tiết.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1539" y="1160" width="316" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="e-weather-ask-weather-context" parent="1" source="weather-ask" target="weather-context" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-weather-context-weather-result" parent="1" source="weather-context" target="weather-result" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-weather-result-weather-follow" parent="1" source="weather-result" target="weather-follow" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-weather-follow-weather-tips" parent="1" source="weather-follow" target="weather-tips" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="stage-b" parent="1" value="" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EEE8FC;strokeColor=none;pointerEvents=0;rounded=1;absoluteArcSize=1;arcSize=18;">
+          <mxGeometry x="42" y="1314" width="1836" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="stage-b-title" parent="1" value="Giai đoạn B · Đã xây, lồng dịch vụ (19/11)" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=19;fontColor=#4E3C7A;fontStyle=1;">
+          <mxGeometry x="62" y="1319" width="615" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="stage-b-scope" parent="1" value="Lộ trình lồng vé đi, nhận phòng, điểm tham quan, trả phòng và vé về; đổi lựa chọn qua nhiều lượt" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=15;fontColor=#4E3C7A;fontStyle=0;">
+          <mxGeometry x="680" y="1319" width="1168" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="plan" parent="1" value="" vertex="1" style="html=1;fontFamily=Arial;fillColor=#F9FBFE;strokeColor=#D2DBE9;pointerEvents=0;rounded=1;absoluteArcSize=1;arcSize=18;">
+          <mxGeometry x="42" y="1380" width="1836" height="239" as="geometry" />
+        </mxCell>
+        <mxCell id="plan-title" parent="1" value="05   Nhờ Tripi xếp chuyến đi từ đầu" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=23;fontColor=#14243B;fontStyle=1;">
+          <mxGeometry x="64" y="1394" width="1800" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="plan-ask" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Yêu cầu xếp lịch trình&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;“Xếp chuyến Vũng Tàu 2N1Đ cho mình.”&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="63" y="1444" width="316" height="127" as="geometry" />
+        </mxCell>
+        <mxCell id="plan-origin" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Hỏi nơi đi và ngày trước&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;“Bạn đi từ đâu và đi ngày nào?” Người dùng trả lời “Từ Sài Gòn, 21/11”. Thiếu gì hỏi tiếp phần đó.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="432" y="1444" width="316" height="127" as="geometry" />
+        </mxCell>
+        <mxCell id="plan-options" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Ghép vé và phòng Tripflix&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Chọn vé đi sớm nhất còn chỗ, khách sạn còn phòng và vé về muộn nhất. Tìm điểm và thời tiết cùng lúc.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="801" y="1444" width="316" height="127" as="geometry" />
+        </mxCell>
+        <mxCell id="plan-choose" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Xếp lịch kèm dịch vụ&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Vé đi → nhận phòng → các điểm → trả phòng → vé về. Xếp điểm từ khách sạn, theo giờ bay.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1170" y="1444" width="316" height="127" as="geometry" />
+        </mxCell>
+        <mxCell id="plan-result" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Bấm «Đặt theo lộ trình»&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;App: lộ trình vào tab Đặt, thẻ khác mở trang tự lên lộ trình. Web: «Đặt phòng» và «Đặt vé» riêng.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1539" y="1444" width="316" height="127" as="geometry" />
+        </mxCell>
+        <mxCell id="e-plan-ask-plan-origin" parent="1" source="plan-ask" target="plan-origin" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-plan-origin-plan-options" parent="1" source="plan-origin" target="plan-options" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-plan-options-plan-choose" parent="1" source="plan-options" target="plan-choose" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-plan-choose-plan-result" parent="1" source="plan-choose" target="plan-result" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="external-note" parent="1" value="Chỗ ở ngoài hệ thống có nhãn «Tham khảo». Không có tuyến bay thì dùng xe khách tham khảo, không có nút đặt combo." vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=15;fontColor=#475974;fontStyle=0;">
+          <mxGeometry x="801" y="1582" width="1055" height="23" as="geometry" />
+        </mxCell>
+        <mxCell id="revise" parent="1" value="" vertex="1" style="html=1;fontFamily=Arial;fillColor=#F9FBFE;strokeColor=#D2DBE9;pointerEvents=0;rounded=1;absoluteArcSize=1;arcSize=18;">
+          <mxGeometry x="42" y="1641" width="1836" height="234" as="geometry" />
+        </mxCell>
+        <mxCell id="revise-title" parent="1" value="06   Đổi lộ trình đang có" vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=23;fontColor=#14243B;fontStyle=1;">
+          <mxGeometry x="64" y="1655" width="1800" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="edit-ask" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Yêu cầu thay đổi&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;“Đổi resort khác gần biển hơn.”&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="63" y="1705" width="316" height="108" as="geometry" />
+        </mxCell>
+        <mxCell id="edit-options" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Đưa phương án thay thế&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;So sánh 2–3 chỗ nếu có, ưu tiên nơi đặt được trên Tripflix.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="432" y="1705" width="316" height="108" as="geometry" />
+        </mxCell>
+        <mxCell id="edit-choose" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Chọn phương án mới&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Bấm «Chọn» hoặc nhắn “Lấy chỗ thứ hai”.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#EDF3FF;strokeColor=#7E9BD5;fontColor=#244981;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="801" y="1705" width="316" height="108" as="geometry" />
+        </mxCell>
+        <mxCell id="edit-recalc" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Xếp lại với lựa chọn mới&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Đổi chỗ ở hoặc chuyến bay thì cập nhật lộ trình lồng dịch vụ và nút đặt, giữ các lựa chọn còn phù hợp.&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#E8F7F1;strokeColor=#72AE9C;fontColor=#125849;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1170" y="1705" width="316" height="108" as="geometry" />
+        </mxCell>
+        <mxCell id="edit-result" parent="1" value="&lt;b style=&quot;font-size:18px&quot;&gt;Xem bản nháp đã cập nhật&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:15px&quot;&gt;Nhắn “Chốt” để kiểm lại phòng và vé cả chiều về trước khi mở màn đặt. Có thể bấm «Hoàn tác».&lt;/span&gt;" vertex="1" style="html=1;fontFamily=Arial;fillColor=#F0EDFB;strokeColor=#9C8CC3;fontColor=#493773;rounded=1;absoluteArcSize=1;arcSize=12;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=15;spacingRight=15;spacingTop=5;spacingBottom=5;">
+          <mxGeometry x="1539" y="1705" width="316" height="108" as="geometry" />
+        </mxCell>
+        <mxCell id="e-edit-ask-edit-options" parent="1" source="edit-ask" target="edit-options" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-edit-options-edit-choose" parent="1" source="edit-options" target="edit-choose" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-edit-choose-edit-recalc" parent="1" source="edit-choose" target="edit-recalc" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-edit-recalc-edit-result" parent="1" source="edit-recalc" target="edit-result" edge="1" style="edgeStyle=orthogonalEdgeStyle;jettySize=auto;rounded=1;orthogonalLoop=1;html=1;strokeColor=#59718C;strokeWidth=1.7;endArrow=block;endFill=1;endSize=8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="other-edits" parent="1" value="Đổi hãng bay → xem chuyến khác. Bỏ một điểm đi chơi → xem lịch trình đã cập nhật." vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=15;fontColor=#475974;fontStyle=0;">
+          <mxGeometry x="63" y="1826" width="1420" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="doc-note" parent="1" value="Cập nhật v1.1 (19/11) · AI #46, #47 · FE #230, #235, #239, #241, #244 · Tripi có trên mobile và web; mở lại vẫn còn thẻ." vertex="1" style="html=1;fontFamily=Arial;text;whiteSpace=wrap;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontSize=14;fontColor=#475974;fontStyle=0;">
+          <mxGeometry x="44" y="1906" width="1828" height="24" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

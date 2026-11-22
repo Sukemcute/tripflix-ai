@@ -1,0 +1,148 @@
+# Safety complaints, caught by rules before any LLM (Which?/Tripadvisor 2026 lesson).
+# Patterns run on vi_text.to_norm output: lowercase, no diacritics, đ -> d.
+# v2 (BAO_CAO P5): more ways to say v1's groups, plus tai_nan and trom_cap_lua_dao.
+# v3 (BAO_CAO "safety.v3"): false positives found on 3,058 real Vietnamese hotel reviews.
+# Without diacritics many words collide: mọt/một, mất ví/mất vì, đuối nước/dưới nước,
+# sờ mó/sổ mở, mất tích/mặt tích (cực), camera ẩn/camera an (ninh), hỏa hoạn/hóa hoàn (toàn).
+# Negation is handled only for "nam moc" ("khong co mui nam moc"); general negation is a gap.
+# v3: drafted by Claude, pending review by Bảo, 2026-11-04.
+# v4 (BAO_CAO "Sửa theo use case"): general negation now lives in safety.py (NegEx window);
+# 'co (ca )?gian' lets one filler word in ("co ca gian bo ra chao khach" slipped past v3).
+# v4: drafted by Claude, pending review by Bảo, 2026-11-05.
+# v5 (BAO_CAO "Sửa an toàn"): snatch theft ("giật điện thoại", "cướp giật"), missed on seed s09; drafted by Claude 2026-11-05, pending review by Bảo.
+name: safety
+version: 5
+groups:
+  ngo_doc:
+    patterns:
+      - 'ngo doc'
+      - 'trung doc'
+      - 'food poisoning'
+      - 'tao thao (ruot|duoi)'
+      - 'tieu chay'
+      - 'di ngoai (lien|ca|suot|may)'
+      - '(non|oi) (mua|thoc thao|lien|ca dem|suot)'
+      - 'non oi'
+      - '(buon|bi) non'
+      - '(?<!cuoi )dau bung'
+      - 'roi loan tieu hoa'
+      - '(nhap vien|cap cuu|di vien|vao vien)'
+    match:
+      - 'ca nha bi tao thao ruot sau buffet'
+      - 'an xong non oi ca dem'
+      - 'an hai san xong phai nhap vien'
+      - 'got food poisoning o day'
+    no_match:
+      - 'do an ngon khong bi gi'
+      - 'clip hai cuoi dau bung'
+      - 'non la dep qua'
+  quay_roi:
+    patterns:
+      - 'sam so'
+      - '(?<!cua )so mo'  # not "cua so mo" (window open)
+      - 'quay roi'
+      - 'ga gam'
+      - 'xam hai'
+      - 'hiep dam'
+      - '(dong|dung) cham (nguoi|vao|co the)'  # động chạm / đụng chạm
+      - 'quay len'
+      - 'camera (an(?! ninh)|giau|quay len|trong phong tam)'  # not "camera an ninh"
+    match:
+      - 'nhan vien le tan sam so ban minh'
+      - 'phat hien camera giau trong phong'
+      - 'bi so mo o quay bar'
+    no_match:
+      - 'nhan vien nhiet tinh than thien'
+      - 'camera quay dep lam'
+      - 'cua so mo ra rat thoang'
+      - 'yen tam vi co camera an ninh'
+  ve_sinh:
+    patterns:
+      - 'co (ca )?(gian|chuot|rep)'  # not mot/dong: một, đông, đồng, dòng
+      - 'thay (ca )?(gian|chuot|rep)'
+      - 'rep (can|giuong|khap)'
+      - 'bi rep'
+      - '(?<!khong co )(?<!khong co mui )(?<!khong bi )nam moc'  # "khong co mui nam moc"
+      - 'moc (meo|den|xanh)'
+      - 'do an (song|thiu|oi|hong|bi moc|co mui)'
+      - '(thit|ca|hai san) (bi )?(thiu|uon|boc mui)'
+    match:
+      - 'phong co gian bo khap noi'
+      - 'phong sach lam co ca gian bo ra chao khach'
+      - 'buffet do an thiu'
+      - 'nem bi rep can sung het chan'
+      - 'tuong nam moc den xi'
+    no_match:
+      - 'phong sach se thom tho'
+      - 'nam nay moc chau dep'
+      - 'chung toi co mot phong tam ngoai troi'
+      - 'xe buyt tu nam den bac'
+      - 'nhin thay dong song'
+      - 'giuong thoai mai va khong co mui nam moc'
+  tu_vong_danh_thuoc:
+    patterns:
+      - 'chet duoi'
+      # not bare "duoi nuoc" (dưới nước) nor "bi duoi" (bị đuổi)
+      - 'bi duoi nuoc'
+      - 'suyt (chet )?duoi'
+      - 'tu vong'
+      - 'thiet mang'
+      - 'bi (danh|bo) thuoc'
+      - '(nguoi|bi|bao) mat tich'  # bare "mat tich" is also "mat tich cuc", "lo xo mat tich"
+    match:
+      - 'nam ngoai co nguoi chet duoi o bai nay'
+      - 'ban minh bi bo thuoc vao do uong'
+      - 'con toi suyt duoi o ho boi'
+    no_match:
+      - 'dep chet di duoc'
+      - 'khu vui choi duoi nuoc'
+      - 'tre con vua xuong da bi duoi len'
+      - 've mat tich cuc nhan vien tot'
+      - 'mot so lo xo mat tich'
+  tai_nan:
+    patterns:
+      - 'tai nan'
+      - 'bi thuong'
+      - 'gay (chan|tay|xuong)'
+      - 'dien giat'
+      - 'ro ri (gas|khi)'
+      - 'ngat (khi|xiu vi khi)'
+      - 'hoa hoan(?! toan)'  # not "hien dai hoa hoan toan"
+      - 'sap (tran|cau thang|lan can|ban cong)'
+      - '(lan can|ban cong|tran nha|cau thang) (bi |lung lay |muon |sap )*sap'
+      - '(bi |te )nga'
+      - 'nga (cau thang|ho boi|xuong)'
+      - 'truot nga'
+    match:
+      - 'con minh truot nga o ho boi'
+      - 'o cam bi ro dien giat ca nguoi'
+      - 'lan can ban cong sap luon'
+      - 'ba toi bi nga o nha tam'
+    no_match:
+      - 'cau thang dep chup hinh xinh'
+      - 'cac phong deu dep va tinh te ho boi rat dep'
+      - 'hien dai hoa hoan toan'
+  trom_cap_lua_dao:
+    patterns:
+      - '(bi|mat) trom'
+      - 'trom (do|tien|dien thoai|vi)'
+      - 'moc tui'
+      - '(bi|vu) cuop'
+      - 'lua dao'
+      - 'mat (dien thoai|ho chieu|do trong phong)'  # not "mat vi": also "mat vi vay"
+      # v5: snatch theft. Bare "giat" is unsafe once diacritics are gone: "giặt đồ"
+      # (laundry) and "bị giật mình" (startled) normalize to "giat do", "bi giat minh".
+      - 'giat (dien thoai|dt|tui|tui xach|day chuyen|vi|ba lo|balo)'
+      - 'cuop giat'
+      - 'bi giat (mat|lay|dien thoai|tui|day chuyen|vi|ba lo|balo)'
+    match:
+      - 'de do trong phong bi mat trom'
+      - 'bi moc tui o cho dem'
+      - 'tour nay lua dao khach'
+      - 'toi hay bi giat dien thoai'
+      - 'khu nay nhieu cuop giat'
+    no_match:
+      - 'mat ca buoi sang de check in'
+      - 'khach san co dich vu giat do'
+      - 'tieng sam lam minh bi giat minh'
+      - 'khu nghi mat vi vay chung toi an ngoai'

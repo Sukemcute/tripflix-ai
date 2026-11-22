@@ -1,0 +1,60 @@
+{
+  "name": "tripflix-visobert-binary-finetune-v1",
+  "created_date": "2026-11-11",
+  "label_status": "reviewed",
+  "review_confirmation": {
+    "confirmed_by": "user",
+    "confirmed_date": "2026-11-11",
+    "scope": "80 added labels confirmed unchanged; original 240 labels previously reviewed"
+  },
+  "source": "synthetic-reviewed-dev-240-plus-error-driven-80",
+  "source_dataset_sha256": "10a3592a3fe368ceec529e56030d634f40f695728dbf3d81f6d8bf5f65cf7d10",
+  "dataset_sha256": {
+    "reviewed-dev.jsonl": "ea4196b7b45aa74a39a634482aaa81e1e9cf8d89dca77fd0bf6bdb13818fb0e5",
+    "train.jsonl": "4af2037413c89705073c269b4a45920b5f09f59878f0f9d26f81409bfd4dfe28",
+    "validation.jsonl": "f96d8baed1a5ce09a808eb6f8ccd383fe35f3beb7568c1f5545002b516735229"
+  },
+  "split": {
+    "seed": 42,
+    "validation_group_fraction": 0.2,
+    "stratification": "provided focus or kind, sampled by group_id",
+    "train": {
+      "rows": 255,
+      "clean": 127,
+      "toxic": 128,
+      "groups": 212
+    },
+    "validation": {
+      "rows": 65,
+      "clean": 35,
+      "toxic": 30,
+      "groups": 55
+    }
+  },
+  "regression": {
+    "rows": 300,
+    "role": "seen_regression_only",
+    "source": "notebooks/tf32-round2-test-results-reviewed/test-pack.json"
+  },
+  "regression_pack_sha256": "50277d90f13a611112f15a7a7dfa16aab72eeb5df216199f00b87c11d499c2dc",
+  "model": "nd-khoa/vihsd-uit-visobert-v2",
+  "revision": "5e8e892f45bf3d52bc3d4c780b6235b65714f07b",
+  "supervision": "binary cross entropy over clean versus logsumexp(offensive,hate)",
+  "defaults": {
+    "epochs": 3,
+    "learning_rate": 0.00001,
+    "batch_size": 8,
+    "max_length": 256
+  },
+  "selection": {
+    "checkpoint": "minimum validation binary NLL including original epoch 0",
+    "threshold": "maximize validation target recall with FP <= original model FP at threshold 0.97; ties by F1 then fewer FP; validation only"
+  },
+  "limits": [
+    "Small synthetic dataset, one split and one training seed.",
+    "Validation is used for checkpoint and threshold selection.",
+    "Separate offensive/hate semantics are not supervised by binary labels.",
+    "Existing group IDs track base sentences and new contrastive pairs; shared broader template families may still cross splits.",
+    "300 seen examples are regression data; final generalization needs fresh test data."
+  ]
+}

@@ -1,0 +1,66 @@
+# Signals that a commenter tells their own visit (supporting signal only, never a gate).
+# Rule in first_hand.py: not blocked AND past event AND (first person OR concrete detail).
+# v2 fixes v1 (see BAO_CAO P4 §1d): bare toi/tui also mean tới/tối/túi without diacritics,
+# so they count only before a verb; adds blockers and missing time words.
+# Known limit: 'minh' also matches the name Minh ("chi Minh le tan").
+# v2: drafted by Claude, pending review by Bảo, 2026-11-04.
+name: first_hand_cues
+version: 2
+groups:
+  first_person:
+    patterns:
+      - 'minh'
+      # no 'o' or 'an' after toi/tui: "tui o" is also "túi ở"
+      - '(toi|tui|tao|to) (da |vua |moi |tung )?(di|den|toi|thay|dat|book|ghe|ve|nghi)'
+      - 'chung (toi|tui|minh)'
+      - '(nha|tui|bon|gia dinh|vo chong) (minh|toi|tui)'
+    match:
+      - 'minh di cach day 2 thang'
+      - 'toi di thang truoc'
+      - 'gia dinh toi o 3 dem'
+    no_match:
+      - 'di toi day vao buoi toi'
+      - 'mua tui o cho dem'
+  past_event:
+    patterns:
+      - 'da (tung )?(di|o|toi|den|ghe)'
+      - 'tung (di|o|toi|den|ghe)'
+      - '(di|o|den|toi|ghe) (day |do |cho nay )?roi'
+      - 'hom (truoc|qua)'
+      - '(thang|tuan|nam|dot|lan) (truoc|roi)'
+      - 'nam ngoai'
+      - 'cach day \d+ (ngay|tuan|thang|nam)'
+      - 'luc (nhan|tra) phong'
+      - 'vua (ve|di)'
+    match:
+      - 'minh di cach day 2 thang nuoc bien khong sach lam'
+      - 'nam ngoai di phong nho xiu'
+      - 'di roi nuoc bien ban'
+    no_match:
+      - 'uoc duoc di 1 lan'
+      - 'thang sau minh se di'
+  concrete_detail:
+    patterns:
+      - '\d+ ?(k|tr|trieu|nghin|tieng|phut|dem|ngay|nguoi)'
+      - 'tang \d+'
+      - 'phong (nho|rong|chat|bi|tam)'
+    match:
+      - 'gia 500k mot dem'
+      - 'phong nho xiu'
+      - 'o tang 12 view dep'
+    no_match:
+      - 'phong dep lam'
+  not_experienced:
+    patterns:
+      - 'chua (tung |bao gio |duoc )?(di|den|toi|o|ghe)'
+      - '(dinh|muon) di'
+      - 'uoc'
+      - 'nghe (noi|don|bao)'
+      - 'mong (mot|1) lan'
+      - 'them di'
+    match:
+      - 'minh chua di bao gio'
+      - 'thang truoc dinh di ma huy'
+      - 'nghe noi o day ban lam'
+    no_match:
+      - 'minh di roi dep lam'

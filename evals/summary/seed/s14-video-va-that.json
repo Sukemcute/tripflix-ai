@@ -1,0 +1,150 @@
+{
+  "post_id": "s14-video-va-that",
+  "is_simulated": true,
+  "scenario": "video_only",
+  "caption": "Trải nghiệm Sapa mùa lúa chín 🌾",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Terrace View Sapa",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s14-c01",
+      "author_id": "s14-v1",
+      "parent_id": null,
+      "body": "edit đỉnh quá",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-03T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s14-c02",
+      "author_id": "s14-v2",
+      "parent_id": null,
+      "body": "nhạc hay ghê, tên bài gì vậy",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-03T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s14-c03",
+      "author_id": "s14-v3",
+      "parent_id": null,
+      "body": "quay flycam đẹp xỉu",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-03T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s14-c04",
+      "author_id": "s14-a1",
+      "parent_id": null,
+      "body": "Mình đi tháng 9 năm ngoái, lúa chín vàng đẹp nhất là giữa tháng 9",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-03T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s14-c05",
+      "author_id": "s14-a2",
+      "parent_id": null,
+      "body": "nên đi giữa tháng 9 tới đầu tháng 10, lúa vàng đều",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-03T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s14-c06",
+      "author_id": "s14-a3",
+      "parent_id": null,
+      "body": "Khách sạn view ruộng bậc thang đẹp, sáng có mây",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-03T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s14-c07",
+      "author_id": "s14-a4",
+      "parent_id": null,
+      "body": "phòng nhìn ra ruộng bậc thang, đẹp lắm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-03T15:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s14-c08",
+      "author_id": "s14-a5",
+      "parent_id": null,
+      "body": "Đồ ăn ở nhà hàng khách sạn hơi đắt mà không ngon",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-03T16:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s14-c09",
+      "author_id": "s14-a6",
+      "parent_id": null,
+      "body": "ăn ở khách sạn chán, ra chợ ăn thắng cố ngon hơn",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-03T17:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {
+      "s14-c01": "video_reaction",
+      "s14-c02": "video_reaction",
+      "s14-c03": "video_reaction"
+    },
+    "safety": [],
+    "not_safety": [],
+    "points": [
+      {
+        "polarity": "pro",
+        "aspect": "canh_quan",
+        "comment_ids": [
+          "s14-c06",
+          "s14-c07"
+        ]
+      },
+      {
+        "polarity": "con",
+        "aspect": "do_an",
+        "comment_ids": [
+          "s14-c08",
+          "s14-c09"
+        ]
+      }
+    ],
+    "reality_gaps": [],
+    "topics": [
+      {
+        "label": "Nên đi tháng nào",
+        "comment_ids": [
+          "s14-c04",
+          "s14-c05"
+        ]
+      },
+      {
+        "label": "Ăn uống",
+        "comment_ids": [
+          "s14-c08",
+          "s14-c09"
+        ]
+      }
+    ]
+  }
+}

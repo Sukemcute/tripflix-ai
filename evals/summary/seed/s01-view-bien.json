@@ -1,0 +1,168 @@
+{
+  "post_id": "s01-view-bien",
+  "is_simulated": true,
+  "scenario": "reality_gap",
+  "caption": "Ở Sea Breeze Resort Nha Trang 2N1Đ, phòng nhìn thẳng ra biển, sáng mở rèm là thấy bình minh 🌅",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Sea Breeze Resort Nha Trang",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s01-c01",
+      "author_id": "s01-a1",
+      "parent_id": null,
+      "body": "Mình ở đây tháng 8 rồi, đặt phòng deluxe mà cửa sổ nhìn ra núi với bãi đỗ xe, không thấy biển đâu hết",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s01-c02",
+      "author_id": "s01-a2",
+      "parent_id": null,
+      "body": "t cũng vừa ở tuần trước, phòng view núi nha mn, muốn view biển phải nâng hạng thêm tiền",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s01-c03",
+      "author_id": "s01-a3",
+      "parent_id": null,
+      "body": "Nhân viên lễ tân dễ thương, cho mình check-in sớm 2 tiếng",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s01-c04",
+      "author_id": "s01-a4",
+      "parent_id": null,
+      "body": "mình ở 2 đêm, nhân viên hỗ trợ nhiệt tình, gọi taxi giúp luôn",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s01-c05",
+      "author_id": "s01-a5",
+      "parent_id": null,
+      "body": "Phòng sạch, giường êm, ngủ ngon lắm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s01-c06",
+      "author_id": "s01-a6",
+      "parent_id": null,
+      "body": "phòng rộng sạch sẽ, nhà tắm thơm tho",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s01-c07",
+      "author_id": "s01-a7",
+      "parent_id": null,
+      "body": "Cho hỏi từ sân bay Cam Ranh về resort bao xa vậy ạ?",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T15:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s01-c08",
+      "author_id": "s01-a8",
+      "parent_id": "s01-c07",
+      "body": "Từ sân bay đi taxi tầm 40 phút nha bạn",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T16:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s01-c09",
+      "author_id": "s01-a9",
+      "parent_id": null,
+      "body": "video quay đẹp quá, nhạc gì vậy ad",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T17:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s01-c10",
+      "author_id": "s01-a10",
+      "parent_id": "s01-c01",
+      "body": "đúng rồi, phòng mình ở tháng 9 cũng nhìn ra núi",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-21T18:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {
+      "s01-c09": "video_reaction"
+    },
+    "safety": [],
+    "not_safety": [],
+    "points": [
+      {
+        "polarity": "pro",
+        "aspect": "phuc_vu",
+        "comment_ids": [
+          "s01-c03",
+          "s01-c04"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "ve_sinh",
+        "comment_ids": [
+          "s01-c05",
+          "s01-c06"
+        ]
+      }
+    ],
+    "reality_gaps": [
+      {
+        "claim": "Phòng nhìn thẳng ra biển",
+        "comment_ids": [
+          "s01-c01",
+          "s01-c02",
+          "s01-c10"
+        ]
+      }
+    ],
+    "topics": [
+      {
+        "label": "Đường đi từ sân bay",
+        "comment_ids": [
+          "s01-c07",
+          "s01-c08"
+        ]
+      },
+      {
+        "label": "View của phòng",
+        "comment_ids": [
+          "s01-c01",
+          "s01-c02",
+          "s01-c10"
+        ]
+      }
+    ]
+  }
+}

@@ -8,3 +8,8 @@ __pycache__
 .env
 .env.*
 !.env.example
+# Dữ liệu nghiên cứu (vài trăm MB, có dữ liệu YouTube không được phát tán): image dev COPY . . nên phải loại
+data/
+docs/research/
+app/models/visobert_moderation/
+app/models/e5_embedding/

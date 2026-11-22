@@ -1,0 +1,116 @@
+# Signals that a commenter tells their own visit (supporting signal only, never a gate).
+# Rule in first_hand.py: not blocked AND past event AND (first person OR concrete detail).
+# v2 fixes v1 (see BAO_CAO P4 §1d): bare toi/tui also mean tới/tối/túi without diacritics,
+# so they count only before a verb; adds blockers and missing time words.
+# v3 (BAO_CAO P5, misses on evals/summary/safety_30): "ca nha bi", "3 dua", "o 2 dem",
+# and the adversative "bi"/"phai" after a first-person subject ("minh phai vo vien").
+# v4 (BAO_CAO "first_hand_cues.v4"): v3 found only 463/3,058 real TripAdvisor reviews,
+# which are first-hand by policy. Adds experiencer + activity cues (Park et al. 2010):
+# "chung toi da <verb>", "o lai", "khi chung toi den", staff acting on the writer
+# ("nhan vien giup toi"), "phong cua chung toi", "se quay lai", dates.
+# Known limit: 'minh' also matches the name Minh ("chi Minh le tan").
+# v4: drafted by Claude, pending review by Bảo, 2026-11-04.
+# v5 (BAO_CAO "Sửa an toàn"): "tối qua"/"đêm qua" and an adversative with a companion
+# ("mình với bạn bị"), missed on seed s08; drafted by Claude 2026-11-05.
+name: first_hand_cues
+version: 5
+groups:
+  first_person:
+    patterns:
+      - 'minh'
+      # no 'o' or 'an' after toi/tui: "tui o" is also "túi ở"
+      - '(toi|tui|tao|to) (da |vua |moi |tung )?(di|den|toi|thay|dat|book|ghe|ve|nghi)'
+      - 'chung (toi|tui|minh)'
+      - '(nha|tui|bon|gia dinh|vo chong) (minh|toi|tui)'
+      - '(toi|tui) (o|nghi) (lai|tai)'  # v4: "toi o lai" is safe, unlike bare "tui o" (tui o)
+      # "ca nha oi" (calling everyone) is not first person, so a verb must follow
+      - 'ca (nha|doan|gia dinh) (deu |cung )?(bi|di|o|an|phai)'
+    match:
+      - 'minh di cach day 2 thang'
+      - 'toi di thang truoc'
+      - 'gia dinh toi o 3 dem'
+      - 'ca nha bi tao thao ruot'
+      - 'toi o lai hai dem'
+    no_match:
+      - 'di toi day vao buoi toi'
+      - 'mua tui o cho dem'
+      - 'ca nha oi cho hoi'
+  past_event:
+    patterns:
+      - 'da (tung )?(di|o|toi|den|ghe)'
+      - 'tung (di|o|toi|den|ghe)'
+      - '(di|o|den|toi|ghe) (day |do |cho nay )?roi'
+      - 'hom (truoc|qua)'
+      # v5: "tối qua"/"đêm qua" (last night); "toi qua" alone is also "tới qua" or "tôi qua",
+      # so a first-person subject or an activity must follow.
+      - '(toi|dem) qua (minh|toi|tui|ca nha|nha minh|an|o|ngu|di)'
+      - '(thang|tuan|nam|dot) (truoc|roi)'
+      - 'lan truoc'  # v4: not "lan roi" ("xem clip nay 3 lan roi")
+      - 'nam ngoai'
+      - 'cach day \d+ (ngay|tuan|thang|nam)'
+      - 'luc (nhan|tra) phong'
+      - 'vua (ve|di)'
+      - 'o (lai |day |do )?(\d+|mot|hai|ba|bon|nam|vai) (dem|ngay|hom|tuan)'
+      # adversative passive: something happened to the speaker
+      # not "ban minh bi": a friend may not have been on the trip (hearsay)
+      - '(?<!ban )(minh|toi|tui|tao|ca nha|nha minh|con minh|vo minh|chong minh) (da |cung |deu )?(bi|phai)'
+      # v5: the writer plus a companion ("mình với bạn bị"): the writer is in it
+      - '(minh|toi|tui) (voi|va) (ban|ban minh|vo|chong|nguoi yeu|con|ca nha|gia dinh|em|anh|chi)( minh| toi)? (da |cung |deu )?(bi|phai)'
+      # v4: a first-person subject + "da/vua" + a verb that is not just watching the clip
+      - '(chung toi|toi|minh|tui|nha minh|gia dinh (toi|minh)|vo chong (toi|minh)) (da|vua) (?!(xem|coi|luu|thich|follow|share|nghe|doc|thay clip|thay video)\b)'
+      - '(chung toi|toi|minh) (o|nghi) (lai|tai|o day)'
+      - 'khi (chung toi|toi|minh) (den|toi|nhan phong|tra phong|o|check in)'
+      # staff acting on the writer means the writer was there
+      - '(giup|ho tro|don|chao|phuc vu|tu van|nang cap|tang|cham soc) (cho )?(chung toi|toi|minh)'
+      - '(phong|bua sang|ky nghi|chuyen di|ky luu tru) (cua )?(chung toi|gia dinh minh|gia dinh toi)'
+      # "will come back" presupposes a visit
+      - '(se|chac chan se|nhat dinh se) (quay|tro) lai'
+    match:
+      - 'minh di cach day 2 thang nuoc bien khong sach lam'
+      - 'nam ngoai di phong nho xiu'
+      - 'di roi nuoc bien ban'
+      - 'o day 3 dem sang nao cung thay gian'
+      - 'minh phai vo vien truyen nuoc'
+      - 'chung toi da co mot ky nghi tuyet voi'
+      - 'toi o lai hai dem'
+      - 'nhan vien rat nhiet tinh giup chung toi mang hanh ly'
+      - 'phong cua chung toi nhin ra bien'
+      - 'chac chan se quay lai'
+      - 'toi qua an buffet xong minh voi ban bi tao thao ruot'
+      - 'dem qua ngu o day on'
+    no_match:
+      - 'toi qua day choi duoc khong'
+      - 'uoc duoc di 1 lan'
+      - 'thang sau minh se di'
+      - 'minh so bi say song'
+      - 'ban minh bi bo thuoc'
+      - 'minh da xem clip nay 3 lan'
+      - 'toi vua thay video nay'
+  concrete_detail:
+    patterns:
+      - '\d+ ?(k|tr|trieu|nghin|tieng|phut|dem|ngay|nguoi|dua|ban|mon|suat)'
+      - 'tang \d+'
+      - 'phong (nho|rong|chat|bi|tam)'
+      - '\d{1,2} \d{1,2} (20)?\d{2}'  # a stay date: 14/05/2022 becomes "14 05 2022"
+    match:
+      - 'gia 500k mot dem'
+      - 'phong nho xiu'
+      - 'o tang 12 view dep'
+      - '3 dua bi ngo doc'
+      - 'zannier 14 05 16 05 2022'
+    no_match:
+      - 'phong dep lam'
+  not_experienced:
+    patterns:
+      - 'chua (tung |bao gio |duoc )?(di|den|toi|o|ghe)'
+      - '(dinh|muon) di'
+      - 'uoc'
+      - 'nghe (noi|don|bao)'
+      - 'mong (mot|1) lan'
+      - 'them di'
+    match:
+      - 'minh chua di bao gio'
+      - 'thang truoc dinh di ma huy'
+      - 'nghe noi o day ban lam'
+    no_match:
+      - 'minh di roi dep lam'

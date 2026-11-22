@@ -1,0 +1,349 @@
+{
+  "$defs": {
+    "ChatUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "conversationId": {
+          "format": "uuid",
+          "title": "Conversationid",
+          "type": "string"
+        },
+        "costUsd": {
+          "minimum": 0,
+          "title": "Costusd",
+          "type": "number"
+        },
+        "estimated": {
+          "const": true,
+          "default": true,
+          "title": "Estimated",
+          "type": "boolean"
+        },
+        "feature": {
+          "const": "chat",
+          "default": "chat",
+          "title": "Feature",
+          "type": "string"
+        },
+        "inputTokens": {
+          "minimum": 0,
+          "title": "Inputtokens",
+          "type": "integer"
+        },
+        "latencyMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latencyms"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "outputTokens": {
+          "minimum": 0,
+          "title": "Outputtokens",
+          "type": "integer"
+        },
+        "step": {
+          "enum": [
+            "controller",
+            "responder"
+          ],
+          "title": "Step",
+          "type": "string"
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turnid"
+        }
+      },
+      "required": [
+        "model",
+        "inputTokens",
+        "outputTokens",
+        "costUsd",
+        "estimated",
+        "feature",
+        "conversationId",
+        "step",
+        "turnId",
+        "latencyMs"
+      ],
+      "title": "ChatUsage",
+      "type": "object"
+    },
+    "CoverOcrUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "costUsd": {
+          "minimum": 0,
+          "title": "Costusd",
+          "type": "number"
+        },
+        "estimated": {
+          "const": true,
+          "default": true,
+          "title": "Estimated",
+          "type": "boolean"
+        },
+        "feature": {
+          "const": "cover_ocr",
+          "default": "cover_ocr",
+          "title": "Feature",
+          "type": "string"
+        },
+        "inputTokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputtokens"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "outputTokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outputtokens"
+        },
+        "step": {
+          "enum": [
+            "completed",
+            "error",
+            "usage_missing"
+          ],
+          "title": "Step",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "model",
+        "step",
+        "inputTokens",
+        "outputTokens",
+        "costUsd",
+        "estimated"
+      ],
+      "title": "CoverOcrUsage",
+      "type": "object"
+    },
+    "ModerationUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "costUsd": {
+          "const": 0,
+          "default": 0,
+          "title": "Costusd",
+          "type": "integer"
+        },
+        "estimated": {
+          "const": false,
+          "default": false,
+          "title": "Estimated",
+          "type": "boolean"
+        },
+        "feature": {
+          "const": "moderation",
+          "default": "moderation",
+          "title": "Feature",
+          "type": "string"
+        },
+        "images": {
+          "minimum": 0,
+          "title": "Images",
+          "type": "integer"
+        },
+        "inputTokens": {
+          "default": null,
+          "title": "Inputtokens",
+          "type": "null"
+        },
+        "items": {
+          "minimum": 1,
+          "title": "Items",
+          "type": "integer"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "outputTokens": {
+          "default": null,
+          "title": "Outputtokens",
+          "type": "null"
+        }
+      },
+      "required": [
+        "feature",
+        "model",
+        "inputTokens",
+        "outputTokens",
+        "costUsd",
+        "estimated",
+        "items",
+        "images"
+      ],
+      "title": "ModerationUsage",
+      "type": "object"
+    },
+    "SummaryUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "costUsd": {
+          "minimum": 0,
+          "title": "Costusd",
+          "type": "number"
+        },
+        "estimated": {
+          "const": true,
+          "default": true,
+          "title": "Estimated",
+          "type": "boolean"
+        },
+        "estimatedCommentTokens": {
+          "minimum": 0,
+          "title": "Estimatedcommenttokens",
+          "type": "integer"
+        },
+        "feature": {
+          "const": "summary",
+          "default": "summary",
+          "title": "Feature",
+          "type": "string"
+        },
+        "inputTokens": {
+          "minimum": 0,
+          "title": "Inputtokens",
+          "type": "integer"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "outputTokens": {
+          "minimum": 0,
+          "title": "Outputtokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model",
+        "inputTokens",
+        "outputTokens",
+        "costUsd",
+        "estimated",
+        "feature",
+        "estimatedCommentTokens"
+      ],
+      "title": "SummaryUsage",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "format": "uuid",
+      "title": "Eventid",
+      "type": "string"
+    },
+    "occurredAt": {
+      "format": "date-time",
+      "title": "Occurredat",
+      "type": "string"
+    },
+    "payload": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ChatUsage"
+        },
+        {
+          "$ref": "#/$defs/SummaryUsage"
+        },
+        {
+          "$ref": "#/$defs/ModerationUsage"
+        },
+        {
+          "$ref": "#/$defs/CoverOcrUsage"
+        }
+      ],
+      "title": "Payload"
+    },
+    "producer": {
+      "const": "ai-service",
+      "default": "ai-service",
+      "title": "Producer",
+      "type": "string"
+    },
+    "type": {
+      "const": "ai.usage.recorded",
+      "default": "ai.usage.recorded",
+      "title": "Type",
+      "type": "string"
+    },
+    "userId": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Userid"
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventId",
+    "type",
+    "version",
+    "occurredAt",
+    "producer",
+    "userId",
+    "payload"
+  ],
+  "title": "UsageEvent",
+  "type": "object"
+}

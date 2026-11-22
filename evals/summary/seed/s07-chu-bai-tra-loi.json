@@ -1,0 +1,109 @@
+{
+  "post_id": "s07-chu-bai-tra-loi",
+  "is_simulated": true,
+  "scenario": "below_threshold",
+  "caption": "Villa hồ bơi riêng ở Hội An 🏡",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Riverside Villa Hội An",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s07-c01",
+      "author_id": "s07-a1",
+      "parent_id": null,
+      "body": "Villa có mấy phòng ngủ vậy bạn?",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-27T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s07-c02",
+      "author_id": "s07-owner",
+      "parent_id": "s07-c01",
+      "body": "Có 3 phòng ngủ nha bạn, ở 6 người thoải mái",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-27T10:00:00+00:00",
+      "is_post_author": true
+    },
+    {
+      "comment_id": "s07-c03",
+      "author_id": "s07-a2",
+      "parent_id": null,
+      "body": "Hồ bơi riêng sạch không ạ",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-27T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s07-c04",
+      "author_id": "s07-owner",
+      "parent_id": "s07-c03",
+      "body": "Sạch lắm, ngày nào cũng có người dọn",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-27T12:00:00+00:00",
+      "is_post_author": true
+    },
+    {
+      "comment_id": "s07-c05",
+      "author_id": "s07-a3",
+      "parent_id": null,
+      "body": "Mình ở rồi, villa rộng, yên tĩnh",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-27T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s07-c06",
+      "author_id": "s07-owner",
+      "parent_id": "s07-c05",
+      "body": "Cảm ơn bạn nhiều nha 🥰",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-27T14:00:00+00:00",
+      "is_post_author": true
+    },
+    {
+      "comment_id": "s07-c07",
+      "author_id": "s07-a4",
+      "parent_id": null,
+      "body": "Đi phố cổ có xa không",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-27T15:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s07-c08",
+      "author_id": "s07-owner",
+      "parent_id": "s07-c07",
+      "body": "Đạp xe 10 phút thôi",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-10-27T16:00:00+00:00",
+      "is_post_author": true
+    }
+  ],
+  "labels": {
+    "status": "insufficient_data",
+    "must_not_cite": {
+      "s07-c02": "post_author",
+      "s07-c04": "post_author",
+      "s07-c06": "post_author",
+      "s07-c08": "post_author"
+    },
+    "safety": [],
+    "not_safety": [],
+    "points": [],
+    "reality_gaps": [],
+    "topics": []
+  }
+}

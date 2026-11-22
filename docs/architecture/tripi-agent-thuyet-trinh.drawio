@@ -1,0 +1,351 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net" type="device" version="24.7.17">
+  <diagram id="tripi-presentation" name="Tripi · Agent architecture">
+    <mxGraphModel grid="1" gridSize="10" guides="1" connect="1" page="1" pageScale="1" pageWidth="3840" pageHeight="2160" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="&lt;b style=&quot;font-size:18px&quot;&gt;TRIPI · Read-only travel agent → bookable itinerary&lt;/b&gt;&lt;br&gt;Code snapshot 6a5eb2b · Single canvas · Left to right: client → admission → code/agents → skills → core APIs&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;Sources: assistant/ = app/services/assistant/; skills/ = assistant/skills/; api/, clients/, core/, prompts/ relative to app/. contracts/ relative to repo.&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#F8FAFC;strokeColor=#94A3B8;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="30" y="10" width="2320" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-client" value="&lt;b style=&quot;font-size:18px&quot;&gt;Client&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#DBEAFE;strokeColor=#2563EB;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2370" y="18" width="225" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-ai" value="&lt;b style=&quot;font-size:18px&quot;&gt;AI service&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2610" y="18" width="225" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-core" value="&lt;b style=&quot;font-size:18px&quot;&gt;Core API&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2850" y="18" width="225" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-data" value="&lt;b style=&quot;font-size:18px&quot;&gt;Data / Redis&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#E5E7EB;strokeColor=#64748B;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="3090" y="18" width="225" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-llm" value="&lt;b style=&quot;font-size:18px&quot;&gt;LLM role&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FEF3C7;strokeColor=#CA8A04;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="3330" y="18" width="225" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-error" value="&lt;b style=&quot;font-size:18px&quot;&gt;Error / fallback&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FEE2E2;strokeColor=#DC2626;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="3570" y="18" width="225" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="clients-region" value="01 · Clients &amp; entry" style="swimlane;html=1;whiteSpace=wrap;startSize=42;horizontal=1;rounded=1;fillColor=#F8FAFC;swimlaneFillColor=#FFFFFF;strokeColor=#CBD5E1;fontFamily=Helvetica;fontSize=21;fontStyle=1;align=left;spacingLeft=16;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="30" y="120" width="540" height="920" as="geometry" />
+        </mxCell>
+        <mxCell id="pipeline-region" value="02 · One turn · ordered pipeline" style="swimlane;html=1;whiteSpace=wrap;startSize=42;horizontal=1;rounded=1;fillColor=#F8FAFC;swimlaneFillColor=#FFFFFF;strokeColor=#CBD5E1;fontFamily=Helvetica;fontSize=21;fontStyle=1;align=left;spacingLeft=16;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="610" y="120" width="1000" height="920" as="geometry" />
+        </mxCell>
+        <mxCell id="skills-region" value="03 · Skill dispatch · read-only tools" style="swimlane;html=1;whiteSpace=wrap;startSize=42;horizontal=1;rounded=1;fillColor=#F8FAFC;swimlaneFillColor=#FFFFFF;strokeColor=#CBD5E1;fontFamily=Helvetica;fontSize=21;fontStyle=1;align=left;spacingLeft=16;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="1650" y="120" width="830" height="920" as="geometry" />
+        </mxCell>
+        <mxCell id="core-region" value="04 · Core API boundary · exact chat calls" style="swimlane;html=1;whiteSpace=wrap;startSize=42;horizontal=1;rounded=1;fillColor=#F8FAFC;swimlaneFillColor=#FFFFFF;strokeColor=#CBD5E1;fontFamily=Helvetica;fontSize=21;fontStyle=1;align=left;spacingLeft=16;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="2520" y="120" width="1290" height="920" as="geometry" />
+        </mxCell>
+        <mxCell id="memory-region" value="05 · Data &amp; memory · no conversation DB" style="swimlane;html=1;whiteSpace=wrap;startSize=42;horizontal=1;rounded=1;fillColor=#F8FAFC;swimlaneFillColor=#FFFFFF;strokeColor=#CBD5E1;fontFamily=Helvetica;fontSize=21;fontStyle=1;align=left;spacingLeft=16;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="30" y="1080" width="1120" height="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="events-region" value="06 · Events &amp; analytics boundary" style="swimlane;html=1;whiteSpace=wrap;startSize=42;horizontal=1;rounded=1;fillColor=#F8FAFC;swimlaneFillColor=#FFFFFF;strokeColor=#CBD5E1;fontFamily=Helvetica;fontSize=21;fontStyle=1;align=left;spacingLeft=16;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="1080" width="820" height="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="booking-region" value="07 · Booking handoff · not an order" style="swimlane;html=1;whiteSpace=wrap;startSize=42;horizontal=1;rounded=1;fillColor=#F8FAFC;swimlaneFillColor=#FFFFFF;strokeColor=#CBD5E1;fontFamily=Helvetica;fontSize=21;fontStyle=1;align=left;spacingLeft=16;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="2030" y="1080" width="850" height="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="fail-region" value="08 · Failures &amp; fallbacks" style="swimlane;html=1;whiteSpace=wrap;startSize=42;horizontal=1;rounded=1;fillColor=#F8FAFC;swimlaneFillColor=#FFFFFF;strokeColor=#CBD5E1;fontFamily=Helvetica;fontSize=21;fontStyle=1;align=left;spacingLeft=16;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="2910" y="1080" width="900" height="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="clients" value="&lt;b style=&quot;font-size:18px&quot;&gt;Mobile app / Web&lt;/b&gt;&lt;br&gt;Tripi runs on mobile and web. Send message, history, trip and optional action/contextPostId; consume SSE. Signed-in sessions keep the last 20 messages, including cards and trip, on device for 7 days. Guests: memory only.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;tripflix-fe #230, #244&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#DBEAFE;strokeColor=#2563EB;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="180" width="500" height="195" as="geometry" />
+        </mxCell>
+        <mxCell id="gateway" value="&lt;b style=&quot;font-size:18px&quot;&gt;Gateway /ai&lt;/b&gt;&lt;br&gt;Core gateway routes /ai to ai-service, with a dedicated rate-limit router for /ai/chat. Numbers live in gateway config; no numeric gateway limit asserted here.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;tripflix-be · deploy gateway config&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#DBEAFE;strokeColor=#2563EB;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="400" width="500" height="165" as="geometry" />
+        </mxCell>
+        <mxCell id="limits" value="&lt;b style=&quot;font-size:18px&quot;&gt;TurnGate · configured defaults&lt;/b&gt;&lt;br&gt;1 active turn per identity; 30 in flight per process.&lt;br&gt;User: 20/min, 500/day, 2,000,000 tokens/day. Guest:&lt;br&gt;15/min, 300/day, 1,000,000 tokens/day.&lt;br&gt;System: USD 3/day. Vietnam day boundary.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;core/config.py: ChatSettings&lt;br&gt;assistant/admission.py: TurnGate&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#E5E7EB;strokeColor=#64748B;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="50" y="610" width="500" height="245" as="geometry" />
+        </mxCell>
+        <mxCell id="ownership" value="&lt;b style=&quot;font-size:18px&quot;&gt;AI service ownership&lt;/b&gt;&lt;br&gt;No conversation database. No core DB connection.&lt;br&gt;Business data read via HTTP.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;api/chat.py; assistant/turn.py&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#F8FAFC;strokeColor=#94A3B8;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="50" y="885" width="500" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="identity" value="&lt;b style=&quot;font-size:18px&quot;&gt;1 · Resolve identity&lt;/b&gt;&lt;br&gt;JWT signature/claims + GET /api/auth/me revocation&lt;br&gt;check. Guest = salted IP hash. Invalid token stays&lt;br&gt;401; auth dependency failure may be 503.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;api/chat.py: resolve_identity&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="630" y="180" width="470" height="185" as="geometry" />
+        </mxCell>
+        <mxCell id="gate" value="&lt;b style=&quot;font-size:18px&quot;&gt;2 · Admit turn&lt;/b&gt;&lt;br&gt;Lock → minute cap → process capacity → daily budget.&lt;br&gt;409/429/503 rejection never enters run_turn.&lt;br&gt;Generate turnId after admission.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/admission.py: enter&lt;br&gt;api/chat.py: chat, run_turn&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#E5E7EB;strokeColor=#64748B;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="180" width="470" height="185" as="geometry" />
+        </mxCell>
+        <mxCell id="controller" value="&lt;b style=&quot;font-size:18px&quot;&gt;3 · Controller LLM&lt;/b&gt;&lt;br&gt;Mask PII; tag injection (not a block). Strict&lt;br&gt;ControllerOutput JSON; prompt v9. Bypass on action,&lt;br&gt;LLM off or quota. One provider attempt; timeout 5 s; output cap 350 tokens.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/understand.py: understand&lt;br&gt;prompts/assistant-controller.v9.md&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FEF3C7;strokeColor=#CA8A04;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="630" y="400" width="470" height="215" as="geometry" />
+        </mxCell>
+        <mxCell id="guards" value="&lt;b style=&quot;font-size:18px&quot;&gt;4 · Code guards &amp;amp; dates&lt;/b&gt;&lt;br&gt;apply_guards → to_understanding. Canonical cities;&lt;br&gt;pending origin/date fills; closing choice guard.&lt;br&gt;Code resolves calendar year and relative days in&lt;br&gt;Vietnam time.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/controller.py&lt;br&gt;assistant/planner.py&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="400" width="470" height="215" as="geometry" />
+        </mxCell>
+        <mxCell id="turn" value="&lt;b style=&quot;font-size:18px&quot;&gt;5 · Turn / skills&lt;/b&gt;&lt;br&gt;Actions → draft edits, no LLM. Social replies need&lt;br&gt;no tool. Intent selects bounded skill calls.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/turn.py: _answer, _plan_step&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="630" y="650" width="470" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="responder" value="&lt;b style=&quot;font-size:18px&quot;&gt;6 · Optional Responder LLM&lt;/b&gt;&lt;br&gt;answer/no_result + cards/facts + parsed intent +&lt;br&gt;roles enabled + ≥3 s left. No tools; timeout ≤4 s. Prompt v3; role enabled by default.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;api/chat.py: run_turn&lt;br&gt;assistant/responder.py: respond&lt;br&gt;prompts/assistant-responder.v3.md&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FEF3C7;strokeColor=#CA8A04;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="650" width="470" height="165" as="geometry" />
+        </mxCell>
+        <mxCell id="verify" value="&lt;b style=&quot;font-size:18px&quot;&gt;7 · Verify → emit → finally&lt;/b&gt;&lt;br&gt;Verifier filters responder sentences before text.&lt;br&gt;Fixed text otherwise. Finally: settle → leave →&lt;br&gt;publish, shielded on disconnect. Whole turn: 12 s&lt;br&gt;from arrival, including auth.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/verifier.py: verify&lt;br&gt;api/chat.py: run_turn&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="825" width="470" height="185" as="geometry" />
+        </mxCell>
+        <mxCell id="sse" value="&lt;b style=&quot;font-size:18px&quot;&gt;SSE order · sentence deltas&lt;/b&gt;&lt;br&gt;status understanding → LLM status → searching →&lt;br&gt;[writing] → text → cards → [suggestions ≤3] → trip →&lt;br&gt;done. Caught turn failure → error instead.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;api/chat.py: event, run_turn&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="630" y="825" width="470" height="185" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="identity" target="gate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="controller" target="guards">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="turn" target="responder">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="clients" target="gateway">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-5" value="proxy boundary" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="gateway" target="identity">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-6" value="admitted" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="gate" target="controller">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-7" value="intent + slots" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="guards" target="turn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="responder" target="verify">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="verify" target="sse">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="search" value="&lt;b style=&quot;font-size:18px&quot;&gt;Search / find_reel&lt;/b&gt;&lt;br&gt;q → sections/items → video, post, plan, stay cards. Maximum 5 cards, including at most 3&lt;br&gt;videos.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/skills/content.py: search, build_cards&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1670" y="180" width="790" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="stay" value="&lt;b style=&quot;font-size:18px&quot;&gt;find_stay / check_room / change_stay&lt;/b&gt;&lt;br&gt;Place/hotel resolution → dated rooms/rate plans. stay cards; compare: ≤3 Tripflix stays +&lt;br&gt;≤1 external reference.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/skills/stay.py; skills/trip.py; skills/plan.py&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1670" y="330" width="790" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="flight" value="&lt;b style=&quot;font-size:18px&quot;&gt;find_flight / change_transport&lt;/b&gt;&lt;br&gt;Resolve airport suggestions; filter ambiguous pairs by routes list. No route ≠ sold out.&lt;br&gt;Sold out probes ±1/2/3 days, offers ≤3 dates. Available flight cards have select actions.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/skills/flight.py: find_airport, search_flights&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1670" y="480" width="790" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="plan" value="&lt;b style=&quot;font-size:18px&quot;&gt;plan_trip · TripPlanner&lt;/b&gt;&lt;br&gt;Ask origin/date first. gather: places, weather, stays, outbound, return. Hotel base;&lt;br&gt;rain/interests; travel windows. itinerary card; select rebuilds; confirm → booking card.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/skills/plan.py; assistant/itinerary.py&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1670" y="650" width="790" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="reel" value="&lt;b style=&quot;font-size:18px&quot;&gt;Post / reel context&lt;/b&gt;&lt;br&gt;App/card ID → post → attached itinerary,&lt;br&gt;room check or ready summary. Summary&lt;br&gt;204/404 = not ready.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/trip.py: fetch_post, post_itinerary,&lt;br&gt;post_reviews, reel_room&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1670" y="820" width="385" height="185" as="geometry" />
+        </mxCell>
+        <mxCell id="weather-skill" value="&lt;b style=&quot;font-size:18px&quot;&gt;Weather / packing&lt;/b&gt;&lt;br&gt;Forecast card or YAML checklist. No core&lt;br&gt;call unless resolving reel destination.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/weather.py&lt;br&gt;assistant/packing.v2.yaml&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2075" y="820" width="385" height="185" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-10" value="dispatch" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="turn" target="plan">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="722" />
+              <mxPoint x="1110" y="632" />
+              <mxPoint x="1630" y="632" />
+              <mxPoint x="1630" y="722" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="api-search" value="&lt;b style=&quot;font-size:18px&quot;&gt;Discovery · search&lt;/b&gt;&lt;br&gt;POST /api/search&lt;br&gt;POST /api/search/posts&lt;br&gt;Uses id, refId, kind, title, priceFrom.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/content.py: search&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2540" y="180" width="605" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="api-suggest" value="&lt;b style=&quot;font-size:18px&quot;&gt;Discovery · suggestions&lt;/b&gt;&lt;br&gt;GET /api/suggest&lt;br&gt;types=place / airport / hotel&lt;br&gt;Uses items: type, refId, name.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/stay.py: search_stays; skills/flight.py: find_airport&lt;br&gt;skills/trip.py: named_hotel_room&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="3165" y="180" width="625" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="api-stays" value="&lt;b style=&quot;font-size:18px&quot;&gt;Commerce · stay inventory&lt;/b&gt;&lt;br&gt;GET /api/stays&lt;br&gt;placeId, checkIn, checkOut, adults, limit, [priceMax] → hotelId,&lt;br&gt;name, unitPrice, totalPrice.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/stay.py: search_stays&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2540" y="330" width="605" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="api-hotel" value="&lt;b style=&quot;font-size:18px&quot;&gt;Commerce · hotel detail&lt;/b&gt;&lt;br&gt;GET /api/hotels/{hotel_id}&lt;br&gt;location lat/lng; rooms.isAvailable; ratePlans.totalPrice /&lt;br&gt;pricePerNight.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/trip.py: hotel_room; skills/plan.py: _plan_stays, select&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="3165" y="330" width="625" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="api-routes" value="&lt;b style=&quot;font-size:18px&quot;&gt;Commerce · flight routes&lt;/b&gt;&lt;br&gt;GET /api/flights/routes&lt;br&gt;Ambiguous airports only. Top-level list: fromAirport, toAirport. On&lt;br&gt;error: log and ask as before.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/flight.py: search_flights&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2540" y="480" width="605" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="api-flights" value="&lt;b style=&quot;font-size:18px&quot;&gt;Commerce · dated flights&lt;/b&gt;&lt;br&gt;GET /api/flights&lt;br&gt;from, to, date, passengers, [children, infants] → productId,&lt;br&gt;flightKey, name, times, isAvailable,&lt;br&gt;fares(code,totalPrice,pricePerPerson).&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/flight.py: search_flights, _nearby_dates&lt;br&gt;skills/plan.py: _check_flight&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="3165" y="480" width="625" height="165" as="geometry" />
+        </mxCell>
+        <mxCell id="api-places" value="&lt;b style=&quot;font-size:18px&quot;&gt;Discovery · points of interest&lt;/b&gt;&lt;br&gt;GET /api/places&lt;br&gt;city/near, radiusKm, kinds, limit → id, name, kind, lat, lng, city,&lt;br&gt;tags, popularity. Plan asks ≤60 candidates.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;clients/places.py: CorePlaces.search&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2540" y="650" width="605" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="external-weather" value="&lt;b style=&quot;font-size:18px&quot;&gt;External weather API&lt;/b&gt;&lt;br&gt;GET geocoding-api.open-meteo.com/v1/search&lt;br&gt;GET api.open-meteo.com/v1/forecast&lt;br&gt;min/max temperature, rain probability, sky. 16-day forecast; process&lt;br&gt;cache 30 min.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;clients/weather.py: find_place, forecast&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#E5E7EB;strokeColor=#64748B;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="3165" y="650" width="625" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="api-post" value="&lt;b style=&quot;font-size:18px&quot;&gt;Social · post &amp;amp; ready summary&lt;/b&gt;&lt;br&gt;GET /api/v1/posts/{post_id}&lt;br&gt;post.title/body/tripAttachment: hotelId, destinationName, daysCount,&lt;br&gt;items.&lt;br&gt;GET /api/v1/posts/{post_id}/ai-summary&lt;br&gt;status, keyTakeaways, summary/content.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/trip.py: fetch_post, post_reviews&lt;br&gt;clients/core_api.py: CorePost (model only)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2540" y="820" width="605" height="185" as="geometry" />
+        </mxCell>
+        <mxCell id="api-auth" value="&lt;b style=&quot;font-size:18px&quot;&gt;Access · validate signed-in session&lt;/b&gt;&lt;br&gt;GET /api/auth/me&lt;br&gt;GET /.well-known/jwks.json (default JWKS path)&lt;br&gt;Forward user bearer; 401/403 invalidates session. Runs before&lt;br&gt;admission. Core HTTP and JWKS timeout 3 s. No core skill circuit breaker.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;api/chat.py: resolve_identity, get_core_client&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="3165" y="820" width="625" height="185" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="search" target="api-search">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="stay" target="api-stays">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-13" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="flight" target="api-routes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="plan" target="api-places">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-15" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="reel" target="api-post">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2065" y="912" />
+              <mxPoint x="2065" y="1022" />
+              <mxPoint x="2500" y="1022" />
+              <mxPoint x="2500" y="912" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="request" value="&lt;b style=&quot;font-size:18px&quot;&gt;ChatRequest&lt;/b&gt;&lt;br&gt;conversationId UUID; message 1–500 chars. history ≤30&lt;br&gt;messages, text 1–2000 each; Controller reads last 20 for&lt;br&gt;user/guest. searchMode=reel optional; contextPostId, trip,&lt;br&gt;action.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/schemas.py: ChatRequest, Turn&lt;br&gt;core/config.py: ChatSettings&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#DBEAFE;strokeColor=#2563EB;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="50" y="1140" width="530" height="215" as="geometry" />
+        </mxCell>
+        <mxCell id="draft" value="&lt;b style=&quot;font-size:18px&quot;&gt;TripContext v2 · v1 accepted&lt;/b&gt;&lt;br&gt;place, originCity, dates; adults=2; children/infants=0;&lt;br&gt;budget, reelId, lastCards≤5. stay, transport,&lt;br&gt;returnTransport; days≤7; pending≤4; pendingFlights≤5;&lt;br&gt;ops≤5; awaiting; interests; mealsOnly.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/schemas.py: TripContext&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#DBEAFE;strokeColor=#2563EB;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1140" width="530" height="215" as="geometry" />
+        </mxCell>
+        <mxCell id="card" value="&lt;b style=&quot;font-size:18px&quot;&gt;Card contract&lt;/b&gt;&lt;br&gt;Emitted kinds: video/post/plan/stay/flight;&lt;br&gt;itinerary/compare/transport;&lt;br&gt;weather/checklist/summary/booking.&lt;br&gt;lines: label, detail, ref, service=flight|stay.&lt;br&gt;Prices/observedAt on card, not booking params.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/schemas.py: Card, CardLine&lt;br&gt;contracts/openapi/ai-service.json&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="50" y="1390" width="530" height="215" as="geometry" />
+        </mxCell>
+        <mxCell id="actions" value="&lt;b style=&quot;font-size:18px&quot;&gt;Validated actions&lt;/b&gt;&lt;br&gt;CardAction select: label + ref only. book: label +&lt;br&gt;path=/trip-builder + string params only; label ≤40 chars.&lt;br&gt;Request DraftAction: select/ref, remove_stop/stopId, undo.&lt;br&gt;Actions skip LLM.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/schemas.py: CardAction, DraftAction&lt;br&gt;assistant/turn.py: _plan_step&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1390" width="530" height="215" as="geometry" />
+        </mxCell>
+        <mxCell id="pii" value="&lt;b style=&quot;font-size:18px&quot;&gt;What reaches each LLM&lt;/b&gt;&lt;br&gt;mask_pii on message/history: email, phone, citizen ID,&lt;br&gt;patterned names. Controller: city-level origin, trusted&lt;br&gt;trip fields, stay/stop names; no reel ID or user&lt;br&gt;coordinates. Responder: facts + masked question + last 4&lt;br&gt;messages (≤300 chars each).&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/understand.py; assistant/responder.py&lt;br&gt;services/summary/pii.py&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="50" y="1640" width="530" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="client-store" value="&lt;b style=&quot;font-size:18px&quot;&gt;Client owns conversation restore&lt;/b&gt;&lt;br&gt;Signed-in session: 7 days; last 20 messages including cards and trip. Native: app-private file ≤64 KB. Web: localStorage. Guests: memory only. Restored cards pass the same filter as server cards.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;tripflix-fe #230, #244&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#DBEAFE;strokeColor=#2563EB;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1640" width="530" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="redis" value="&lt;b style=&quot;font-size:18px&quot;&gt;Redis technical state · no full conversation&lt;/b&gt;&lt;br&gt;chat:busy:* lock TTL = timeout +3 s =15 s; chat:rate:* minute bucket TTL 120 s; chat:spend:* day counters TTL 2 days. Store&lt;br&gt;turns/tokens/system micro-USD, no message text in these keys. Weather cache is separate process memory.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/admission.py: enter, _count_minute, settle&lt;br&gt;clients/weather.py: CACHE_SECONDS&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#E5E7EB;strokeColor=#64748B;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="50" y="1905" width="1080" height="175" as="geometry" />
+        </mxCell>
+        <mxCell id="usage-event" value="&lt;b style=&quot;font-size:18px&quot;&gt;ai.usage.recorded · successful LLM results&lt;/b&gt;&lt;br&gt;Envelope: eventId, type, version=1, occurredAt, producer, nullable userId. Chat payload:&lt;br&gt;feature=chat, conversationId, turnId, step=controller|responder, model metadata,&lt;br&gt;inputTokens, outputTokens, costUsd, estimated=true, latencyMs.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;services/usage_events.py: UsageEvent, ChatUsage&lt;br&gt;api/chat.py: add_usage&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#E5E7EB;strokeColor=#64748B;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="1140" width="780" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="turn-event" value="&lt;b style=&quot;font-size:18px&quot;&gt;ai.chat.turn.recorded · signed-in only&lt;/b&gt;&lt;br&gt;Same envelope; userId required. conversationId, turnId, latencyMs,&lt;br&gt;question=mask_pii(message)[:120], intent|null, answerKind, isAction. Error/disconnect:&lt;br&gt;answerKind=error until answer completed. Gate rejection emits none.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;services/usage_events.py: ChatTurnEvent, ChatTurn&lt;br&gt;api/chat.py: run_turn finally&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#E5E7EB;strokeColor=#64748B;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="1370" width="780" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="publish" value="&lt;b style=&quot;font-size:18px&quot;&gt;Finally → stream:ai&lt;/b&gt;&lt;br&gt;settle → release → publish_usage. Non-transactional XADD pipeline; maxlen 100,000;&lt;br&gt;publish deadline 0.25 s. Provider latency: perf_counter; turn latency includes&lt;br&gt;arrival/auth.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;services/usage_events.py: publish_usage&lt;br&gt;clients/llm/guarded.py: agenerate&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#E5E7EB;strokeColor=#64748B;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="1600" width="780" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="analytics" value="&lt;b style=&quot;font-size:18px&quot;&gt;Core analytics → admin pages&lt;/b&gt;&lt;br&gt;One core-analytics consumer group on stream:ai handles both events; no second consumer added to the group. Stores per-user AI cost, turnId traces and user activity. Superadmin pages: User behaviour and AI cost. Masked questions kept 90 days.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;tripflix-be #272, #278, #280&lt;br&gt;tripflix-fe #260, #262&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FFEDD5;strokeColor=#EA580C;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="1820" width="780" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-16" value="shared turnId" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="usage-event" target="turn-event">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-17" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="turn-event" target="publish">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-18" value="event boundary" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;dashed=1;" edge="1" parent="1" source="publish" target="analytics">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="gather" value="&lt;b style=&quot;font-size:18px&quot;&gt;Ask first → gather services&lt;/b&gt;&lt;br&gt;Unknown origin/date → awaiting plan_trip/origin|dates|origin_dates. Explicit plan-first cue&lt;br&gt;allows bare itinerary. Otherwise 5 branches: places, rain, stay, outbound, return. First&lt;br&gt;Tripflix stay selected (≤3 pending).&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/plan.py: plan, _plan_stays, _plan_flight&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2050" y="1140" width="810" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="woven" value="&lt;b style=&quot;font-size:18px&quot;&gt;One woven itinerary&lt;/b&gt;&lt;br&gt;Outbound → check-in → stops → check-out → return. Earliest available outbound departure&lt;br&gt;(arrival ≥07:00 or unknown); latest return departure. Hotel base. Arrival ≥12:00 removes&lt;br&gt;morning/noon; ≥17:00 keeps evening. Return slots leave ≥2 h. Distance/time estimated.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/plan.py: _build, _itinerary_answer&lt;br&gt;assistant/itinerary.py: travel_slots; route.py&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2050" y="1365" width="810" height="215" as="geometry" />
+        </mxCell>
+        <mxCell id="confirm" value="&lt;b style=&quot;font-size:18px&quot;&gt;Select/change → rebuild · confirm → recheck&lt;/b&gt;&lt;br&gt;Itinerary book action requires Tripflix stay + outbound flight/fare. confirm_booking&lt;br&gt;rechecks dated rooms + same flight/fare on both legs; omits unavailable parts. One action if&lt;br&gt;any checked part remains. Nothing chosen → clarify.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/plan.py: select, confirm, _check_flight&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#EDE9FE;strokeColor=#7C3AED;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2050" y="1615" width="810" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="booking-action" value="&lt;b style=&quot;font-size:18px&quot;&gt;Book action → /trip-builder&lt;/b&gt;&lt;br&gt;Server label: “Đặt theo lộ trình”. String params: destination, adults, [startDate, days], [hotelId, hotelName, checkIn, nights], [flightFrom, flightTo, flightDate], [returnFrom, returnTo, returnDate]. Only checked parts in confirm. No prices, room IDs or fare IDs.&lt;br&gt;Mobile: woven itinerary → Book tab with stops, hotel and flights; other cards → trip builder. Web: no trip-booking page yet → “Đặt phòng” /hotels/{id} and “Đặt vé” /flights. Booking screens always re-read prices. AI creates no order.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;skills/plan.py: _booking_action; assistant/schemas.py: CardAction&lt;br&gt;tripflix-fe #241 (mobile), #239 (web)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#DBEAFE;strokeColor=#2563EB;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2050" y="1830" width="810" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-19" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="gather" target="woven">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-20" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="woven" target="confirm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-21" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="confirm" target="booking-action">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="llm-fallback" value="&lt;b style=&quot;font-size:18px&quot;&gt;LLM unavailable → core keyword search&lt;/b&gt;&lt;br&gt;Disabled (default), missing config, invalid JSON, provider error or open breaker → parsed=None →&lt;br&gt;_discover. User/system daily quota bypasses LLM; guest daily quota rejects 429/loginRequired.&lt;br&gt;Separate role breakers: 3 failures → open 300 s, per process.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;api/chat.py: run_turn; assistant/turn.py: _discover&lt;br&gt;clients/llm/guarded.py; core/breaker.py&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FEE2E2;strokeColor=#DC2626;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2930" y="1140" width="860" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="skill-fallback" value="&lt;b style=&quot;font-size:18px&quot;&gt;Skill isolation · dependency budgets&lt;/b&gt;&lt;br&gt;Core/weather HTTP: 3 s each. Skill cap: default 3 s, weather 6 s, plan 7 s. No core/weather chat&lt;br&gt;breaker. Plan service branches 3 s; rain/base 2.5 s. Outer skill errors → fallback + degraded.&lt;br&gt;Internal plan failures log/omit part, not always done.degraded.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;api/chat.py; clients/weather.py&lt;br&gt;assistant/turn.py: _run_value; skills/plan.py&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FEE2E2;strokeColor=#DC2626;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2930" y="1350" width="860" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="responder-fallback" value="&lt;b style=&quot;font-size:18px&quot;&gt;Responder / Verifier → fixed answer&lt;/b&gt;&lt;br&gt;Disabled, skipped, failed, cut output or no verified sentence → fixed text. Checks refs, numbers,&lt;br&gt;names, availability, contact, Vietnamese, weather date, scarcity; ≤4 sentences and ≤2 emoji.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/responder.py: respond&lt;br&gt;assistant/verifier.py: verify&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FEE2E2;strokeColor=#DC2626;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2930" y="1560" width="860" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="redis-fallback" value="&lt;b style=&quot;font-size:18px&quot;&gt;Redis outage → bounded degradation&lt;/b&gt;&lt;br&gt;Counters: local lock/system cap; shared per-identity limits fail open. Publish Redis/OS/value&lt;br&gt;failure logs usage event; turn event logs only ai.chat_turn.publish_failed + eventId, never&lt;br&gt;question. Publish timeout is not caught by that handler.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;assistant/admission.py: _call, _shared_only&lt;br&gt;services/usage_events.py: publish_usage, _log_unpublished&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FEE2E2;strokeColor=#DC2626;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2930" y="1750" width="860" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="terminal" value="&lt;b style=&quot;font-size:18px&quot;&gt;Terminal error / no-flight reference&lt;/b&gt;&lt;br&gt;Caught run_turn timeout/HTTP/validation/value error → SSE error DEPENDENCY_UNAVAILABLE. No&lt;br&gt;outbound + catalog route → reference bus, no combo button. Not every core failure is terminal.&lt;br&gt;&lt;span style=&quot;font-size:14px;color:#475569&quot;&gt;api/chat.py: run_turn; skills/plan.py; assistant/transport.py&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=12;fontFamily=Helvetica;fontSize=16;fillColor=#FEE2E2;strokeColor=#DC2626;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="2930" y="1940" width="860" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-hotel-detail" source="api-stays" target="api-hotel" edge="1" parent="1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-flight-offers" source="api-routes" target="api-flights" edge="1" parent="1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-final-events" source="verify" target="usage-event" edge="1" parent="1" value="usage / final turn event" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;labelBackgroundColor=#FFFFFF;strokeColor=#64748B;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1355" y="1060" />
+              <mxPoint x="1590" y="1060" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-dispatch-search" source="turn" target="search" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="722" />
+              <mxPoint x="1110" y="632" />
+              <mxPoint x="1630" y="632" />
+              <mxPoint x="1630" y="252" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-dispatch-stay" source="turn" target="stay" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="722" />
+              <mxPoint x="1110" y="632" />
+              <mxPoint x="1630" y="632" />
+              <mxPoint x="1630" y="402" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-dispatch-flight" source="turn" target="flight" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="722" />
+              <mxPoint x="1110" y="632" />
+              <mxPoint x="1630" y="632" />
+              <mxPoint x="1630" y="552" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-dispatch-reel" source="turn" target="reel" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="722" />
+              <mxPoint x="1110" y="632" />
+              <mxPoint x="1630" y="632" />
+              <mxPoint x="1630" y="912" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-dispatch-weather" source="turn" target="weather-skill" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0.5;entryY=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="722" />
+              <mxPoint x="1110" y="632" />
+              <mxPoint x="1630" y="632" />
+              <mxPoint x="1630" y="810" />
+              <mxPoint x="2267" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-weather-api" source="weather-skill" target="external-weather" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;whiteSpace=wrap;fontSize=15;strokeColor=#64748B;strokeWidth=2;endArrow=block;exitX=1;exitY=0.5;entryX=0.5;entryY=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2490" y="912" />
+              <mxPoint x="2490" y="810" />
+              <mxPoint x="3477" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

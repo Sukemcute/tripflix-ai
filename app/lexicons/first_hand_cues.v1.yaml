@@ -1,0 +1,41 @@
+# Signals that a commenter tells their own visit (supporting signal only, never a gate).
+# Rule in first_hand.py: first person AND (past event OR concrete detail).
+# Cues are [CẦN NC] (QT 12.5): no linguistic source yet.
+# v1: drafted by Claude, pending review by Bảo, 2026-11-04.
+name: first_hand_cues
+version: 1
+groups:
+  first_person:
+    patterns:
+      - 'minh'
+      - 'tui'
+      - 'toi'
+      - 'nha minh'
+      - 'tui minh'
+      - 'bon minh'
+    match:
+      - 'minh di cach day 2 thang'
+    no_match:
+      - 'nhin co ve dep ghe'
+  past_event:
+    patterns:
+      - 'da (di|o|toi|den)'
+      - 'di roi'
+      - 'hom (truoc|qua)'
+      - '(thang|tuan|nam) (truoc|roi)'
+      - 'cach day \d+ (ngay|tuan|thang|nam)'
+      - 'luc (nhan|tra) phong'
+      - 'vua (ve|di)'
+    match:
+      - 'minh di cach day 2 thang nuoc bien khong sach lam'
+      - 'thang truoc ca nha minh o day'
+    no_match:
+      - 'uoc duoc di 1 lan'
+  concrete_detail:
+    patterns:
+      - '\d+ ?(k|tr|trieu|nghin|tieng|phut|dem|nguoi)'
+    match:
+      - 'gia 500k mot dem'
+      - 'cho 2 tieng moi duoc nhan phong'
+    no_match:
+      - 'phong dep lam'

@@ -1,0 +1,136 @@
+{
+  "post_id": "s12-moi-tuong-tac",
+  "is_simulated": true,
+  "scenario": "spam",
+  "caption": "Săn mây ở Tà Xùa 2N1Đ ☁️",
+  "itinerary": [
+    {
+      "kind": "service",
+      "place_name": "Cloud Homestay Tà Xùa",
+      "service_type": "Khách sạn"
+    }
+  ],
+  "comments": [
+    {
+      "comment_id": "s12-c01",
+      "author_id": "s12-sp1",
+      "parent_id": null,
+      "body": "😍😍😍",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-01T09:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s12-c02",
+      "author_id": "s12-sp2",
+      "parent_id": null,
+      "body": "ai đi chung hông",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-01T10:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s12-c03",
+      "author_id": "s12-sp3",
+      "parent_id": null,
+      "body": "@Linh @Nam vô coi nè",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-01T11:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s12-c04",
+      "author_id": "s12-sp4",
+      "parent_id": null,
+      "body": "first",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-01T12:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s12-c05",
+      "author_id": "s12-a1",
+      "parent_id": null,
+      "body": "Homestay sạch, chăn ấm, đêm không bị lạnh",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-01T13:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s12-c06",
+      "author_id": "s12-a2",
+      "parent_id": null,
+      "body": "phòng sạch, chăn dày, ngủ ấm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-01T14:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s12-c07",
+      "author_id": "s12-a3",
+      "parent_id": null,
+      "body": "Sáng 5h dậy là thấy biển mây, đẹp lắm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-01T15:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s12-c08",
+      "author_id": "s12-a4",
+      "parent_id": null,
+      "body": "săn mây sáng sớm đẹp thật, nên dậy sớm",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-01T16:00:00+00:00",
+      "is_post_author": false
+    },
+    {
+      "comment_id": "s12-c09",
+      "author_id": "s12-a5",
+      "parent_id": null,
+      "body": "Đường lên dốc, xe số yếu thì khó đi",
+      "status": "visible",
+      "like_count": 0,
+      "created_at": "2026-11-01T17:00:00+00:00",
+      "is_post_author": false
+    }
+  ],
+  "labels": {
+    "status": "ready",
+    "must_not_cite": {
+      "s12-c01": "emoji_only",
+      "s12-c02": "engagement_bait",
+      "s12-c03": "tag_bait",
+      "s12-c04": "too_short"
+    },
+    "safety": [],
+    "not_safety": [],
+    "points": [
+      {
+        "polarity": "pro",
+        "aspect": "ve_sinh",
+        "comment_ids": [
+          "s12-c05",
+          "s12-c06"
+        ]
+      },
+      {
+        "polarity": "pro",
+        "aspect": "canh_quan",
+        "comment_ids": [
+          "s12-c07",
+          "s12-c08"
+        ]
+      }
+    ],
+    "reality_gaps": [],
+    "topics": []
+  }
+}
