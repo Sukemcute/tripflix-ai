@@ -113,7 +113,12 @@ class _UsageSettings(BaseSettings):
 
 @cache
 def get_usage_redis() -> aioredis.Redis:
-    return aioredis.Redis.from_url(_UsageSettings().redis_url, retry=AsyncRetry(NoBackoff(), 0))
+    return aioredis.Redis.from_url(
+        _UsageSettings().redis_url,
+        socket_connect_timeout=1.0,
+        socket_timeout=1.0,
+        retry=AsyncRetry(NoBackoff(), 0),
+    )
 
 
 async def close_usage_redis() -> None:
