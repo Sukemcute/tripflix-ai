@@ -94,6 +94,10 @@ class LabelWorker:
             raw = fields.get("event", "")
             try:
                 event = _Envelope.model_validate_json(raw)
+                # Stream chung có cả sự kiện bài viết, reaction: không phải việc của worker này,
+                # bỏ qua (ack ở cuối) thay vì coi là hỏng và đổ vào dead-letter.
+                if event.type not in WRITE_EVENTS and event.type not in GONE_EVENTS:
+                    continue
                 payload = _Payload.model_validate(event.payload)
             except ValidationError as e:
                 self.redis.xadd(

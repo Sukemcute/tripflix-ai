@@ -209,6 +209,24 @@ def test_an_unreadable_event_goes_to_dead_letter_and_is_acked() -> None:
     assert redis.dead[0]["group"] == "ai-labels" and redis.acked == ["9-0"]
 
 
+def test_post_and_reaction_events_on_the_shared_stream_are_acked_not_dead_lettered() -> None:
+    redis = FakeRedis()
+    post_event = {
+        "eventId": "e-post",
+        "type": "content.post.published",
+        "version": 1,
+        "occurredAt": "2026-11-11T08:00:00.000Z",
+        "producer": "core-api",
+        "payload": {"postId": POST, "authorId": "a-1"},
+    }
+
+    LabelWorker(redis, RedisLabelStore(redis), StubClassifier()).handle_batch(
+        [("8-0", {"event": json.dumps(post_event)})]
+    )
+
+    assert redis.dead == [] and redis.acked == ["8-0"]
+
+
 @pytest.mark.parametrize("name", ["server-1", ""])
 def test_both_workers_take_their_consumer_name_from_settings(
     monkeypatch: pytest.MonkeyPatch, name: str
