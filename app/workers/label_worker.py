@@ -22,6 +22,7 @@ summaries down (bulkhead).
 import logging
 import os
 import socket
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -56,6 +57,7 @@ from app.workers.summary_worker import (
 logger = logging.getLogger(__name__)
 
 GROUP = "ai-labels"
+RECONNECT_SECONDS = 1.0
 # restored carries no body today (contracts/events): handled as a write so it labels the
 # comment as soon as core adds the body; until then it is a no-op and summary runs label it.
 WRITE_EVENTS = {"content.comment.created", "content.comment.updated", "content.comment.restored"}
@@ -190,6 +192,7 @@ class LabelWorker:
             except redis.ConnectionError:
                 logger.exception("redis unavailable, retrying")
                 self.redis.connection_pool.disconnect()
+                time.sleep(RECONNECT_SECONDS)  # không quay vòng 100% CPU khi Redis mất
 
 
 def main() -> None:
