@@ -89,6 +89,8 @@ logger = logging.getLogger(__name__)
 
 STREAM = "stream:core.content"
 DEAD_LETTER_STREAM = "stream:dead-letter"
+# Dead-letter chỉ để xem tay: giữ chừng này bản ghi mới nhất, không để Redis phình mãi.
+DEAD_LETTER_MAXLEN = 10_000
 GROUP = "ai-summary"
 COMMENT_EVENTS = {
     "content.comment.created",
@@ -431,6 +433,8 @@ class SummaryWorker:
         self.redis.xadd(
             DEAD_LETTER_STREAM,
             {"postId": post_id, "group": GROUP, "reason": reason[:500]},
+            maxlen=DEAD_LETTER_MAXLEN,
+            approximate=True,
         )
 
     def _summarize(self, post_id: str) -> None:
@@ -585,6 +589,8 @@ class SummaryWorker:
                 "messageId": message_id,
                 "reason": reason,
             },
+            maxlen=DEAD_LETTER_MAXLEN,
+            approximate=True,
         )
         self.redis.xack(STREAM, GROUP, message_id)
 

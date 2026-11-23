@@ -22,6 +22,7 @@ summaries down (bulkhead).
 import logging
 import os
 import socket
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -46,6 +47,7 @@ from app.workers.summary_worker import (
     BATCH_SIZE,
     BLOCK_MS,
     CLAIM_IDLE_MS,
+    DEAD_LETTER_MAXLEN,
     DEAD_LETTER_STREAM,
     STREAM,
     _Envelope,  # pyright: ignore[reportPrivateUsage]
@@ -55,6 +57,7 @@ from app.workers.summary_worker import (
 logger = logging.getLogger(__name__)
 
 GROUP = "ai-labels"
+RECONNECT_SECONDS = 1.0
 # restored carries no body today (contracts/events): handled as a write so it labels the
 # comment as soon as core adds the body; until then it is a no-op and summary runs label it.
 WRITE_EVENTS = {"content.comment.created", "content.comment.updated", "content.comment.restored"}
@@ -93,6 +96,10 @@ class LabelWorker:
             raw = fields.get("event", "")
             try:
                 event = _Envelope.model_validate_json(raw)
+                # Stream chung có cả sự kiện bài viết, reaction: không phải việc của worker này,
+                # bỏ qua (ack ở cuối) thay vì coi là hỏng và đổ vào dead-letter.
+                if event.type not in WRITE_EVENTS and event.type not in GONE_EVENTS:
+                    continue
                 payload = _Payload.model_validate(event.payload)
             except ValidationError as e:
                 self.redis.xadd(
@@ -104,6 +111,8 @@ class LabelWorker:
                         "messageId": message_id,
                         "reason": f"unreadable event: {e.error_count()} errors",
                     },
+                    maxlen=DEAD_LETTER_MAXLEN,
+                    approximate=True,
                 )
                 continue
             if event.type in GONE_EVENTS or event.type == "content.comment.updated":
@@ -183,6 +192,7 @@ class LabelWorker:
             except redis.ConnectionError:
                 logger.exception("redis unavailable, retrying")
                 self.redis.connection_pool.disconnect()
+                time.sleep(RECONNECT_SECONDS)  # không quay vòng 100% CPU khi Redis mất
 
 
 def main() -> None:
