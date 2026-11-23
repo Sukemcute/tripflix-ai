@@ -1,7 +1,8 @@
-# Perf & Bug Audit: báo cáo sửa lỗi và việc còn lại
+# Perf & Bug Audit: báo cáo sửa lỗi (đợt 1, đợt 2) và việc còn lại
 
 - Notion: chưa có task (không có mã TF) · Nhánh: `bao/perf-audit-fixes` (đã merge) · Người làm: Bảo (dùng AI: có, Claude Code + opencode) · Ngày: 2026-11-23
-- PR: [tripflix-be#327](https://github.com/Sukemcute/tripflix-be/pull/327) · [tripflix-fe#359](https://github.com/Sukemcute/tripflix-fe/pull/359) · [tripflix-ai#64](https://github.com/Sukemcute/tripflix-ai/pull/64). Cả 3 đã merge vào `develop`; publish và deploy xanh.
+- Đợt 2: nhánh `bao/perf-audit-dot-2` (chưa push, chưa có PR), mục 4–6.
+- PR đợt 1: [tripflix-be#327](https://github.com/Sukemcute/tripflix-be/pull/327) · [tripflix-fe#359](https://github.com/Sukemcute/tripflix-fe/pull/359) · [tripflix-ai#64](https://github.com/Sukemcute/tripflix-ai/pull/64). Cả 3 đã merge vào `develop`; publish và deploy xanh.
 - File này giống hệt nhau ở cả 3 repo (`docs/evidence/perf-audit-fixes.md`) vì đợt sửa đi qua cả ba.
 
 ## 1. Bối cảnh
@@ -76,60 +77,101 @@ Trong số phát hiện của audit, các mục sau **sai hoặc đã được s
 | AI `ruff`, `ruff format --check`, `pyright`, `pytest` | sạch; 1265 pass. 5 fail trong `tests/test_chat.py` là bản sửa cục bộ chưa commit trên máy người làm; bản trên `develop` pass |
 | Scan lại bằng skill (`deploy_audit`, `container-cloud-auditor`, `sbom-supply-chain-auditor`) | Không có high/critical, không phát hiện nào trong file đã sửa |
 | CI của PR | Cả 3 xanh |
-| Publish sau merge | AI, FE xanh. BE lần đầu fail ở `core-api` và `video-worker` (`Unexpected end of JSON input` trong `pnpm`, xem mục 4.3); chạy lại thì xanh, `deploy-api` xanh |
+| Publish sau merge | AI, FE xanh. BE lần đầu fail ở `core-api` và `video-worker` (`Unexpected end of JSON input` trong `pnpm`, xem mục 4.3); chạy lại thì xanh, `deploy-api` xanh. Đợt 2 đã sửa (mục 4.1) |
 
 Chưa có: ảnh/video evidence cho thay đổi giao diện; số đo lag trước/sau trên máy thật.
 
-## 4. Việc còn lại và ai phụ trách
+## 4. Đợt 2: làm tiếp việc còn lại (2026-11-23)
 
-### 4.1 Cần làm sớm
-| # | Việc | Ai | Ghi chú |
-|---|---|---|---|
-| 1 | Chụp ảnh evidence: avatar Reels (Mobile, chụp trên Android), màn lỗi Web/Admin, Explore rỗng (Mobile), font hero/coming-soon (Web) | Bảo, nhờ Trang (mobile), Thành (web/admin) | RULES §5 bắt buộc khi đổi giao diện |
-| 2 | Quyết định style cho màn `global-error` (đang là chữ và nút mặc định của trình duyệt) | Thành | Màn này thay cả layout nên phải tự có CSS |
-| 3 | Kiểm trên server sau deploy: `/ai/chat` stream và SSE admin không bị đệm khi bật nén; đo lại thời gian tải trang, đổi tab, lướt Reels | Phong, Bảo | Chưa có số đo trước/sau |
-| 4 | Tạo task Notion cho đợt này (chưa có mã TF; commit không có `Refs`, tên nhánh lệch quy ước) | Bảo | RULES §2, §6, §7 |
-| 5 | Chặn lỗi race của pnpm khi build Docker: thêm `ENV npm_config_verify_deps_before_run=false` vào stage `base` của các Dockerfile BE | Tech Lead | Lần sau merge có thể lại fail ngẫu nhiên |
+Cả nhóm đã đồng ý các việc ở mục 4 bản trước. Nhánh `bao/perf-audit-dot-2` ở cả 3 repo, tách từ `bao/perf-audit-bao-cao` (= `develop` + file này). BE 12 commit, FE 10 commit, AI chỉ cập nhật file này.
 
-### 4.2 Cần quyết định trước khi sửa
-| # | Việc | Ai | Vì sao chưa làm |
-|---|---|---|---|
-| 6 | Mobile bật ABR (đưa `master.m3u8` lên đầu nguồn phát) | Trang, Phong | Code cố ý bỏ qua master (ghi chú "unsigned master playlist"), có thể vì cookie CloudFront |
-| 7 | Không dựng lại 6 player khi đổi tab Reels | Trang | `key={contentTab}` là cố ý; phải refactor `usePlayerPool`, cần đo trên Android trước |
-| 8 | Nén 55 MB ảnh mascot Mobile (`assets/brand`) | Trang | Sửa file binary, phải duyệt chất lượng ảnh |
-| 9 | Tách gửi SMTP khỏi consumer realtime của notification | Dũng | Thay đổi kiến trúc; lượng email pilot chưa cần |
-| 10 | Redis `maxmemory` | Phong, Dũng | `volatile-lru` có thể xoá khoá chống gửi trùng; DLQ đã có giới hạn |
-| 11 | Dọn `stream:dead-letter` đang có trên production (`XTRIM`) | Phong | Không hoàn tác được. Replayer mới đã tự `XDEL` bản ghi `notification` ở trạng thái `done` |
-| 12 | Nâng VM 2 vCPU, tune Postgres (`shared_buffers`, `shm_size`), tách `APP_ROLE` | Phong, Tech Lead | Quyết định hạ tầng, cần biết RAM của VM |
+### 4.1 Đã làm
+| Việc | Thay đổi | Kiểm bằng |
+|---|---|---|
+| Review: cache `trip_v1` có thể tốn hàng trăm MB (500 phiên × tới 5.000 bài) | Mỗi phiên chỉ giữ 300 bài đầu; cuộn quá thì xếp lại như trước | Test mới: 400 bài, cuộn hết không lặp, không mất; xếp lại đúng 3 lần |
+| #2 Style màn `global-error` | Style inline theo `@tripflix/tokens`, nút giống nút primary của `ui-web` (web, admin dùng chung bản) | typecheck web, admin |
+| #5 Lỗi race của pnpm khi build Docker | `npm_config_verify_deps_before_run=false` ở stage `base` của Dockerfile core-api, notification-service, video-worker | `docker build` core-api (stage build, prod) xanh |
+| #6 Mobile bật ABR | `getAdaptiveReelPlaybackSources`: `master.m3u8` trước, bản lẻ làm dự phòng; trần 540p khi tiết kiệm dữ liệu vẫn qua `maxResolution`. Web giữ nguyên | Test `app-core` |
+| #8 Ảnh mascot 55 MB | Ảnh tĩnh 1254px → 768px (giữ PNG, không giảm số màu để viền trong suốt không răng cưa): thư mục `assets/brand` 55 MB → 31 MB. Ảnh động 512px giữ nguyên | Xem lại bằng mắt một ảnh; Trang duyệt trên máy |
+| #10 Redis `maxmemory` | `--maxmemory ${REDIS_MAXMEMORY:-0} --maxmemory-policy noeviction`; cách chọn giá trị ở `deploy/SERVER.md` | `docker compose config` |
+| #11 Dọn `stream:dead-letter` trên production | Không cần `XTRIM` tay: lần ghi kế tiếp tự gọn về ~10.000 (`MAXLEN ~`), replayer gỡ bản đã gửi. Ghi vào `SERVER.md` | Đọc code |
+| #12 Tune Postgres | `shm_size: 256mb` (mặc định 64 MB làm truy vấn song song lỗi), `shared_buffers=${PG_SHARED_BUFFERS:-128MB}` | `docker compose config` |
+| Commerce: `READ_CALENDAR` | Tìm chuyến bay và dải giá đọc lịch từ bộ nhớ như trang khách sạn; giữ chỗ vẫn kiểm trong database | Test mới trong `flight-search.use-cases.spec.ts` |
+| Content DB: index | GIN `posts(hashtags)`, `posts(updated_at, id)`, `post_counter_deltas(post_id)`. Migration chỉ có `CREATE INDEX` | Int test content trên Postgres thật |
+| Content DB: job dọn | `ContentCleanupJob`: xoá `idempotency_keys` hết hạn theo lô 5.000 và outbox đã gửi quá 7 ngày, mỗi 24 giờ (giống commerce) | Test `runContentCleanup` |
+| Discovery: lock `recordQueryGrams` | Upsert theo thứ tự gram để hai câu tìm cùng lúc không deadlock (ghi chạy nền nhưng giữ kết nối pool) | Test discovery |
+| Discovery: `typoPool` | Index một phần `(left(key,1), length(key)) WHERE ns='df'` | `EXPLAIN ANALYZE` 160k dòng: Bitmap Index Scan, 1,6 ms |
+| Discovery: `/api/places`, `/api/suggest` | Cache 60 giây. places trước đây đọc toàn bộ điểm OSM mỗi request; suggest quét cả bảng mỗi lần gõ (~13 ms trên 2.500 dòng) | Test mới cho cả hai |
+| Deploy: S3 lifecycle | `staging/uploads/` (video gốc) xoá sau 30 ngày; áp bằng `deploy/aws/setup-dev-media.sh` | JSON hợp lệ |
+| Deploy: `flock` | `deploy-web.sh` khoá như `deploy-api.sh` (web và admin cùng ghi `.env.web`) | `sh -n` |
+| Deploy: OTel `--import` | `NODE_OPTIONS=--import @tripflix/observability/register` cho core-api, notification-service | Chạy image prod của cả hai với hook: nạp đủ module, dừng ở bước kiểm env như bản không có hook |
+| Web: `ReelSeekBar` rAF | Video dừng thì kiểm lại 4 lần/giây thay vì mỗi khung hình | typecheck, test web |
+| Web: `FeedHighlightFrame` | Bỏ `characterData`; chỉ observe lại khi danh sách con trực tiếp đổi | typecheck, test web |
+| Mobile: seek bar | `scaleX` từ mép trái thay cho đổi `width` mỗi khung hình | typecheck |
+| Mobile: `useAnimatedKeyboard` mỗi slide | Chỉ dựng panel bình luận khi mở (panel đóng vốn đã `return null`) | typecheck |
+| Mobile: timer `ProfileHub` | Hẹn giờ đúng lúc chỗ giữ hết hạn sớm nhất, thôi vẽ lại mỗi giây | typecheck |
+| Mobile: poll `HeldPosts` | 10 giây chỉ khi màn đang mở (`useIsFocused`) | typecheck |
+| Mobile: query key `HotelRoomsScreen` | Cùng khoá với màn khách sạn (chỉ ngày + người lớn): mở danh sách phòng không gọi lại `getHotel` | typecheck |
 
-### 4.3 Audit có nêu nhưng chưa kiểm chứng
-| Việc | Ai |
+### 4.2 Kiểm rồi, không sửa
+| Việc | Lý do |
 |---|---|
-| Mobile: seek bar animate `width`, `useAnimatedKeyboard` mỗi slide, timer `ProfileHub`, poll `HeldPosts`, lệch query key `HotelRoomsScreen`, `getPost` mỗi lần lướt Reel | Trang |
-| Web: `getBoundingClientRect` mỗi khung cuộn, `FeedHighlightFrame` MutationObserver, `PostCard` chưa `memo`, `rAF` của `ReelSeekBar`, `generateMetadata` fetch hai lần, tách `live-posts.tsx` (4.331 dòng) | Thành |
-| Discovery: GIN của `/api/suggest`, cache `/api/places`, `/api/stays`, lock `recordQueryGrams`, `typoPool` (cần `EXPLAIN` trên dữ liệu thật) | Duy |
-| Commerce: `FlightSearchUseCases` chưa dùng `READ_CALENDAR` | Thắng |
-| Content DB: index `posts(hashtags)`, `posts(updated_at, id)`, `post_counter_deltas(post_id)`; job dọn `outbox_events`, `idempotency_keys`; cột `has_playable_video` khi catalog lớn | Phong, Thành, Trang |
-| Deploy: S3 lifecycle `staging/uploads/`, `flock` cho `deploy-web.sh`, OTel `--import` cho trace Postgres/Redis | Phong, Dũng |
+| Bug D (review): label worker không ack entry rỗng của `XAUTOCLAIM` | Redis 8 tự gỡ entry đã xoá khỏi PEL; không phải lỗi |
+| Bug B (review): `complete()` lỗi thì gửi lại nhận 409 tới hết TTL | Đánh đổi đã chốt: thà 409 còn hơn chạy lần hai |
+| Web: `generateMetadata` fetch hai lần | Sai: `features/seo/public-data.ts` dùng `React.cache`, metadata và trang chung một lần gọi |
+| Web: `getBoundingClientRect` mỗi khung cuộn | Đã gộp bằng rAF, chỉ đọc không ghi xen kẽ nên không layout thrash |
+| Web: `PostCard` chưa `memo` | Props có callback tạo mới mỗi lần render (`onViewItinerary`), `memo` không có tác dụng nếu không sửa lớn `social-feed-view.tsx`; chưa đo được là chậm |
+| Web: tách `live-posts.tsx` | Refactor lớn, không tự làm nhanh hơn; nên là task riêng của Thành |
+| Discovery: GIN cho `/api/suggest` | Index trigram đã có. Viết lại câu cho dùng được index (`<%`, LIKE trên cột) thì planner vẫn seq scan ở 2.500 dòng; đã cache thay (4.1) |
+| `/api/stays` cache | Có giá và số phòng; commerce đã đọc lịch từ bản 10 giây trong bộ nhớ |
+| Mobile: `getPost` mỗi lần lướt Reel | Một request cho Reel đang xem để lấy hashtag và trạng thái thích/lưu mới nhất. Muốn bỏ thì BE thêm hashtag vào thẻ feed (task riêng) |
+| Cột `has_playable_video` | Audit ghi "khi catalog lớn"; chưa tới lúc |
+
+### 4.3 Còn lại, cần người hoặc cần quyết định thêm
+| # | Việc | Ai | Vì sao chưa xong |
+|---|---|---|---|
+| 1 | Ảnh evidence: avatar Reels, Explore rỗng, ABR, mascot (Android); màn `global-error`, font (web/admin) | Trang, Thành, Bảo | Cần chạy app thật; máy làm không có Android |
+| 3 | Kiểm trên server: `/ai/chat`, SSE admin, `/ws` Socket.IO khi bật nén; đo trước/sau; đặt `REDIS_MAXMEMORY`, `PG_SHARED_BUFFERS` theo RAM rồi `dc up -d postgres redis`; chạy `setup-dev-media.sh` để áp lifecycle | Phong, Bảo | Cần quyền server và RAM của VM |
+| 4 | Task Notion, mã TF cho cả hai đợt; tên nhánh và commit chưa có `Refs` | Bảo | Không có quyền Notion trong phiên này |
+| 7 | Không dựng lại 6 player khi đổi tab Reels | Trang | Pool nằm trong `ReelsFeed` key theo tab; bỏ key phải tự reset vị trí, trang, trạng thái refresh. Cần đo trên Android trước như đã thống nhất |
+| 9 | Tách gửi SMTP khỏi consumer realtime | Dũng | Group mới tạo ở id `0` sẽ đọc lại cả lịch sử stream và gửi lại email cũ. Cần thiết kế: tạo group ở `$`, khoá chống trùng riêng, replayer DLQ cho group mới |
+| 12 | Nâng VM 2 vCPU, tách `APP_ROLE` | Phong, Tech Lead | Quyết định hạ tầng; tách role thêm một tiến trình Node, chỉ nên làm sau khi nâng VM |
 
 ## 5. Ảnh hưởng tới phần của người khác
 
-| Phần | Chủ | Đã đổi |
-|---|---|---|
-| BE `libs/`, `access`, `notification-service` | Dũng | MAXLEN, XDEL, idempotency, pool, keep-alive, `getPublicAuthors`, Cache-Control S3 |
-| BE `deploy/` | Phong | compress, router file tĩnh, env admin, healthcheck |
-| BE `content/feed`, `content/media` | Phong | avatarUrl, TTL 60s, `getDurations`, Cache-Control |
-| BE `content/social` | Thành | `GET /v1/posts?ids=` (chỉ thêm), guard dùng chung, cursor, `findVisibleIds` |
-| BE `discovery` | Duy | cache xếp hạng `trip_v1`, `findVisiblePostIds` |
-| BE `commerce` | Thắng | metrics dùng sorted set |
-| FE `apps/web`, `apps/admin` | Thành | các thay đổi web/admin ở mục 2 |
-| FE `apps/mobile` | Trang | Explore spinner |
-| AI | Bảo | label worker, dead-letter, timeout Redis, `/health` |
+| Phần | Chủ | Đợt 1 | Đợt 2 |
+|---|---|---|---|
+| BE `libs/`, `access`, `notification-service` | Dũng | MAXLEN, XDEL, idempotency, pool, keep-alive, `getPublicAuthors`, Cache-Control S3 | — |
+| BE `deploy/` | Phong | compress, router file tĩnh, env admin, healthcheck | Redis/Postgres, S3 lifecycle, `flock`, OTel `--import` |
+| BE `content/feed`, `content/media` | Phong | avatarUrl, TTL 60s, `getDurations`, Cache-Control | — |
+| BE `content/social`, `content/db` | Thành (db: Phong, Thành, Trang) | `GET /v1/posts?ids=`, guard dùng chung, cursor, `findVisibleIds` | 3 index (migration), `ContentCleanupJob` |
+| BE `discovery` | Duy | cache `trip_v1`, `findVisiblePostIds` | giới hạn cache, upsert theo thứ tự, index `typoPool` (migration), cache places/suggest |
+| BE `commerce` | Thắng | metrics dùng sorted set | flight search dùng `READ_CALENDAR` |
+| BE Dockerfile | Tech Lead | — | tắt verify-deps của pnpm |
+| FE `apps/web`, `apps/admin` | Thành | các thay đổi ở mục 2 | `global-error` có style, seek bar, highlight frame |
+| FE `apps/mobile`, `packages/app-core` | Trang | Explore spinner | ABR, mascot, seek bar, panel bình luận, ProfileHub, HeldPosts, query key phòng |
+| AI | Bảo | label worker, dead-letter, timeout Redis, `/health` | — |
 
-Không có migration mới, không thêm thư viện. API chỉ thêm tham số (`ids`) và thêm field có giá trị (`author.avatarUrl` trước đây luôn `null`).
+Đợt 2 có 2 migration chỉ thêm index (content, discovery); `CREATE INDEX` khoá ghi bảng trong lúc dựng, bảng pilot nhỏ nên không đáng kể. Không thêm thư viện, không đổi API.
 
-## 6. Cách kiểm lại
+## 6. Kết quả kiểm tra đợt 2
+
+| Kiểm tra | Kết quả |
+|---|---|
+| BE `pnpm turbo run lint typecheck test --affected` | 37/37 task pass: core-api 3137 pass, 4 skip; notification 159; video-worker 53; libs pass |
+| BE int test (Postgres thật) | `post.repository.int.spec.ts`, `drizzle-places.store.int.spec.ts` pass, chạy cả 2 migration mới |
+| BE `docker build` | core-api, notification-service (stage prod) xanh; chạy được với `--import` OTel |
+| FE `pnpm turbo run lint typecheck test --affected` | 15/15 task pass: web 582, api-client 330, app-core 263, admin 106, mobile 6 |
+| FE `next build` | web, admin xanh |
+| AI | Không đổi code, chỉ đổi file này |
+
+Lần chạy đầu chạy BE và FE cùng lúc trên một máy nên quá tải: 1 test realtime theo thời gian của notification-service (token hết hạn trong 2 giây, chờ 4 giây), 1 test core-api và worker vitest của web bị chết. Chạy lại tuần tự thì pass hết, chưa sửa gì. Lint chỉ còn warning có từ trước.
+
+Chưa có: ảnh evidence UI, đo trên Android (ABR, panel bình luận, seek bar), số đo trên server (mục 4.3).
+
+## 7. Cách kiểm lại
 1. BE: `pnpm turbo run lint typecheck test --affected`; `pnpm --filter @tripflix/core-api test:int` (cần Docker).
 2. FE: `pnpm turbo run lint typecheck test --affected`; `pnpm --filter @tripflix/web build`.
 3. AI: `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest`.
 4. Trên server: mở DevTools trang gợi ý/tìm kiếm, thấy 1 request `GET /api/v1/posts?ids=` thay cho 7–12 request `/v1/posts/:id`; response có `Content-Encoding: gzip`/`br`; Reels Mobile hiện avatar.
+5. Đợt 2 trên server: `dc exec redis redis-cli config get maxmemory-policy` ra `noeviction`; `dc exec postgres df -h /dev/shm` ra 256M; Tempo có span `pg`, `ioredis` của core-api; `\di content.idx_posts_hashtags` có sau migrate.
