@@ -46,6 +46,7 @@ from app.workers.summary_worker import (
     BATCH_SIZE,
     BLOCK_MS,
     CLAIM_IDLE_MS,
+    DEAD_LETTER_MAXLEN,
     DEAD_LETTER_STREAM,
     STREAM,
     _Envelope,  # pyright: ignore[reportPrivateUsage]
@@ -104,6 +105,8 @@ class LabelWorker:
                         "messageId": message_id,
                         "reason": f"unreadable event: {e.error_count()} errors",
                     },
+                    maxlen=DEAD_LETTER_MAXLEN,
+                    approximate=True,
                 )
                 continue
             if event.type in GONE_EVENTS or event.type == "content.comment.updated":

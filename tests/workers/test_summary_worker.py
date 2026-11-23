@@ -92,7 +92,7 @@ class FakeRedis:
         self.acked.append(message_id)
         return 1
 
-    def xadd(self, stream: str, fields: dict[str, str]) -> str:
+    def xadd(self, stream: str, fields: dict[str, str], **_: Any) -> str:
         self.dead.append(fields)
         return "1-0"
 
