@@ -219,6 +219,41 @@ def test_b11_b12_a_range_that_makes_no_sense_is_asked_not_replaced(start, end, w
     assert "/api/stays" not in core.paths()
 
 
+@pytest.mark.parametrize(
+    ("today", "start", "end"),
+    [
+        (date(2026, 11, 25), date(2026, 12, 1), date(2026, 11, 30)),
+        (date(2026, 12, 26), date(2027, 1, 1), date(2026, 12, 31)),
+    ],
+)
+def test_b11_reversed_range_across_month_or_year_is_asked_not_wrapped(today, start, end):
+    core = FakeCore(PLACE | {"/api/stays": stays(400_000)})
+    answer, _ = run_turn(
+        plan(intent="find_stay", place="Vũng Tàu", start=dm(start), end=dm(end)),
+        core,
+        today=today,
+    )
+    assert answer.kind == "clarify" and "trước ngày nhận" in answer.text
+    assert "/api/stays" not in core.paths()
+
+
+def test_cross_year_range_wraps_to_next_year():
+    core = FakeCore(PLACE | {"/api/stays": stays(400_000)})
+    answer, _ = run_turn(
+        plan(
+            intent="find_stay",
+            place="Vũng Tàu",
+            start=DayMonth(day=30, month=12),
+            end=DayMonth(day=2, month=1),
+        ),
+        core,
+        today=date(2026, 12, 20),
+    )
+    params = dict(core.calls)["/api/stays"]
+    assert (params["checkIn"], params["checkOut"]) == ("2026-12-30", "2027-01-02")
+    assert answer.kind == "answer"
+
+
 def test_b16_a_start_day_alone_is_one_night_and_said_so():
     core = FakeCore(PLACE | {"/api/stays": stays(400_000)})
     answer, _ = run_turn(plan(intent="find_stay", place="Vũng Tàu", start=dm(IN_5)), core)
