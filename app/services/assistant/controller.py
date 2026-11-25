@@ -313,25 +313,35 @@ def build_date(day_month: DayMonth | None, today: date) -> date | None:
     return candidate
 
 
-def build_end(day_month: DayMonth | None, start: date | None, today: date) -> date | None:
-    """Same year as the start; the next year only when the month wraps ("30/12 - 2/1").
+def _try_date(year: int, month: int, day: int) -> date | None:
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
 
-    An end before the start in the same month stays before it, so the planner asks instead
-    of silently searching another range (Expo Web report B11, D07).
+
+def build_end(day_month: DayMonth | None, start: date | None, today: date) -> date | None:
+    """Same year as the start; wrap year only when the range genuinely crosses New Year.
+
+    An end shortly before the start (e.g. "1/12 - 30/11" or "1/1 - 31/12") stays before it,
+    so the planner asks instead of silently searching a ~1-year range (Expo Web report B11, D07).
     """
     if day_month is None:
         return None
     if start is None:
         return build_date(day_month, today)
-    try:
-        end = date(start.year, day_month.month, day_month.day)
-    except ValueError:
+    end = _try_date(start.year, day_month.month, day_month.day)
+    next_year = _try_date(start.year + 1, day_month.month, day_month.day)
+    if end is None:
+        if next_year and (next_year - start).days <= 180:
+            return next_year
         return None
-    if end < start and day_month.month < start.month:
-        try:
-            end = date(start.year + 1, day_month.month, day_month.day)
-        except ValueError:
-            return None
+    if end < start and next_year and (next_year - start) < (start - end):
+        return next_year
+    if end >= start and start.year > today.year:
+        prev_year = _try_date(start.year - 1, day_month.month, day_month.day)
+        if prev_year and (start - prev_year) < (end - start):
+            return prev_year
     return end
 
 
