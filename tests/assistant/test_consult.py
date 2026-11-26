@@ -160,8 +160,14 @@ def test_reel_open_day_two_is_post_itinerary() -> None:
 
 
 def test_reel_open_weekend_ideas_stay_consult() -> None:
-    got = guard("cuối tuần này đi đâu", has_reel=True, intent="consult", uses_context_post=False)
-    assert got.intent == "consult"
+    for uses_context_post in (False, True):  # the model sets the flag on any ask in a reel
+        got = guard(
+            "cuối tuần này đi đâu",
+            has_reel=True,
+            intent="consult",
+            uses_context_post=uses_context_post,
+        )
+        assert got.intent == "consult"
 
 
 def test_consult_without_place_stays_consult() -> None:

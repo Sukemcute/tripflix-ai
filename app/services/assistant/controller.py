@@ -952,9 +952,8 @@ def apply_guards(
         if re.search(REEL_WORD_CUE, text):
             intent = "find_reel"
             fixed["reel_query"] = out.reel_query or out.query
-        elif has_reel and (
-            out.uses_context_post or re.search(rf"{THIS_REEL}|{ITINERARY_DAY}", text)
-        ):
+        elif has_reel and re.search(rf"{THIS_REEL}|{ITINERARY_DAY}", text):
+            # Only the words decide: the model sets uses_context_post on any ask in a reel.
             # "ngày thứ hai đi đâu" in a reel: day 2 of its itinerary, not Monday (report-R15).
             intent = "post_itinerary"
             fixed["day_ref"] = "none"
