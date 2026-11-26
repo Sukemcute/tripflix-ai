@@ -107,6 +107,20 @@ Chạy ngày 2026-11-26 trên nhánh, trước commit evidence:
 - Quy tắc "rẻ nhất/đắt nhất" và "tối đa một câu hỏi" từ PR trước vẫn chỉ nằm trong prompt, Verifier không kiểm.
 - Chưa có đánh giá LLM thật cho Controller v12 và Consultant v1; ví dụ trong prompt Consultant viết cho tháng hiện tại là 5, chưa thử với model thật.
 
+## Sửa sau khi test local với LLM thật (26/11)
+
+Stack local: BE `develop` (Docker), AI nhánh này ở cổng 8001, web ở cổng 3100; Controller `gpt-5-nano`, Responder và Consultant DeepSeek.
+
+- `rating` của Core là object `{average, count}`: trước đó mọi lượt tìm phòng với Core thật đều lỗi. Đã sửa (`0cbd4b4`).
+- Câu hỏi ngày ("hôm nay/mai/cuối tuần này là ngày mấy", "Tết năm nay ngày mấy") có intent `ask_date`, code trả lời từ lịch và giữ câu hỏi lộ trình còn dở.
+- Hiểu "mốt", "ngày kia", thứ 2 đến thứ 6. Ngày người dùng vừa nói thắng ngày đang nhớ. "Cuối tuần này 2N1Đ" ra đúng thứ Bảy đến Chủ nhật. Hỏi thời tiết một ngày không kéo dài ngày về của chuyến.
+- Lịch thời gian thực (`calendar.py`) và ngày lễ (`holidays.v1.yaml`, Tết và Giỗ Tổ 2026–2030; ngày nào chưa đối chiếu web thì đã ghi chú) được đưa vào Controller, Consultant, Responder. Spec: `docs/superpowers/specs/2026-11-26-tripi-lich-thoi-gian-design.md`.
+- Vé bay hôm nay bỏ các chuyến cất cánh trước giờ hiện tại + 120 phút. Thành phố có nhiều sân bay chọn sân bay chính (TP.HCM→SGN…).
+- Tìm tiếp mà tin nhắn không nêu nơi thì tìm theo nơi đang nói, hết thẻ lạc đề. Tên thẻ không còn bị lặp.
+- Test đổi kỳ vọng: 3 dòng `test_ambiguous_airports_only_offer_connected_pairs` (Sài Gòn, Đà Nẵng giờ chọn sân bay chính). Mock nhận thêm kwarg `now`.
+- Kết quả: ruff, format, pyright sạch; pytest 1384 pass, 7 skip; eval ci 194/194. Eval live/chain trước/sau **chưa chạy xong** (Bảo cho dừng); lệnh ở mục "Cách kiểm lại".
+- Việc của Bảo: kiểm ngày âm lịch có ghi chú `chưa đối chiếu` trong `holidays.v1.yaml`, kiểm bảng sân bay chính với dữ liệu Core.
+
 ## Ảnh / video
 
 - Không đổi giao diện; FE không sửa.
