@@ -86,7 +86,11 @@ def test_higher_drops_remembered_cap():
     understood = Understanding(
         intent="find_stay", price_relative="higher", price_max_per_night=500_000
     )
-    refined = refine_stay_filters(understood, shown_stays(300_000, 450_000))
+    refined = refine_stay_filters(
+        understood,
+        shown_stays(300_000, 450_000),
+        remembered=TripContext(price_max_per_night=500_000),
+    )
     assert refined.price_min_per_night == 450_001
     assert refined.price_max_per_night is None
     assert refined.stay_sort == "price_asc"
@@ -97,22 +101,38 @@ def test_higher_keeps_explicit_cap_above_new_floor():
     understood = Understanding(
         intent="find_stay", price_relative="higher", price_max_per_night=2_000_000
     )
-    refined = refine_stay_filters(understood, shown_stays(450_000))
+    refined = refine_stay_filters(understood, shown_stays(450_000), remembered=TripContext())
     assert (refined.price_min_per_night, refined.price_max_per_night) == (450_001, 2_000_000)
 
 
 def test_lower_sets_cap_below_cheapest():
     understood = Understanding(intent="find_stay", price_relative="lower")
-    refined = refine_stay_filters(understood, shown_stays(300_000, 450_000))
+    refined = refine_stay_filters(
+        understood, shown_stays(300_000, 450_000), remembered=TripContext()
+    )
     assert refined.price_max_per_night == 299_999
     assert refined.stay_sort == "price_desc"
 
 
 def test_relative_without_prices_only_sorts():
     refined = refine_stay_filters(
-        Understanding(intent="find_stay", price_relative="higher"), shown_stays(None)
+        Understanding(intent="find_stay", price_relative="higher"),
+        shown_stays(None),
+        remembered=TripContext(),
     )
     assert refined.stay_sort == "price_desc" and refined.price_min_per_night is None
+
+
+def test_lower_drops_remembered_floor():
+    understood = Understanding(
+        intent="find_stay", price_relative="lower", price_min_per_night=450_001
+    )
+    refined = refine_stay_filters(
+        understood,
+        shown_stays(450_001, 600_000),
+        remembered=TripContext(price_min_per_night=450_001),
+    )
+    assert refined.price_min_per_night is None and refined.price_max_per_night == 450_000
 
 
 def test_stay_search_sends_filters_to_core():
@@ -205,3 +225,5 @@ def test_turn_higher_after_capped_search():
     params = dict(core.calls)["/api/stays"]
     assert params["priceMin"] == "450001" and "priceMax" not in params
     assert answer.kind == "no_result"
+    assert "đắt hơn" in answer.text and "450.000đ" in answer.text
+    assert answer.suggestions == ["Xem căn rẻ hơn", "Đổi ngày"]

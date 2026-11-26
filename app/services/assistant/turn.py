@@ -411,7 +411,9 @@ class Turn:
         return Answer(kind="clarify", text=planner.STAY_DATE_QUESTION)
 
     async def _stay(self, parsed: Understanding) -> Answer:
-        parsed = self.parsed = refine_stay_filters(parsed, self.memory.last_cards)
+        parsed = self.parsed = refine_stay_filters(
+            parsed, self.memory.last_cards, remembered=self.memory
+        )
         is_one_night_assumed = parsed.check_out is None and not parsed.nights
         dates = self._dates_or_question(parsed)
         if isinstance(dates, Answer):

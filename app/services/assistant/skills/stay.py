@@ -8,6 +8,7 @@ from app.services.assistant.schemas import (
     CardRef,
     Places,
     Stays,
+    TripContext,
     Understanding,
 )
 
@@ -19,7 +20,9 @@ SORT_PHRASE = {
 }
 
 
-def refine_stay_filters(understood: Understanding, shown: list[CardRef]) -> Understanding:
+def refine_stay_filters(
+    understood: Understanding, shown: list[CardRef], *, remembered: TripContext
+) -> Understanding:
     """Turn "đắt hơn" / "rẻ hơn" into a price bound taken from the cards on screen."""
     refined = understood.model_copy()
     prices = [c.price for c in shown if c.kind == "stay" and c.price is not None]
@@ -27,16 +30,17 @@ def refine_stay_filters(understood: Understanding, shown: list[CardRef]) -> Unde
     if relative == "higher":
         if prices:
             refined.price_min_per_night = max(prices) + 1
-            # shortcut: a cap under twice the new floor is read as the old cap that boxed the
-            # shown cards in; a wider one is kept as the user's own. Needs a flag if it misfires.
-            if refined.price_max_per_night and refined.price_max_per_night <= 2 * (max(prices) + 1):
+            # A cap equal to the remembered one came from memory, not from this message.
+            cap = refined.price_max_per_night
+            if cap and (cap == remembered.price_max_per_night or cap <= max(prices) + 1):
                 refined.price_max_per_night = None
         if refined.stay_sort == "none":
             refined.stay_sort = "price_asc" if prices else "price_desc"
     elif relative == "lower":
         if prices:
             refined.price_max_per_night = min(prices) - 1
-            if refined.price_min_per_night and refined.price_min_per_night >= min(prices) - 1:
+            floor = refined.price_min_per_night
+            if floor and (floor == remembered.price_min_per_night or floor >= min(prices) - 1):
                 refined.price_min_per_night = None
         if refined.stay_sort == "none":
             refined.stay_sort = "price_desc" if prices else "price_asc"
@@ -89,15 +93,15 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
     ][:5]
     if not stays:
         if understood.price_relative in {"higher", "lower"}:
-            word = "đắt" if understood.price_relative == "higher" else "rẻ"
+            is_higher = understood.price_relative == "higher"
+            bound = understood.price_min_per_night if is_higher else understood.price_max_per_night
+            amount = f" {vnd(bound + (-1 if is_higher else 1))}/đêm" if bound else ""
             return Answer(
                 kind="no_result",
-                text=f"Ngày đó chưa có chỗ nào còn phòng {word} hơn các căn vừa rồi, "
-                f"đây đã là nhóm {'cao' if word == 'đắt' else 'thấp'} nhất Tripi thấy.",
-                suggestions=[
-                    "Xem căn rẻ hơn" if word == "đắt" else "Xem căn đắt hơn",
-                    "Đổi ngày",
-                ],
+                text=f"Ngày đó chưa có chỗ nào còn phòng {'đắt' if is_higher else 'rẻ'} hơn"
+                f"{amount or ' các căn vừa rồi'}, "
+                f"đây đã là nhóm {'cao' if is_higher else 'thấp'} nhất Tripi thấy.",
+                suggestions=["Xem căn rẻ hơn" if is_higher else "Xem căn đắt hơn", "Đổi ngày"],
             )
         if cap:
             return Answer(
