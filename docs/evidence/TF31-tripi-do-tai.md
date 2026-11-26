@@ -51,18 +51,43 @@ Một instance ai-service (bản `prod`, 1 process) và core-api local. Tổng 1
 ### Giới hạn của bài đo
 - Chạy trên laptop, core-api bản dev, dữ liệu Core local. Nút thắt nằm ở LLM nên kết luận vẫn dùng được, nhưng chưa thay được bài đo trên VM staging.
 - Chain viết cho ngày 16/11, server chạy ngày 26/11, nên vài lượt có ngày ra câu hỏi lại thay vì tìm kiếm.
-- Không biết hạng giới hạn RPM/TPM của tài khoản OpenAI. 429 cho thấy trần thật đang ở quanh 6–9 lượt/giây.
+- Không biết hạng giới hạn RPM/TPM của tài khoản OpenAI. Xem lần đo sau khi sửa bên dưới: trần thật vào khoảng 3–4 lượt/giây kéo dài.
 - Mỗi giai đoạn chỉ 1–2 phút. Chưa chạy bài kéo dài (soak).
 
+## Sửa 429 và breaker (commit `3f06109`)
+- **Breaker** (`app/core/breaker.py`): khi breaker đang mở, một cuộc gọi gửi *trước* lúc mở mà trả về thành công không còn đóng breaker lại. Breaker giữ mở đúng `open_seconds`; hết giờ thì cuộc gọi đầu tiên thành công mới đóng.
+- **429 ở đường chat** (`GuardedLlmClient.agenerate`):
+  - 429 do bị giới hạn tốc độ thì không tính là lỗi của breaker.
+  - Nếu `retry-after-ms` / `retry-after` ≤ 2 giây (không có header thì chờ 1 giây), chờ rồi thử lại **một** lần. Lâu hơn thì bỏ ngay, lượt đó dùng câu dự phòng như cũ, vì cả lượt chỉ có 12 giây.
+  - 429 `insufficient_quota` (hết tiền ở OpenAI) vẫn tính là lỗi, vì đó là sự cố thật.
+  - Đường sync của worker tóm tắt giữ nguyên: adapter đã tự thử lại 429.
+- 7 test mới trong `tests/test_breaker.py`.
+
+### Đo lại sau khi sửa
+Lệnh: `--stages 4:60,6:120,8:60 --budget-usd 0.8`. Tổng 1.406 lượt, 0,46 USD.
+
+| Mục tiêu (lượt/s) | Thật | Cùng lúc tối đa | done% | full% | Controller 429 | 503 | Breaker mở |
+|---|---|---|---|---|---|---|---|
+| 4 | 3,0 | 19 | 100 | 99,4 | 0 | 0 | 0 |
+| 6 | 5,8 | 24 | 100 | 78,1 | 148 | 0 | 0 |
+| 8 | 7,4 | 24 | 100 | 42,7 | 253 | 0 | 0 |
+
+So với lần đầu (mức 6 lượt/giây: 19 lượt bị 503, breaker mở 34 lần, full 66,8%):
+- **Breaker không mở lần nào.** Lượt bị 429 chỉ ảnh hưởng chính lượt đó, không kéo người khác mất LLM theo.
+- **Không còn 503:** lượt bị 429 kết thúc nhanh nên số lượt chạy cùng lúc dừng ở 24.
+- **Trần thật là hạn mức tài khoản OpenAI.** Chia theo cửa sổ 15 giây, số lượt Controller `ok` đứng yên ở khoảng **47 mỗi 15 giây (~3,1 lượt/giây)** khi tải vượt mức đó. 429 bắt đầu sau khoảng 2 phút ở 5–6 lượt/giây, giống giới hạn token theo phút (TPM).
+  - Thử lại một lần không vượt được trần này. Script đo phía client nên không đếm được bao nhiêu lượt được cứu nhờ thử lại.
+  - Vì vậy sức chịu bền vững của **cả hệ thống** (mọi instance dùng chung key) khoảng **3–4 lượt/giây**, tức ~120–160 người đang chat với giả định 40 giây một tin.
+
 ## Việc còn lại (đề xuất, chưa làm)
-1. **Xử lý 429 riêng:** đọc `Retry-After`, thử lại một lần có chờ, hoặc giới hạn số cuộc gọi Controller cùng lúc để không vượt giới hạn của nhà cung cấp, thay vì đẩy cả lượt sang câu dự phòng.
-2. **Breaker giữ trạng thái mở cho đúng** khi có nhiều cuộc gọi đang bay (bỏ qua `record_success` của cuộc gọi bắt đầu trước lúc mở). Cân nhắc không đếm 429 như lỗi sập.
-3. **Xem hạng giới hạn tài khoản OpenAI** trên dashboard. Nếu dự kiến vượt khoảng 4 lượt/giây thì nâng hạng trước khi mở rộng số instance, vì nhiều instance vẫn dùng chung một hạn mức key.
-4. Chạy lại bài này trên VM giống staging (cần anh Phong).
+1. **Xem hạn mức RPM/TPM của key OpenAI** trên dashboard, đối chiếu với ~3 lượt/giây ở trên. Muốn hơn thì nâng hạng. Thêm instance không giúp được, vì cùng một key.
+2. **Giảm token mỗi lượt Controller** (khoảng 15k đầu vào/lượt): kéo dài trần TPM trực tiếp. Cần đo lại eval nếu đổi prompt.
+3. Chạy lại bài này trên VM giống staging (cần anh Phong).
 
 ## Kết quả kiểm tra
-- `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest -q`: sạch, pyright 0 lỗi, **1416 pass, 7 skip**.
-- Không đổi code của app, prompt, eval case. Không cần chạy lại eval ci.
+- `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest -q`: sạch, pyright 0 lỗi, **1423 pass, 7 skip**.
+- `uv run python -m evals.assistant.run` (ci): **194/194**.
+- Không đổi prompt, eval case.
 
 ## Cách kiểm lại
 Xem `evals/load/README.md`. Smoke: `uv run python -m evals.load.run --stages 0.1:60 --budget-usd 0.1`.
