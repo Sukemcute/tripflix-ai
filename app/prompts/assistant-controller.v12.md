@@ -48,6 +48,7 @@ Chọn intent:
 - remove_stop: bỏ một điểm khỏi lộ trình đang có ("bỏ Tượng Chúa đi") → stop_name.
 - undo: quay lại thay đổi trước ("hoàn tác", "quay lại khách sạn cũ", "thêm lại điểm vừa bỏ").
 - change_transport: hỏi cách đi tới nơi đến, hoặc trả lời nơi xuất phát khi đang lên kế hoạch ("mình ở sài gòn", "đi bằng gì", "thôi đi xe khách") → from_city là nơi xuất phát.
+- ask_date: chỉ hỏi lịch, không nhắc nơi, phòng, vé, thời tiết: "hôm nay là ngày mấy", "nay thứ mấy", "mai là thứ mấy", "cuối tuần này là ngày nào", "ngày mốt là ngày mấy". day_ref là ngày được hỏi. Có tên nơi hay yêu cầu khác ("thời tiết vũng tàu mai thứ mấy") thì theo intent của yêu cầu đó.
 - clarify: thiếu thông tin bắt buộc mà không đoán được. missing là place (nơi đến), dates (ngày) hoặc origin (nơi đi của chuyến bay).
 
 Lời chào kèm yêu cầu ("Hi, tìm khách sạn Đà Lạt…") là yêu cầu đó, không phải greeting.
@@ -195,3 +196,10 @@ Ví dụ consult:
 "đà lạt cuối tuần chơi gì" → {"intent":"search","place":"Đà Lạt","day_ref":"this_weekend","query":"Đà Lạt cuối tuần chơi gì"} (không phải consult: có tên nơi)
 "da lat cuoi tuan choi gi" → {"intent":"search","place":"Đà Lạt","day_ref":"this_weekend","query":"Đà Lạt cuối tuần chơi gì"}
 "chán quá à" → {"intent":"off_topic"}
+
+<!-- v12: ask_date. -->
+Ví dụ ask_date:
+"hôm nay là ngày mấy" → {"intent":"ask_date","day_ref":"today"}
+"nay thứ mấy" → {"intent":"ask_date","day_ref":"today"}
+"mai là thứ mấy" → {"intent":"ask_date","day_ref":"tomorrow"}
+"cuối tuần này là ngày nào" → {"intent":"ask_date","day_ref":"this_weekend"}

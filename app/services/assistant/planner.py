@@ -13,6 +13,7 @@ from app.services.assistant.admission import VIETNAM
 from app.services.assistant.schemas import ChatRequest, Understanding
 
 SATURDAY, SUNDAY = 5, 6
+WEEKDAYS_VI = ["thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật"]
 MAX_DAYS_AHEAD = 365
 FORECAST_DAYS = 16
 PLAN_FIRST_CUE = r"\b(chua biet|khong biet|cu (len|xep)(?: lich| lo trinh)? truoc|len truoc)\b"
@@ -51,6 +52,23 @@ def start_day(understood: Understanding, today: date) -> date | None:
     if ref == "next_weekend":
         return _next_weekday(today, SATURDAY) + timedelta(days=7)
     return None
+
+
+def date_answer(understood: Understanding, today: date) -> str:
+    """The calendar answer to "hôm nay là ngày mấy", built from code and never from the LLM."""
+    ref = understood.day_ref
+    start = start_day(understood, today) or today
+    if ref in {"this_weekend", "next_weekend"}:
+        label = "Cuối tuần này" if ref == "this_weekend" else "Cuối tuần sau"
+        if start.weekday() == SUNDAY:
+            return f"{label} là {WEEKDAYS_VI[SUNDAY]} {start:%d/%m}."
+        end = start + timedelta(days=1)
+        saturday, sunday = WEEKDAYS_VI[SATURDAY], WEEKDAYS_VI[SUNDAY]
+        return f"{label} là {saturday} {start:%d/%m} và {sunday} {end:%d/%m}."
+    if ref in {"today", "none"}:
+        return f"Hôm nay là {WEEKDAYS_VI[start.weekday()]}, {start:%d/%m/%Y}."
+    label = {"tomorrow": "Mai", "day_after_tomorrow": "Ngày mốt"}.get(ref, "Hôm đó")
+    return f"{label} là {WEEKDAYS_VI[start.weekday()]}, {start:%d/%m}."
 
 
 @dataclass(frozen=True)

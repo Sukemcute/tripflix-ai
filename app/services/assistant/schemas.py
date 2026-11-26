@@ -210,6 +210,8 @@ class Understanding(WireModel):
         "ask_why",
         # v12 (2026-11-26): wants to go out, no place yet: Tripi advises where (TF31)
         "consult",
+        # v12: "hôm nay là ngày mấy": answered from the calendar, no Core call
+        "ask_date",
     ]
     query: str = Field(default="", max_length=200)
     missing: Literal["place", "dates", "none"] = "none"

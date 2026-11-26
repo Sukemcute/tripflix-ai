@@ -20,7 +20,7 @@ from app.clients.llm.openai import OpenAILlmClient
 from app.core.breaker import CircuitBreaker
 from app.core.config import get_chat_settings
 from app.services.assistant.controller import ControllerOutput, apply_guards, to_understanding
-from app.services.assistant.planner import today_in_vietnam
+from app.services.assistant.planner import WEEKDAYS_VI, today_in_vietnam
 from app.services.assistant.schemas import ChatRequest, Understanding
 from app.services.assistant.turn import REEL_KINDS
 from app.services.summary.injection import match_injection
@@ -34,9 +34,6 @@ PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v12.md"
 
 class LlmNotConfiguredError(Exception):
     pass
-
-
-WEEKDAYS_VI = ["thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật"]
 
 
 def build_understanding_input(

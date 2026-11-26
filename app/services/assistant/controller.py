@@ -28,6 +28,15 @@ DAY_CUES = {
     "tomorrow": r"\b(mai|ngay mai)\b",
     "yesterday": r"\b(hom qua)\b",
 }
+# "hôm nay là ngày mấy": only the calendar is asked, so code answers and no Skill runs.
+DATE_QUESTION = r"\b(la )?(ngay|thu) (may|nao|bao nhieu)\b"
+ASKED_DAYS = {
+    "next_weekend": r"\bcuoi tuan sau\b",
+    "this_weekend": r"\bcuoi tuan\b",
+    "tomorrow": r"\b(ngay )?mai\b",
+    "today": r"\b(hom nay|(?<!tuan )nay)\b",
+}
+NOT_CALENDAR_CUE = r"\b(reel|video|clip|thoi tiet|du bao)\b"
 EXPLICIT_WEATHER_DAYS = {"hom nay": "today", "ngay mai": "tomorrow", "hom qua": "yesterday"}
 CALENDAR_DATE = r"\b\d{1,2}(?:\s*[/.-]\s*|\s+th[aá]ng\s+)\d{1,2}\b"
 GREETING = r"(?:hi+|hell?o+|hey+|(?:xin )?chao(?: ban| tripi)?)"
@@ -211,6 +220,8 @@ class ControllerOutput(BaseModel):
         "ask_why",
         # v12 (2026-11-26): wants to go out, no place yet: advise where (TF31)
         "consult",
+        # v12: "hôm nay là ngày mấy": answered from the calendar, no Core call
+        "ask_date",
     ]
     query: str
     missing: Literal["place", "dates", "origin", "none"]
@@ -635,6 +646,18 @@ def apply_guards(
         return out.model_copy(update={"intent": "confirm_booking" if has_booking else "ack"})
     if re.fullmatch(ACK_ONLY, text):
         return out.model_copy(update={"intent": "ack"})
+    asked_day = next((ref for ref, cue in ASKED_DAYS.items() if re.search(cue, text)), None)
+    if (
+        asked_day
+        and re.search(DATE_QUESTION, text)
+        and not named_place(text)
+        and not re.search(rf"{STAY_CUE}|{FLIGHT_CUE}|{WEATHER_CUE}|{NOT_CALENDAR_CUE}", text)
+    ):
+        return out.model_copy(
+            update={"intent": "ask_date", "day_ref": asked_day, "start": None, "end": None}
+        )
+    if out.intent == "ask_date":  # the model saw a date question the message does not hold
+        out = out.model_copy(update={"intent": "clarify"})
     fixed: dict = {}
     if out.day_ref in DAY_CUES and not re.search(DAY_CUES[out.day_ref], text):
         fixed["day_ref"] = "none"

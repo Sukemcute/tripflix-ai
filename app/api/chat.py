@@ -38,7 +38,7 @@ from app.services.assistant.admission import (
 from app.services.assistant.planner import today_in_vietnam
 from app.services.assistant.responder import respond, split_for_stream
 from app.services.assistant.schemas import TripContext
-from app.services.assistant.turn import Turn
+from app.services.assistant.turn import DATE_FACT, Turn
 from app.services.assistant.understand import LlmNotConfiguredError, understand
 from app.services.summary.pii import mask_pii
 from app.services.usage_events import ChatTurn, ChatTurnEvent, ChatUsage, UsageEvent, publish_usage
@@ -279,7 +279,10 @@ async def run_turn(
                 is_llm_on
                 and settings.chat_responder_enabled
                 and parsed is not None
-                and not any(fact.get("type") == consultant.CONSULT_FACT for fact in answer.facts)
+                and not any(
+                    fact.get("type") in {consultant.CONSULT_FACT, DATE_FACT}
+                    for fact in answer.facts
+                )
                 and answer.kind in {"answer", "no_result", "clarify"}
                 and (
                     social.is_off_topic_answer(answer)

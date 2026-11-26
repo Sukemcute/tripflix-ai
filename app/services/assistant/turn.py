@@ -74,6 +74,7 @@ PLAN_INTENTS = {
     "confirm_booking",
 }
 REEL_KINDS = {"video", "plan", "post"}
+DATE_FACT = "date_info"
 DISCOVERY_SUGGESTIONS = ["Thời tiết ở đó", "Cần mang gì?", "Tìm chỗ ở"]
 NEEDS_REEL = Answer(
     kind="no_result",
@@ -248,6 +249,8 @@ class Turn:
             return await self._discover()
         if parsed.intent == "consult":
             return await self._consult()
+        if parsed.intent == "ask_date":
+            return self._date_info(parsed)
         fixed = self._fixed(parsed)
         if fixed is not None:
             return fixed
@@ -276,6 +279,8 @@ class Turn:
             return TripContext()
         if isinstance(self.short_stay_dates, planner.DateProblem):
             return self.memory
+        if self.parsed is not None and self.parsed.intent == "ask_date":
+            return self.memory  # the plan question still waiting is finished next turn
         # A Stage B step already wrote the plan it changed.
         memory = (self.planned_trip or self.memory).model_copy(deep=True)
         parsed = self.parsed
@@ -385,6 +390,12 @@ class Turn:
         else:
             question = "Bạn muốn mình tìm gì cho chuyến đi này?"
         return Answer(kind="clarify", text=question)
+
+    def _date_info(self, parsed: Understanding) -> Answer:
+        text = planner.date_answer(parsed, self.today)
+        if self.memory.awaiting and self.memory.place:
+            text += f" Mình xếp tiếp chuyến {self.memory.place} cho bạn nha?"
+        return Answer(kind="answer", text=text, facts=[{"type": DATE_FACT}])
 
     # ---- consult: where to go when the user has no destination
 
