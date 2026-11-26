@@ -6,6 +6,7 @@ only destinations of the curated catalog, and every sentence and chip passes the
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -19,6 +20,7 @@ from app.services.assistant.understand import get_role_llm
 from app.services.assistant.verifier import verify
 from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
+from app.services.summary.vi_text import normalize_text
 
 logger = logging.getLogger(__name__)
 PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-consultant.v1.md"
@@ -31,6 +33,32 @@ FALLBACK_TEXT = (
     "Bạn đang muốn một chuyến yên tĩnh để nghỉ ngơi hay sôi động cho vui? Thích biển hay núi nè?"
 )
 FALLBACK_CHIPS = ["Yên tĩnh, chill", "Sôi động", "Biển", "Núi"]
+WORD = re.compile(r"[^\W\d_]+")
+SENTENCE_END = re.compile(r"[.!?…]\s*$")
+# Capitalised words that are never a place (pronouns, the app's names).
+NOT_PLACES = {"tripi", "tripflix", "ban", "minh"}
+
+
+def _names_outside(texts: list[str], grounded: set[str]) -> list[str]:
+    """Keep the texts whose capitalised words (the first of a sentence aside) are all known.
+
+    Verifier V3 only judges runs of two or more capitalised words, so a lone "Bali" passes it.
+    """
+    kept = []
+    for text in texts:
+        is_clean = True
+        for word in WORD.finditer(text):
+            if not word.group()[0].isupper() or SENTENCE_END.search(text[: word.start()]):
+                continue
+            if word.start() == len(text) - len(text.lstrip()):
+                continue
+            folded = normalize_text(word.group())
+            if folded and folded not in grounded | NOT_PLACES:
+                is_clean = False
+                break
+        if is_clean:
+            kept.append(text)
+    return kept
 
 
 class ConsultOutput(BaseModel):
@@ -105,10 +133,21 @@ async def consult(
     ids = list(dict.fromkeys(i for i in output.destination_ids if i in by_id))[:MAX_SUGGESTIONS]
     suggested = [by_id[i] for i in ids]
     prefs_fact = {"prefs": merge_prefs(trip.prefs, output.prefs).model_dump(mode="json")}
-    facts = [_catalog_entry(d) for d in suggested] if suggested else catalog
-    facts = [*facts, prefs_fact]
+    # The whole catalog grounds the words: a sentence may mention a second catalog place.
+    facts = [*catalog, prefs_fact]
     kwargs = {"today": today, "extra_grounding": f"{trip.origin_city} {trip.place}"}
+    known = " ".join(
+        [
+            *(f"{entry['name']} {' '.join(entry['highlights'])}" for entry in catalog),
+            question,
+            *(turn.text for turn in request.history[-HISTORY_MESSAGES:]),
+            trip.origin_city,
+            trip.place,
+        ]
+    )
+    grounded = set(normalize_text(known).split())
     sentences, dropped = verify(output.sentences, facts, set(), question, **kwargs)
+    sentences = _names_outside(sentences, grounded)
     if dropped:
         logger.info("chat.verifier.dropped", extra={"rules": dict(dropped)})
     if not sentences:
@@ -119,7 +158,8 @@ async def consult(
         chips = _code_chips(suggested[0].name)
     else:
         short = [c for c in output.chips if len(c) <= MAX_CHIP_CHARS]
-        chips = verify(short, facts, set(), question, **kwargs)[0][:MAX_CHIPS]
+        chips = _names_outside(verify(short, facts, set(), question, **kwargs)[0], grounded)
+        chips = chips[:MAX_CHIPS]
     answer = Answer(
         kind="answer",
         text=" ".join(sentences),

@@ -208,6 +208,38 @@ def test_consult_drops_sentence_with_place_outside_catalog(monkeypatch) -> None:
     assert answer.text == "Quy Nhơn có Eo Gió nè."
 
 
+def test_consult_drops_single_word_place_outside_catalog(monkeypatch) -> None:
+    answer, _, _ = run_consult(
+        monkeypatch,
+        sentences=["Mình gợi ý Bali nha.", "Quy Nhơn yên tĩnh lắm nè."],
+        destination_ids=["quy-nhon"],
+    )
+    assert answer.text == "Quy Nhơn yên tĩnh lắm nè."
+    asking, _, _ = run_consult(
+        monkeypatch, chips=["Biển nha", "thử Jeju xem"], sentences=["Bạn thích gì nè?"]
+    )
+    assert asking.suggestions == ["Biển nha"]
+
+
+def test_consult_keeps_mention_of_other_catalog_place(monkeypatch) -> None:
+    answer, _, _ = run_consult(
+        monkeypatch,
+        sentences=["Quy Nhơn gần Phú Yên, đi kết hợp được nè."],
+        destination_ids=["quy-nhon"],
+    )
+    assert answer.text == "Quy Nhơn gần Phú Yên, đi kết hợp được nè."
+
+
+def test_consult_keeps_place_user_named(monkeypatch) -> None:
+    answer, _, _ = run_consult(
+        monkeypatch,
+        message="muốn đi Bali",
+        sentences=["Bali thì Tripi chưa hỗ trợ, trong nước có Phú Quốc nè."],
+        destination_ids=["phu-quoc"],
+    )
+    assert answer.text == "Bali thì Tripi chưa hỗ trợ, trong nước có Phú Quốc nè."
+
+
 def test_consult_all_dropped_uses_fallback(monkeypatch, caplog) -> None:
     with caplog.at_level(logging.INFO):
         answer, _, _ = run_consult(monkeypatch, sentences=["Đi Bali đi bạn."], chips=["Biển nha"])
