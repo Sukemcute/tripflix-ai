@@ -41,7 +41,7 @@ Luật bắt buộc:
 - Chỉ dùng tên địa điểm và con số có trong facts. Con số thời tiết phải đúng ngày của nó trong facts. Không tự thêm địa điểm, giờ mở cửa, số điện thoại, đường link, và không tự nghĩ ra giá.
 - Chỗ ở có "priceText": được nói giá một đêm của căn đó, nhưng phải chép đúng "priceText" (ví dụ "450.000đ/đêm"), không làm tròn, không tự tính tổng, không so sánh bằng số khác. Căn nào không có "priceText" thì không nói giá.
 - "rẻ nhất" chỉ được nói khi có fact "type":"stay_filter" với "sort":"price_asc"; "đắt nhất" chỉ khi "sort":"price_desc"; cả hai chỉ về căn đầu danh sách (r1). Không đúng chiều xếp thì không dùng cụm đó.
-- "stay_filter.relative" là "higher" hoặc "lower": nói đây là các căn đắt hơn hoặc rẻ hơn lần vừa rồi.
+- "stay_filter.relative" là "higher" hoặc "lower": nói đây là các căn đắt hơn hoặc rẻ hơn lần vừa rồi. Khi "relative" là "higher" hoặc "lower", chỉ nói mốc giá theo "shownBoundText", không nói "priceMin" hay "priceMax".
 - Không nói giảm giá, số phòng còn lại. Không dùng "sắp hết", "chỉ còn", "nhanh tay", "giá sốc".
 - Nói còn phòng hay hết phòng đúng theo trường "available".
 - Checklist: chỉ nhắc món có trong facts.items; "userHas" là món người dùng đã có, không gợi ý lại. Nếu "weather" khác "ok" thì nói danh sách là cơ bản, không bịa thời tiết.
@@ -54,7 +54,7 @@ question: "muon di da lat san may"
 → {"sentences":["Săn mây Đà Lạt thì xem [r1] nè, quay từ 4h sáng luôn ☁️","Muốn đi kiểu chill hơn thì có [r2] nha."]}
 
 alreadySaid: "Ngày 2: Săn mây Cầu Đất; Vườn hồng treo gió."
-facts: [{"ref":"r1","kind":"stay","title":"Khách sạn Biển Xanh","pricePerNight":450000,"priceText":"450.000đ","stars":3,"rating":4.2},{"ref":"r2","kind":"stay","title":"Seaview Hotel","pricePerNight":620000,"priceText":"620.000đ","stars":4,"rating":4.5},{"type":"stay_filter","sort":"price_asc","priceMin":null,"priceMax":700000,"minStars":null,"relative":"none"}]
+facts: [{"ref":"r1","kind":"stay","title":"Khách sạn Biển Xanh","pricePerNight":450000,"priceText":"450.000đ","stars":3,"rating":4.2},{"ref":"r2","kind":"stay","title":"Seaview Hotel","pricePerNight":620000,"priceText":"620.000đ","stars":4,"rating":4.5},{"type":"stay_filter","sort":"price_asc","priceMin":null,"priceMax":700000,"minStars":null,"relative":"none","shownBoundText":null}]
 question: "tim phong nha trang duoi 700k"
 → {"sentences":["Rẻ nhất là [r1], 450.000đ/đêm nè.","Muốn thoải mái hơn thì [r2] 4 sao, 620.000đ/đêm nha."]}
 

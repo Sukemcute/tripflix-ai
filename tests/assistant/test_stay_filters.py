@@ -248,6 +248,7 @@ def stay_facts(sort: str) -> list[dict]:
             "priceMax": None,
             "minStars": None,
             "relative": "none",
+            "shownBoundText": None,
         },
     ]
 
@@ -292,6 +293,7 @@ def test_stay_answer_facts_have_prices_and_filter():
             "priceMax": 500_000,
             "minStars": None,
             "relative": "none",
+            "shownBoundText": None,
         },
     ]
 
@@ -335,3 +337,30 @@ def test_verifier_drops_invented_price():
 def test_verifier_still_drops_scarcity_words(sentence):
     kept, dropped = verify([sentence], stay_facts("price_asc"), {"r1"}, "tim phong")
     assert kept == [] and dropped["V4_scarcity"] == 1
+
+
+def relative_answer_text(relative: str, price: int) -> str:
+    items = [{"hotelId": "h1", "name": "A", "unitPrice": price, "totalPrice": price}]
+    trip = TripContext(place="Nha Trang", last_cards=shown_stays(450_000))
+    core = FakeCore(PLACE | {"/api/stays": {"items": items}})
+    answer, _ = run_turn(
+        plan(
+            intent="find_stay", place="Nha Trang", start=dm(IN_5), nights=1, price_relative=relative
+        ),
+        core,
+        trip=trip,
+    )
+    assert answer.facts is not None
+    fact = next(f for f in answer.facts if f.get("type") == "stay_filter")
+    assert fact["shownBoundText"] is not None and fact["shownBoundText"] in answer.text
+    return answer.text
+
+
+def test_higher_text_names_shown_price():
+    text = relative_answer_text("higher", 700_000)
+    assert "đắt hơn 450.000đ/đêm" in text and "450.001" not in text
+
+
+def test_lower_text_names_shown_price():
+    text = relative_answer_text("lower", 300_000)
+    assert "rẻ hơn 450.000đ/đêm" in text and "449.999" not in text

@@ -114,14 +114,31 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
         return Answer(
             kind="no_result", text="Mình chưa tìm thấy chỗ ở còn phòng theo ngày đã chọn."
         )
+    # After "đắt hơn" the floor is the shown price + 1; say the shown price, not the bound.
+    relative = understood.price_relative
+    shown_bound = (
+        f"{vnd(floor - 1)}/đêm"
+        if relative == "higher" and floor
+        else f"{vnd(cap + 1)}/đêm"
+        if relative == "lower" and cap
+        else None
+    )
     return Answer(
         kind="answer",
         text=f"Đây là chỗ ở còn phòng {start:%d/%m}–{end:%d/%m} cho {understood.adults} người"
         + "".join(
             f", {phrase}"
             for phrase in (
-                f"dưới {vnd(cap)}/đêm" if cap else "",
-                f"trên {vnd(floor)}/đêm" if floor else "",
+                f"rẻ hơn {shown_bound}"
+                if relative == "lower" and shown_bound
+                else f"dưới {vnd(cap)}/đêm"
+                if cap
+                else "",
+                f"đắt hơn {shown_bound}"
+                if relative == "higher" and shown_bound
+                else f"trên {vnd(floor)}/đêm"
+                if floor
+                else "",
                 f"từ {stars} sao" if stars else "",
                 SORT_PHRASE.get(understood.stay_sort, ""),
             )
@@ -162,7 +179,8 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
                 "priceMin": floor,
                 "priceMax": cap,
                 "minStars": stars,
-                "relative": understood.price_relative,
+                "relative": relative,
+                "shownBoundText": shown_bound,
             }
         ],
     )
