@@ -31,6 +31,8 @@ PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-responder.v5.md"
 HISTORY_MESSAGES = 4
 TITLE_CHARS = 80  # titles are user-written: keep them short in the prompt
 INFO_CARDS = {"itinerary", "weather", "checklist", "summary"}
+FIXED_KINDS = {"clarify", "no_result"}
+FIXED_MAX_SENTENCES = 2
 CALL_TO_ACTION = re.compile(r"\b(bam|xem chi tiet|xem them|the ben duoi|o the)\b")
 
 
@@ -41,6 +43,9 @@ class ResponderOutput(BaseModel):
 def build_facts(answer: Answer) -> list[dict]:
     if answer.facts:
         return answer.facts
+    if not answer.cards and answer.kind in FIXED_KINDS:
+        # Code's own sentence: the Responder only rewords it, never adds content.
+        return [{"type": "fixed", "answerKind": answer.kind, "fallback": answer.text}]
     # Search cards: name, kind and ref only; a skill that may name prices sets answer.facts.
     return [{"ref": c.ref, "kind": c.kind, "title": c.title[:TITLE_CHARS]} for c in answer.cards]
 
@@ -132,6 +137,12 @@ async def respond(
         ):
             return None, result
         return kept, result
+    if any(f.get("type") == "fixed" for f in facts):
+        kept = kept[:FIXED_MAX_SENTENCES]
+        is_question_missing = answer.kind == "clarify" and not any(
+            re.search(r"\?\W*$", s) for s in kept
+        )
+        return (None if not kept or is_question_missing else kept), result
     if answer.lead:
         return [answer.lead, *kept][:MAX_SENTENCES], result
     if not kept:
