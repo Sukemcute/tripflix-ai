@@ -1,0 +1,26 @@
+# Đo tải Tripi trên máy local (evals/load/run.py). Ghép SAU compose của tripflix-be, chạy từ gốc
+# tripflix-ai. Key và model LLM lấy từ .env của tripflix-ai (như khi chạy eval live), đọc sau
+# deploy/.env nên thắng khi trùng tên:
+#   docker compose --env-file ../tripflix-be/deploy/.env --env-file .env \
+#     -f ../tripflix-be/deploy/compose.yaml -f evals/load/compose.load.yaml \
+#     --profile be --profile ai up -d --build core-api ai-service
+# Chỉ dùng trên máy test.
+services:
+  ai-service:
+    build: { target: prod }  # như staging: fastapi run, không reload, không dev deps
+    environment:
+      CHAT_LLM_ENABLED: 'true'
+      # Tin X-Forwarded-For từ máy bắn tải: mỗi hội thoại là một khách (một IP) riêng.
+      FORWARDED_ALLOW_IPS: '*'
+      # Ngân sách cả hệ thống/ngày; script tự dừng theo --budget-usd trước khi chạm mức này.
+      CHAT_SYSTEM_DAILY_USD: ${LOAD_SYSTEM_DAILY_USD:-5}
+      # Compose của tripflix-be không truyền các biến này; trống thì code dùng mặc định.
+      CHAT_RESPONDER_MODEL: ${CHAT_RESPONDER_MODEL:-}
+      CHAT_RESPONDER_ENABLED: ${CHAT_RESPONDER_ENABLED:-}
+      CHAT_RESPONDER_PRICE_INPUT: ${CHAT_RESPONDER_PRICE_INPUT:-}
+      CHAT_RESPONDER_PRICE_CACHED_INPUT: ${CHAT_RESPONDER_PRICE_CACHED_INPUT:-}
+      CHAT_RESPONDER_PRICE_OUTPUT: ${CHAT_RESPONDER_PRICE_OUTPUT:-}
+      CHAT_LLM_TIMEOUT_SECONDS: ${CHAT_LLM_TIMEOUT_SECONDS:-}
+      CHAT_MAX_OUTPUT_TOKENS: ${CHAT_MAX_OUTPUT_TOKENS:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
