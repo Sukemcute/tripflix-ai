@@ -64,7 +64,7 @@ ROUND_TRIP_CUE = r"\b(khu hoi|(2|hai) chieu|chieu ve|round ?trip)\b"
 INFANT_CUE = r"\b(em be|so sinh|infants?)\b"
 STAY_CUE = (
     r"\b(ks|khach san|homestay|resort|nha nghi|villa|hostel|cho o|cho ngu|"
-    r"(con|dat|nhan|tra|thue) phong)\b"
+    r"(con|dat|nhan|tra|thue|tim|kiem|xem|book) phong)\b"
 )
 WEATHER_CUE = (
     r"\b(thoi tiet|du bao|nhiet do|co mua|mua (khong|k|ko)|troi mua|"
@@ -77,6 +77,12 @@ DAY_WORDS = {
 }  # fmt: skip
 SOCIAL_INTENTS = {"greeting", "thanks", "ack", "goodbye"}
 MAX_SOCIAL_WORDS = 6
+PLAN_VERB_CUE = (
+    r"\b(len|xep|lap|sap xep|lam)\b(?:\s+\w+){0,2}?\s+(lich trinh|lo trinh|lich|ke hoach)\b"
+)
+COMPARE_CUE = r"\b(dat|re|cao|thap|mac|sang|xin) hon\b|\bhon (nua|chut|ti)\b"
+NIGHTS_CUE = r"\b(\d{1,2}) dem\b|\b\d{1,2} ?n ?(\d{1,2}) ?d\b"
+PACK_ASK_CUE = r"\b(mang|mac|chuan bi|dem) (gi|nhung gi|theo gi)\b"
 IDENTITY_CUE = r"\b(la ai|(lam|giup) (duoc )?(gi|nhung gi)|biet lam gi)\b"
 # Live eval of v4 (16/11): slots the message states plainly but the model sometimes missed.
 FLIGHT_CUE = r"\b(bay|may bay|ve bay|chuyen bay|flight|san bay)\b"  # after "thu bay" is removed
@@ -636,6 +642,23 @@ def named_place(text: str) -> str | None:
     return None
 
 
+def date_question_ref(text: str) -> str | None:
+    """The day_ref a pure calendar question asks ("none" for a holiday); None if it is not one.
+
+    `text` is normalized. Shared by apply_guards and by Turn when the Controller failed.
+    """
+    asked_day = next((ref for ref, cue in ASKED_DAYS.items() if re.search(cue, text)), None)
+    holiday = holiday_cue(text)
+    if (
+        (asked_day or holiday)
+        and re.search(DATE_QUESTION, text)
+        and not named_place(text)
+        and not re.search(rf"{STAY_CUE}|{FLIGHT_CUE}|{WEATHER_CUE}|{NOT_CALENDAR_CUE}", text)
+    ):
+        return "none" if holiday else asked_day
+    return None
+
+
 def apply_guards(
     out: ControllerOutput,
     message: str,
@@ -675,27 +698,34 @@ def apply_guards(
         return out.model_copy(update={"intent": "confirm_booking" if has_booking else "ack"})
     if re.fullmatch(ACK_ONLY, text):
         return out.model_copy(update={"intent": "ack"})
-    asked_day = next((ref for ref, cue in ASKED_DAYS.items() if re.search(cue, text)), None)
-    holiday = holiday_cue(text)
-    if (
-        (asked_day or holiday)
-        and re.search(DATE_QUESTION, text)
-        and not named_place(text)
-        and not re.search(rf"{STAY_CUE}|{FLIGHT_CUE}|{WEATHER_CUE}|{NOT_CALENDAR_CUE}", text)
-    ):
+    if (asked_ref := date_question_ref(text)) is not None:
         return out.model_copy(
-            update={
-                "intent": "ask_date",
-                "day_ref": "none" if holiday else asked_day,
-                "start": None,
-                "end": None,
-            }
+            update={"intent": "ask_date", "day_ref": asked_ref, "start": None, "end": None}
         )
     if out.intent == "ask_date":  # the model saw a date question the message does not hold
         out = out.model_copy(update={"intent": "clarify"})
     fixed: dict = {}
     if out.day_ref in DAY_CUES and not re.search(DAY_CUES[out.day_ref], text):
         fixed["day_ref"] = "none"
+    if out.day_ref == "this_weekend" and re.search(r"\bcuoi tuan sau\b", text):
+        fixed["day_ref"] = (
+            "next_weekend"  # stay-02 read "cuối tuần sau" as this weekend 3/3 (26/11)
+        )
+    # Only when the model also sorted: a bare price_relative stays (existing filter tests).
+    if (
+        out.price_relative != "none"
+        and out.stay_sort != "none"
+        and not re.search(COMPARE_CUE, text)
+    ):
+        fixed["price_relative"] = (
+            "none"  # "xếp từ rẻ đến đắt" sorts; it is not "cheaper than shown"
+        )
+    if stated := re.search(NIGHTS_CUE, text):
+        nights = int(stated.group(1) or stated.group(2))
+        if out.nights != nights:
+            fixed["nights"] = nights
+            if out.end is not None:
+                fixed["end"] = None  # the end is rebuilt from the nights said
     if out.round_trip and not re.search(ROUND_TRIP_CUE, text):
         fixed["round_trip"] = False
     if out.children and not out.infants and re.search(INFANT_CUE, text):
@@ -832,6 +862,12 @@ def apply_guards(
         and (re.search(EDIT_CUE, text) or re.fullmatch(DURATION_ONLY, text))
     ):
         intent = "plan_trip"
+    if (
+        intent in {"search", "find_reel"}
+        and re.search(PLAN_VERB_CUE, text)
+        and not re.search(REEL_WORD_CUE, text)
+    ):
+        intent = "plan_trip"  # "Lên lịch trình Đà Nẵng 3n2đ" was search in the chain eval (26/11)
     if is_short and intent in {"clarify", "search", "refusal"} and re.search(WHY_CUE, text):
         intent = "ask_why"
     if intent == "ask_why" and not re.search(r"\b(tai sao|vi sao|sao|why)\b", text):
@@ -867,6 +903,21 @@ def apply_guards(
         intent = "weather"  # "Thời tiết Đà Lạt thứ Bảy" while a reel is open
     elif intent == "refusal" and re.search(IDENTITY_CUE, text):
         intent = "identity"  # "ban lam duoc gi" was refused 3/3
+    elif intent == "consult" and not out.place and re.search(IDENTITY_CUE, text):
+        intent = "identity"  # "ban lam duoc gi" was consult 3/3 (live 26/11)
+    elif (
+        intent in {"search", "consult"}
+        and re.search(PACK_ASK_CUE, text)
+        and not re.search(STAY_CUE, text)
+    ):
+        intent = "packing"  # "di vung tau hop thoi khong di bien, mang gi" was search (live 26/11)
+    elif (
+        intent == "change_transport"
+        and not in_plan
+        and (out.to_city or out.to_airport)
+        and re.search(FLIGHT_CUE, re.sub(r"\bthu bay\b", " ", text))
+    ):
+        intent = "find_flight"  # "3 ngày nữa mình bay ra hà nội từ sài gòn", no plan (live 26/11)
     elif (
         intent == "refusal"
         and (out.from_airport or out.from_city)
@@ -947,8 +998,19 @@ def apply_guards(
         if re.search(REEL_WORD_CUE, text):
             intent = "find_reel"
             fixed["reel_query"] = out.reel_query or out.query
+        elif has_reel and re.search(rf"{THIS_REEL}|{ITINERARY_DAY}", text):
+            # Only the words decide: the model sets uses_context_post on any ask in a reel.
+            # "ngày thứ hai đi đâu" in a reel: day 2 of its itinerary, not Monday (report-R15).
+            intent = "post_itinerary"
+            fixed["day_ref"] = "none"
         elif not origin and (place := named_place(text)):
-            intent = "search"
+            intent = (
+                "find_stay"
+                if re.search(STAY_CUE, text)
+                else "weather"
+                if re.search(WEATHER_CUE, text) and not re.search(PACKING_CUE, text)
+                else "search"
+            )
             fixed |= {"place": place, "query": out.query or message}
     if intent != out.intent:
         fixed["intent"] = intent
@@ -966,6 +1028,13 @@ def apply_guards(
         if len(explicit_days) == 1:
             # An explicit relative day in the latest message beats remembered or invented dates.
             fixed |= {"day_ref": explicit_days.pop(), "start": None}
+    if (
+        intent == "post_itinerary"
+        and has_reel
+        and out.reel_query
+        and normalize_text(out.reel_query) == text
+    ):
+        fixed["reel_query"] = ""  # the model copied the message; it is not a reel's name
     if intent == "post_itinerary" and out.itinerary_day is None:
         found = re.search(ITINERARY_DAY, text)
         if found:
@@ -1049,6 +1118,17 @@ def apply_guards(
         only = [o for o in out.packing_only if not re.fullmatch(ITEM_LIMIT, normalize_text(o))]
         if only != out.packing_only:
             fixed["packing_only"] = only
+    # The model pastes a prompt example ("gợi ý nơi đi chill") into other turns; search would
+    # follow it. Consult never reads the query, so it is left alone.
+    if (
+        fixed.get("intent", out.intent) != "consult"
+        and "goi y" not in text
+        and out.query
+        and re.match(r"goi y noi (di|den)\b", normalize_text(out.query))
+    ):
+        fixed["query"] = message
+        if normalize_text(out.reel_query) == normalize_text(out.query):
+            fixed["reel_query"] = message
     if is_unsafe(message) or (off_topic_kind(message) and is_harmless_off_topic(message, out)):
         fixed["intent"] = "refusal"
     return out.model_copy(update=fixed) if fixed else out

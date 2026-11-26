@@ -18,7 +18,7 @@ from app.services.assistant.consultant import (
     consult,
     fallback_consult_answer,
 )
-from app.services.assistant.controller import apply_guards
+from app.services.assistant.controller import DayMonth, apply_guards
 from app.services.assistant.destinations import destinations_by_id, merge_prefs
 from app.services.assistant.schemas import (
     Answer,
@@ -128,6 +128,46 @@ def test_consult_naming_a_place_becomes_search() -> None:
     assert guard("đi vũng tàu chơi gì", intent="consult").place == "Vũng Tàu"
     # an origin city is where they start, not where they want to go
     assert guard("từ sài gòn đi đâu chơi", intent="consult").intent == "consult"
+
+
+def test_tim_phong_with_place_is_find_stay() -> None:
+    message = "Tìm phòng Quy Nhơn"
+    assert guarded(message, intent="search", place="Quy Nhơn") == "find_stay"
+    awaiting = Awaiting(intent="consult", missing="place")
+    got = guarded(message, awaiting=awaiting, intent="search", place="Quy Nhơn")
+    assert got == "find_stay"
+
+
+def test_consult_with_place_and_stay_cue_is_find_stay() -> None:
+    got = guard("muốn đi đâu đó chill, tìm phòng đà lạt giúp mình", intent="consult")
+    assert (got.intent, got.place) == ("find_stay", "Đà Lạt")
+
+
+def test_consult_with_place_and_weather_cue_is_weather() -> None:
+    got = guard("đà lạt cuối tuần có mưa không", intent="consult")
+    assert (got.intent, got.place) == ("weather", "Đà Lạt")
+
+
+def test_reel_open_day_two_is_post_itinerary() -> None:
+    got = guard(
+        "ngay thu hai di dau",
+        has_reel=True,
+        intent="consult",
+        day_ref="monday",
+        uses_context_post=True,
+    )
+    assert (got.intent, got.itinerary_day, got.day_ref) == ("post_itinerary", 2, "none")
+
+
+def test_reel_open_weekend_ideas_stay_consult() -> None:
+    for uses_context_post in (False, True):  # the model sets the flag on any ask in a reel
+        got = guard(
+            "cuối tuần này đi đâu",
+            has_reel=True,
+            intent="consult",
+            uses_context_post=uses_context_post,
+        )
+        assert got.intent == "consult"
 
 
 def test_consult_without_place_stays_consult() -> None:
@@ -414,3 +454,96 @@ def test_stay_after_consult_still_asks_dates() -> None:
     memory = turn.next_trip(answer)
     _, stay, _ = run_turn(None, trip=memory, intent="find_stay")
     assert stay.kind == "clarify"
+
+
+def test_next_weekend_words_win_over_this_weekend() -> None:
+    message = "homestay da lat cuoi tuan sau"
+    got = guard(message, intent="find_stay", place="Đà Lạt", day_ref="this_weekend")
+    assert got.day_ref == "next_weekend"
+
+
+def test_copied_example_query_is_replaced_by_message() -> None:
+    message = "di vung tau hop thoi khong di bien, mang gi"
+    copied = "gợi ý nơi đi chill"
+    got = guard(message, intent="search", place="Vũng Tàu", query=copied, reel_query=copied)
+    assert (got.query, got.reel_query) == (message, message)
+
+
+def test_real_goi_y_query_is_kept() -> None:
+    got = guard(
+        "gợi ý chỗ đi chill ở đà lạt", intent="search", place="Đà Lạt", query="gợi ý nơi đi chill"
+    )
+    assert got.query == "gợi ý nơi đi chill"
+
+
+def test_what_can_you_do_is_identity_not_consult() -> None:
+    assert (
+        guard("ban lam duoc gi", intent="consult", query="gợi ý nơi đi chill").intent == "identity"
+    )
+
+
+def test_mang_gi_is_packing() -> None:
+    got = guard("di vung tau hop thoi khong di bien, mang gi", intent="search", place="Vũng Tàu")
+    assert (got.intent, got.place) == ("packing", "Vũng Tàu")
+
+
+def test_bay_ra_city_without_plan_is_find_flight() -> None:
+    message = "3 ngày nữa mình bay ra hà nội từ sài gòn"
+    plan = controller_plan(intent="change_transport", from_city="TP.HCM", to_city="Hà Nội")
+    assert apply_guards(plan, message, has_reel=False).intent == "find_flight"
+    planned = apply_guards(plan, message, has_reel=False, in_plan=True)
+    assert planned.intent == "change_transport"
+
+
+def test_len_lich_trinh_is_plan_trip() -> None:
+    got = guard(
+        "Lên lịch trình Đà Nẵng 3 ngày 2 đêm cuối tuần này",
+        intent="search",
+        place="Đà Nẵng",
+        query="gợi ý nơi đến cuối tuần",
+    )
+    assert got.intent == "plan_trip"
+    assert guard("lịch trình Phú Quốc 4n3d", intent="search", place="Phú Quốc").intent == "search"
+    reel = guard("reel lịch trình đà lạt", intent="find_reel", place="Đà Lạt")
+    assert reel.intent == "find_reel"
+
+
+def test_goi_y_noi_den_query_is_replaced_by_message() -> None:
+    message = "đi đà nẵng cuối tuần"
+    got = guard(message, intent="search", place="Đà Nẵng", query="gợi ý nơi đến cuối tuần")
+    assert got.query == message
+
+
+def test_sort_words_are_not_price_relative() -> None:
+    sort = guard(
+        "xếp từ rẻ đến đắt", intent="find_stay", stay_sort="price_asc", price_relative="lower"
+    )
+    assert (sort.stay_sort, sort.price_relative) == ("price_asc", "none")
+    cheaper = guard("tìm căn rẻ hơn", intent="find_stay", price_relative="lower")
+    assert cheaper.price_relative == "lower"
+    assert (
+        guard("xịn hơn nữa", intent="find_stay", price_relative="higher").price_relative == "higher"
+    )
+
+
+def test_stated_nights_win() -> None:
+    start = DayMonth(day=21, month=11)
+    end = DayMonth(day=22, month=11)
+    got = guard(
+        "ks vung tau 21/11 2 dem cho 2 nguoi",
+        intent="find_stay",
+        place="Vũng Tàu",
+        start=start,
+        end=end,
+        nights=1,
+    )
+    assert (got.nights, got.end) == (2, None)
+    tonight = guard("ks vung tau dem nay", intent="find_stay", nights=1)
+    assert tonight.nights == 1
+    short = guard("ks vung tau 21/11 3n2d", intent="find_stay", start=start, nights=3)
+    assert short.nights == 2
+
+
+def test_copied_message_is_not_a_reel_name() -> None:
+    got = guard("ngày 2 đi đâu", has_reel=True, intent="post_itinerary", reel_query="ngay 2 di dau")
+    assert got.reel_query == ""

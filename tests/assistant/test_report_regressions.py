@@ -259,7 +259,40 @@ def test_b16_a_start_day_alone_is_one_night_and_said_so():
     core = FakeCore(PLACE | {"/api/stays": stays(400_000)})
     answer, _ = run_turn(plan(intent="find_stay", place="Vũng Tàu", start=dm(IN_5)), core)
     assert dict(core.calls)["/api/stays"]["checkOut"] == IN_6.isoformat()
-    assert answer.lead and "1 đêm" in answer.lead and f"{IN_5:%d/%m}" in answer.lead
+    assert answer.lead is None and "1 đêm" in answer.text and f"{IN_5:%d/%m}" in answer.text
+    assert {"type": "assumed_stay", "nights": 1} == {
+        k: v for k, v in answer.facts[-1].items() if k in {"type", "nights"}
+    }
+
+
+def test_assumed_night_is_a_fact_not_a_lead():
+    core = FakeCore(PLACE | {"/api/stays": stays(400_000)})
+    answer, _ = run_turn(plan(intent="find_stay", place="Vũng Tàu", start=dm(IN_5)), core)
+    assert answer.lead is None and "tạm tính" not in answer.text
+    assert answer.facts[-1] == {
+        "type": "assumed_stay",
+        "nights": 1,
+        "checkIn": f"{IN_5:%d/%m}",
+        "checkOut": f"{IN_6:%d/%m}",
+    }
+    assert any(f.get("ref") for f in answer.facts[:-1])  # the stay facts are kept
+
+
+def test_assumed_night_fallback_text_without_responder():
+    core = FakeCore(PLACE | {"/api/stays": stays(400_000)})
+    answer, _ = run_turn(plan(intent="find_stay", place="Vũng Tàu", start=dm(IN_5)), core)
+    expected = f"Mình xem trước cho 1 đêm {IN_5:%d/%m}–{IN_6:%d/%m} nha, bạn ở mấy đêm"
+    assert answer.text.startswith(expected)
+
+
+def test_assumed_stay_dates_are_grounded_for_the_verifier():
+    facts = [
+        {"ref": "r1", "kind": "stay", "title": "Seaview"},
+        {"type": "assumed_stay", "nights": 1, "checkIn": "27/11", "checkOut": "28/11"},
+    ]
+    said = ["Mình xem phòng cho 1 đêm 27/11–28/11, bạn ở mấy đêm nè?"]
+    kept, dropped = verify(said, facts, {"r1"}, "tim phong vung tau", today=TODAY)
+    assert kept == said and not dropped
 
 
 # ---- constraints the user said are kept

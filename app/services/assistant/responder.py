@@ -27,7 +27,7 @@ from app.services.summary.schemas import strict_json_schema
 from app.services.summary.vi_text import normalize_text
 
 logger = logging.getLogger(__name__)
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-responder.v5.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-responder.v6.md"
 # The last messages, so "tại sao…" and small talk read the conversation (v3, 17/11).
 HISTORY_MESSAGES = 4
 TITLE_CHARS = 80  # titles are user-written: keep them short in the prompt
@@ -35,6 +35,9 @@ INFO_CARDS = {"itinerary", "weather", "checklist", "summary"}
 FIXED_KINDS = {"clarify", "no_result"}
 FIXED_MAX_SENTENCES = 2
 CALL_TO_ACTION = re.compile(r"\b(bam|xem chi tiet|xem them|the ben duoi|o the)\b")
+# "Bạn xem mấy video bên dưới nha": a short pointer to the reels, not an answer.
+VIDEO_POINTER = re.compile(r"\b(video|reel|clip)\b.*\bduoi\b")
+MAX_POINTER_WORDS = 8
 
 
 class ResponderOutput(BaseModel):
@@ -94,7 +97,9 @@ def _tidy(sentence: str) -> str:
 
 
 def _is_call_to_action(sentence: str) -> bool:
-    return bool(CALL_TO_ACTION.search(normalize_text(sentence)))
+    folded = normalize_text(sentence)
+    is_pointer = len(folded.split()) <= MAX_POINTER_WORDS and VIDEO_POINTER.search(folded)
+    return bool(CALL_TO_ACTION.search(folded) or is_pointer)
 
 
 async def respond(
@@ -146,7 +151,11 @@ async def respond(
         logger.info("chat.verifier.dropped", extra={"rules": dict(dropped)})
     # An info card is right under the text: its ref is dropped, never turned into
     # "thẻ bên dưới" in the middle of a sentence (Vũng Tàu report P2).
-    titles = {c.ref: "" if c.kind in INFO_CARDS else c.title for c in answer.cards}
+    # A reel's title is the author's caption: pasting it mid-sentence repeated what the
+    # model had just said (26/11), so its ref is dropped too.
+    titles = {
+        c.ref: "" if c.kind in INFO_CARDS or c.kind == "video" else c.title for c in answer.cards
+    }
     kept = [_tidy(_name_refs(s, titles)) for s in kept]
     kept = [s for s in kept if s]
     if is_off_topic_answer(answer):
