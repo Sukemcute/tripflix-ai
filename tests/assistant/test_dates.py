@@ -199,3 +199,23 @@ def test_can_i_go_day_is_weather(said):
         ).intent
         == "find_stay"
     )
+
+
+def test_weather_day_does_not_stretch_trip_dates():
+    # Observed live: the model copied nights=2 from the 2N1Đ plan onto both weather questions.
+    trip = TripContext(place="Vũng Tàu", date_from=date(2026, 11, 28), date_to=date(2026, 11, 29))
+    answer, turn, _ = ask("mai thời tiết vũng tàu sao", trip, intent="weather", place="Vũng Tàu",
+                          day_ref="tomorrow", nights=2)  # fmt: skip
+    trip = turn.next_trip(answer)
+    assert (trip.date_from, trip.date_to) == (date(2026, 11, 27), date(2026, 11, 29))
+    answer, turn, _ = ask("mốt đi được không", trip, intent="weather", place="Vũng Tàu",
+                          day_ref="day_after_tomorrow", nights=2)  # fmt: skip
+    trip = turn.next_trip(answer)
+    assert (trip.date_from, trip.date_to) == (date(2026, 11, 28), date(2026, 11, 29))
+    answer, turn, _ = ask("thời tiết vũng tàu hôm nay", trip, intent="weather", place="Vũng Tàu",
+                          day_ref="today", nights=1)  # fmt: skip
+    assert turn.next_trip(answer).date_to == date(2026, 11, 29)
+    answer, turn, _ = ask("thời tiết vũng tàu thứ 7 tuần sau", trip, intent="weather",
+                          place="Vũng Tàu", day_ref="none", start=DayMonth(day=5, month=12),
+                          nights=1)  # fmt: skip
+    assert turn.next_trip(answer).date_to is None  # the old end is before the new start

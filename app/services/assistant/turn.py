@@ -304,8 +304,16 @@ class Turn:
                 and not (self.planned_trip is not None and parsed.intent == "plan_trip")
             ):
                 window = planner.day_window(parsed, self.today)
+                kept_end = (
+                    memory.date_to if memory.date_to and memory.date_to >= window.start else None
+                )
                 memory.date_from = window.start
-                memory.date_to = window.end if window.end > window.start else None
+                if parsed.intent in {"weather", "packing"} and not parsed.check_out:
+                    # The forecast span (nights the model copied from earlier turns) is not a
+                    # statement about the trip: asking about one day never stretches it.
+                    memory.date_to = kept_end
+                else:
+                    memory.date_to = window.end if window.end > window.start else None
             memory.adults, memory.children, memory.infants = (
                 parsed.adults,
                 parsed.children,
