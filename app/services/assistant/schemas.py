@@ -370,6 +370,8 @@ class Stay(BaseModel):
     name: str = Field(min_length=1)
     unitPrice: float = Field(ge=0, allow_inf_nan=False)
     totalPrice: float = Field(ge=0, allow_inf_nan=False)
+    stars: int | None = None
+    rating: float | None = None
 
 
 class Stays(BaseModel):

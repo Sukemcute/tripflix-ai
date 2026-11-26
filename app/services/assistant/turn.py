@@ -39,7 +39,7 @@ from app.services.assistant.skills import weather as weather_skill
 from app.services.assistant.skills.content import search
 from app.services.assistant.skills.flight import draft_flights, search_flights
 from app.services.assistant.skills.plan import TripPlanner
-from app.services.assistant.skills.stay import search_stays
+from app.services.assistant.skills.stay import refine_stay_filters, search_stays
 from app.services.summary.pii import mask_pii
 from app.services.summary.vi_text import normalize_text
 
@@ -292,12 +292,20 @@ class Turn:
                 parsed.infants,
             )
             memory.price_max_per_night = parsed.price_max_per_night
+            memory.price_min_per_night = parsed.price_min_per_night
+            memory.min_stars = parsed.min_stars
         if self.reel_id is not None:
             memory.reel_id = self.reel_id
         elif self.request.context_post_id is not None:
             memory.reel_id = self.request.context_post_id
         shown = [
-            CardRef(ref=c.ref, kind=c.kind, id=c.id, title=c.title[:200])
+            CardRef(
+                ref=c.ref,
+                kind=c.kind,
+                id=c.id,
+                title=c.title[:200],
+                price=int(c.price_from) if c.kind == "stay" and c.price_from else None,
+            )
             for c in answer.cards
             if c.kind in REEL_KINDS | {"stay", "flight"}
         ][:5]
@@ -403,6 +411,7 @@ class Turn:
         return Answer(kind="clarify", text=planner.STAY_DATE_QUESTION)
 
     async def _stay(self, parsed: Understanding) -> Answer:
+        parsed = self.parsed = refine_stay_filters(parsed, self.memory.last_cards)
         is_one_night_assumed = parsed.check_out is None and not parsed.nights
         dates = self._dates_or_question(parsed)
         if isinstance(dates, Answer):

@@ -2,7 +2,48 @@ from datetime import UTC, datetime
 
 import httpx
 
-from app.services.assistant.schemas import Answer, Card, Places, Stays, Understanding
+from app.services.assistant.schemas import (
+    Answer,
+    Card,
+    CardRef,
+    Places,
+    Stays,
+    Understanding,
+)
+
+STAY_SORT_PARAM = {"price_asc": "price", "price_desc": "price_desc", "stars_desc": "stars"}
+SORT_PHRASE = {
+    "price_asc": "xếp từ rẻ đến đắt",
+    "price_desc": "xếp từ đắt đến rẻ",
+    "stars_desc": "sao cao trước",
+}
+
+
+def refine_stay_filters(understood: Understanding, shown: list[CardRef]) -> Understanding:
+    """Turn "đắt hơn" / "rẻ hơn" into a price bound taken from the cards on screen."""
+    refined = understood.model_copy()
+    prices = [c.price for c in shown if c.kind == "stay" and c.price is not None]
+    relative = refined.price_relative
+    if relative == "higher":
+        if prices:
+            refined.price_min_per_night = max(prices) + 1
+            # shortcut: a cap under twice the new floor is read as the old cap that boxed the
+            # shown cards in; a wider one is kept as the user's own. Needs a flag if it misfires.
+            if refined.price_max_per_night and refined.price_max_per_night <= 2 * (max(prices) + 1):
+                refined.price_max_per_night = None
+        if refined.stay_sort == "none":
+            refined.stay_sort = "price_asc" if prices else "price_desc"
+    elif relative == "lower":
+        if prices:
+            refined.price_max_per_night = min(prices) - 1
+            if refined.price_min_per_night and refined.price_min_per_night >= min(prices) - 1:
+                refined.price_min_per_night = None
+        if refined.stay_sort == "none":
+            refined.stay_sort = "price_desc" if prices else "price_asc"
+    low, high = refined.price_min_per_night, refined.price_max_per_night
+    if low and high and low > high:
+        refined.price_max_per_night = None
+    return refined
 
 
 async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> Answer:
@@ -28,16 +69,36 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
             "adults": understood.adults,
             "limit": 5,
         }
-        | ({"priceMax": cap} if (cap := understood.price_max_per_night) else {}),
+        | ({"priceMax": cap} if (cap := understood.price_max_per_night) else {})
+        | ({"priceMin": floor} if (floor := understood.price_min_per_night) else {})
+        | ({"minStars": stars} if (stars := understood.min_stars) else {})
+        | (
+            {"sort": STAY_SORT_PARAM[understood.stay_sort]}
+            if understood.stay_sort in STAY_SORT_PARAM
+            else {}
+        ),
     )
     response.raise_for_status()
-    # Core filters by priceMax; check again so a card never breaks the user's cap (D01, D03).
+    # Core filters too; check again so a card never breaks what the user asked (D01, D03).
     stays = [
         stay
         for stay in Stays.model_validate(response.json()).items
-        if cap is None or stay.unitPrice <= cap
+        if (cap is None or stay.unitPrice <= cap)
+        and (floor is None or stay.unitPrice >= floor)
+        and (stars is None or stay.stars is None or stay.stars >= stars)
     ][:5]
     if not stays:
+        if understood.price_relative in {"higher", "lower"}:
+            word = "đắt" if understood.price_relative == "higher" else "rẻ"
+            return Answer(
+                kind="no_result",
+                text=f"Ngày đó chưa có chỗ nào còn phòng {word} hơn các căn vừa rồi, "
+                f"đây đã là nhóm {'cao' if word == 'đắt' else 'thấp'} nhất Tripi thấy.",
+                suggestions=[
+                    "Xem căn rẻ hơn" if word == "đắt" else "Xem căn đắt hơn",
+                    "Đổi ngày",
+                ],
+            )
         if cap:
             return Answer(
                 kind="no_result",
@@ -51,7 +112,17 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
     return Answer(
         kind="answer",
         text=f"Đây là chỗ ở còn phòng {start:%d/%m}–{end:%d/%m} cho {understood.adults} người"
-        + (f", dưới {vnd(cap)}/đêm." if cap else "."),
+        + "".join(
+            f", {phrase}"
+            for phrase in (
+                f"dưới {vnd(cap)}/đêm" if cap else "",
+                f"trên {vnd(floor)}/đêm" if floor else "",
+                f"từ {stars} sao" if stars else "",
+                SORT_PHRASE.get(understood.stay_sort, ""),
+            )
+            if phrase
+        )
+        + ".",
         cards=[
             Card(
                 ref=f"r{i}",
