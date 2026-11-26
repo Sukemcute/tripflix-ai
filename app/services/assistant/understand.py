@@ -190,5 +190,6 @@ async def understand(
         ),
         awaiting=trip.awaiting if trip else None,
         today=now.date(),
+        trip_place=trip.place if trip else "",
     )
     return to_understanding(out, trip, now.date(), message=request.message), result

@@ -49,6 +49,14 @@ NOT_CALENDAR_CUE = r"\b(reel|video|clip|thoi tiet|du bao)\b"
 SPOKEN_WEEKDAYS = {
     ref: DAY_CUES[ref] for ref in ("monday", "tuesday", "wednesday", "thursday", "friday")
 } | {"saturday": r"\b(t7|thu (7|bay))\b", "sunday": r"\b(chu nhat|cn)\b"}
+# "mốt" only with its accent (or "ngày mốt/kia"): unaccented "mot" is also "một mình", "một chút".
+SPOKEN_DAYS = SPOKEN_WEEKDAYS | {
+    "today": DAY_CUES["today"],
+    "tomorrow": DAY_CUES["tomorrow"],
+    "day_after_tomorrow": r"(?<!\w)(mốt|ngày mốt|ngày kia)(?!\w)",
+}
+# "đi được không", "có nên đi không": a yes/no about going on a day is a weather question.
+CAN_GO_CUE = r"\b(di|ghe|bay)( co)? (duoc|dc)( khong| k| ko)?\b|\bco nen (di|ghe)\b"
 EXPLICIT_WEATHER_DAYS = {"hom nay": "today", "ngay mai": "tomorrow", "hom qua": "yesterday"}
 CALENDAR_DATE = r"\b\d{1,2}(?:\s*[/.-]\s*|\s+th[aá]ng\s+)\d{1,2}\b"
 GREETING = r"(?:hi+|hell?o+|hey+|(?:xin )?chao(?: ban| tripi)?)"
@@ -638,6 +646,7 @@ def apply_guards(
     has_booking: bool = False,
     awaiting: Awaiting | None = None,
     today: date | None = None,
+    trip_place: str = "",
 ) -> ControllerOutput:
     """Drop or fix what the model said that the message does not support [ĐỀ XUẤT]."""
     text = normalize_text(message)
@@ -991,7 +1000,11 @@ def apply_guards(
             "end": DayMonth(day=last.day, month=last.month) if last else None,
             "day_ref": "none",
         }
-    spoken = [ref for ref, cue in SPOKEN_WEEKDAYS.items() if re.search(cue, text)]
+    spoken = [
+        ref
+        for ref, cue in SPOKEN_DAYS.items()
+        if re.search(cue, message.lower() if ref == "day_after_tomorrow" else text)
+    ]
     if (
         len(spoken) == 1
         and not typed_date
@@ -999,8 +1012,18 @@ def apply_guards(
         and not re.search(r"\b(cuoi tuan|tuan (sau|toi))\b", text)
         and fixed.get("day_ref", out.day_ref) != spoken[0]
     ):
-        # "thứ 6 tuần này" said once: the model sometimes kept this_weekend or the trip's dates.
+        # A day said once ("thứ 6 tuần này", "mốt") beats what the model kept: this_weekend,
+        # another day or the dates the trip already remembers.
         fixed |= {"day_ref": spoken[0], "start": None, "end": None}
+    is_day_said = fixed.get("day_ref", out.day_ref) != "none" or out.start is not None
+    if (
+        intent in {"search", "plan_trip", "clarify", "find_stay"}
+        and is_day_said
+        and (out.place or trip_place)
+        and re.search(CAN_GO_CUE, text)
+        and not re.search(rf"{STAY_CUE}|{FLIGHT_CUE}", text)
+    ):
+        intent = fixed["intent"] = "weather"  # the model said plan_trip or find_stay 3/4 times
     if intent == "plan_trip" and not out.meals_only and re.search(MEALS_CUE, text):
         fixed["meals_only"] = True
     if intent == "plan_trip" and out.pace is None:

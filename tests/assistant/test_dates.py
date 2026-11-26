@@ -166,3 +166,36 @@ def test_one_spoken_weekday_beats_a_wrong_day_ref_or_remembered_dates(said_ref):
     parsed = to_understanding(out, None, THURSDAY)
     assert parsed.day_ref == "friday"
     assert planner.start_day(parsed, THURSDAY) == date(2026, 11, 27)
+
+
+def test_mot_beats_remembered_dates():
+    trip = TripContext(place="Vũng Tàu", date_from=date(2026, 11, 27))
+    said = controller_plan(intent="find_stay", place="Vũng Tàu", day_ref="tomorrow")
+    out = apply_guards(said, "mốt đi được không", has_reel=False, today=THURSDAY)
+    parsed = to_understanding(out, trip, THURSDAY)
+    assert parsed.day_ref == "day_after_tomorrow"
+    assert planner.start_day(parsed, THURSDAY) == date(2026, 11, 28)
+    # the day the user just said replaces the remembered ones in the trip memory too
+    answer, turn, _ = ask("mốt đi được không", trip, intent="find_stay", place="Vũng Tàu")
+    assert turn.next_trip(answer).date_from == date(2026, 11, 28)
+
+
+@pytest.mark.parametrize("said", ["plan_trip", "search", "find_stay", "clarify"])
+def test_can_i_go_day_is_weather(said):
+    out = apply_guards(
+        controller_plan(intent=said, place="", day_ref="day_after_tomorrow"),
+        "mốt đi được không",
+        has_reel=False,
+        today=THURSDAY,
+        trip_place="Vũng Tàu",
+    )
+    assert out.intent == "weather"
+    assert (
+        apply_guards(
+            controller_plan(intent="find_stay", place="Vũng Tàu", day_ref="tomorrow"),
+            "tìm khách sạn vũng tàu mai đi được không",
+            has_reel=False,
+            today=THURSDAY,
+        ).intent
+        == "find_stay"
+    )
