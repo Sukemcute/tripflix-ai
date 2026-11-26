@@ -506,7 +506,7 @@ class Turn:
         parsed.flight_date = start
         if re.search(r"\b(?:rẻ nhất|re nhat|cheapest)\b", self.request.message, re.I):
             parsed.cheapest_only = True
-        return await self._run("flight", search_flights(self.core, parsed))
+        return await self._run("flight", search_flights(self.core, parsed, now=self.now))
 
     # ---- the reel in view or picked from the last cards
 
@@ -594,6 +594,7 @@ class Turn:
             places=self.places,
             weather=self.weather,
             today=self.today,
+            now=self.now,
             trip=self.memory.model_copy(deep=True),
         )
         trip_planner.trip.awaiting = None

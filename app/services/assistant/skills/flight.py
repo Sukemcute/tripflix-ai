@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import httpx
 
+from app.services.assistant.admission import VIETNAM
 from app.services.assistant.schemas import (
     Answer,
     Card,
@@ -15,6 +16,8 @@ from app.services.assistant.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+# Minutes before departure a traveller needs to reach the airport and check in [HIỆU CHỈNH].
+MIN_LEAD_MINUTES = 120
 
 
 def draft_flights(cards: list[Card]) -> list[DraftTransport]:
@@ -70,6 +73,7 @@ async def search_flights(
     *,
     latest: bool = False,
     daytime: bool = False,
+    now: datetime | None = None,
 ) -> Answer:
     # The LLM guesses codes badly for "bay ra hn"; Core knows each city's airport (T8).
     origins = (
@@ -156,6 +160,19 @@ async def search_flights(
             text=f"Tuyến {origin} – {destination} hết chỗ ngày {travel_date:%d/%m}.{note}",
             suggestions=[f"Bay ngày {day:%d/%m}" for day in nearby],
         )
+    if now is not None and travel_date == now.astimezone(VIETNAM).date():
+        earliest = now.astimezone(VIETNAM) + timedelta(minutes=MIN_LEAD_MINUTES)
+        # Next day's early flights are not today's: past midnight nothing is left today.
+        limit = earliest.hour * 60 + earliest.minute if earliest.date() == travel_date else 24 * 60
+        offers = [o for o in offers if (m := _minutes(o.departTime)) is None or m >= limit]
+        if not offers:
+            clock = f"{earliest:%H:%M}" if earliest.date() == travel_date else "giờ này"
+            return Answer(
+                kind="no_result",
+                text=f"Hôm nay không còn chuyến nào cất cánh sau {clock} nữa, "
+                "bạn xem ngày mai nha?",
+                suggestions=["Xem ngày mai", "Đổi ngày"],
+            )
     # Filter by time before taking the first five: the 17:30 flight was cut off and Tripi
     # said there was none after 15:00 (Expo Web report I08, I09).
     window = _window_text(understood)

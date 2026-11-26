@@ -90,6 +90,7 @@ class TripPlanner:
     today: date
     trip: TripContext
     notes: list[str] = field(default_factory=list)
+    now: datetime | None = None  # today's flights that leave too soon are dropped
 
     # ---- where the day starts: the chosen stay, else the town centre
 
@@ -228,6 +229,7 @@ class TripPlanner:
                     ),
                     latest=returning,
                     daytime=not returning,
+                    now=self.now,
                 )
                 options = draft_flights(found.cards)
                 return next(
@@ -927,6 +929,7 @@ class TripPlanner:
                         "adults": self.trip.adults,
                     }
                 ),
+                now=self.now,
             )
             if flights.cards:
                 self.trip.pending_flights = draft_flights(flights.cards)
