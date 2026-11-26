@@ -77,6 +77,11 @@ DAY_WORDS = {
 }  # fmt: skip
 SOCIAL_INTENTS = {"greeting", "thanks", "ack", "goodbye"}
 MAX_SOCIAL_WORDS = 6
+PLAN_VERB_CUE = (
+    r"\b(len|xep|lap|sap xep|lam)\b(?:\s+\w+){0,2}?\s+(lich trinh|lo trinh|lich|ke hoach)\b"
+)
+COMPARE_CUE = r"\b(dat|re|cao|thap|mac|sang|xin) hon\b|\bhon (nua|chut|ti)\b"
+NIGHTS_CUE = r"\b(\d{1,2}) dem\b|\b\d{1,2} ?n ?(\d{1,2}) ?d\b"
 PACK_ASK_CUE = r"\b(mang|mac|chuan bi|dem) (gi|nhung gi|theo gi)\b"
 IDENTITY_CUE = r"\b(la ai|(lam|giup) (duoc )?(gi|nhung gi)|biet lam gi)\b"
 # Live eval of v4 (16/11): slots the message states plainly but the model sometimes missed.
@@ -706,6 +711,21 @@ def apply_guards(
         fixed["day_ref"] = (
             "next_weekend"  # stay-02 read "cuối tuần sau" as this weekend 3/3 (26/11)
         )
+    # Only when the model also sorted: a bare price_relative stays (existing filter tests).
+    if (
+        out.price_relative != "none"
+        and out.stay_sort != "none"
+        and not re.search(COMPARE_CUE, text)
+    ):
+        fixed["price_relative"] = (
+            "none"  # "xếp từ rẻ đến đắt" sorts; it is not "cheaper than shown"
+        )
+    if stated := re.search(NIGHTS_CUE, text):
+        nights = int(stated.group(1) or stated.group(2))
+        if out.nights != nights:
+            fixed["nights"] = nights
+            if out.end is not None:
+                fixed["end"] = None  # the end is rebuilt from the nights said
     if out.round_trip and not re.search(ROUND_TRIP_CUE, text):
         fixed["round_trip"] = False
     if out.children and not out.infants and re.search(INFANT_CUE, text):
@@ -842,6 +862,12 @@ def apply_guards(
         and (re.search(EDIT_CUE, text) or re.fullmatch(DURATION_ONLY, text))
     ):
         intent = "plan_trip"
+    if (
+        intent in {"search", "find_reel"}
+        and re.search(PLAN_VERB_CUE, text)
+        and not re.search(REEL_WORD_CUE, text)
+    ):
+        intent = "plan_trip"  # "Lên lịch trình Đà Nẵng 3n2đ" was search in the chain eval (26/11)
     if is_short and intent in {"clarify", "search", "refusal"} and re.search(WHY_CUE, text):
         intent = "ask_why"
     if intent == "ask_why" and not re.search(r"\b(tai sao|vi sao|sao|why)\b", text):
@@ -1002,6 +1028,13 @@ def apply_guards(
         if len(explicit_days) == 1:
             # An explicit relative day in the latest message beats remembered or invented dates.
             fixed |= {"day_ref": explicit_days.pop(), "start": None}
+    if (
+        intent == "post_itinerary"
+        and has_reel
+        and out.reel_query
+        and normalize_text(out.reel_query) == text
+    ):
+        fixed["reel_query"] = ""  # the model copied the message; it is not a reel's name
     if intent == "post_itinerary" and out.itinerary_day is None:
         found = re.search(ITINERARY_DAY, text)
         if found:
@@ -1091,7 +1124,7 @@ def apply_guards(
         fixed.get("intent", out.intent) != "consult"
         and "goi y" not in text
         and out.query
-        and normalize_text(out.query).startswith("goi y noi di")
+        and re.match(r"goi y noi (di|den)\b", normalize_text(out.query))
     ):
         fixed["query"] = message
         if normalize_text(out.reel_query) == normalize_text(out.query):
