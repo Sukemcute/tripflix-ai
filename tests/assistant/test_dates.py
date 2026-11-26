@@ -2,7 +2,10 @@
 
 from datetime import date
 
-from app.services.assistant.controller import apply_guards
+import pytest
+
+from app.services.assistant import planner
+from app.services.assistant.controller import apply_guards, to_understanding
 from app.services.assistant.schemas import Awaiting, TripContext
 from evals.assistant.run import controller_plan
 from tests.assistant.test_report_regressions import FakeCore, run_turn
@@ -53,3 +56,51 @@ def test_date_question_with_place_is_not_ask_date():
         has_reel=False,
     )
     assert out.intent == "weather"
+
+
+def test_start_day_day_after_tomorrow():
+    out = controller_plan(intent="weather", place="Vũng Tàu", day_ref="day_after_tomorrow")
+    assert planner.start_day(to_understanding(out, None, THURSDAY), THURSDAY) == date(2026, 11, 28)
+
+
+@pytest.mark.parametrize(
+    ("day_ref", "want"),
+    [
+        ("monday", date(2026, 11, 30)),
+        ("tuesday", date(2026, 12, 1)),
+        ("wednesday", date(2026, 12, 2)),
+        ("thursday", date(2026, 11, 26)),
+        ("friday", date(2026, 11, 27)),
+    ],
+)
+def test_start_day_weekdays(day_ref, want):
+    out = controller_plan(intent="find_stay", place="Vũng Tàu", day_ref=day_ref)
+    assert planner.start_day(to_understanding(out, None, THURSDAY), THURSDAY) == want
+
+
+@pytest.mark.parametrize(
+    ("message", "day_ref"),
+    [
+        ("mốt đi được không", "day_after_tomorrow"),
+        ("ngày kia ở vũng tàu có mưa không", "day_after_tomorrow"),
+        ("tìm phòng vũng tàu thứ 6 tuần này", "friday"),
+        ("ks vũng tàu t2", "monday"),
+    ],
+)
+def test_day_cue_keeps_mot(message, day_ref):
+    out = apply_guards(controller_plan(intent="weather", day_ref=day_ref), message, has_reel=False)
+    assert out.day_ref == day_ref
+
+
+def test_day_cue_drops_mot_when_message_says_one_night():
+    out = apply_guards(
+        controller_plan(intent="find_stay", place="Vũng Tàu", day_ref="day_after_tomorrow"),
+        "tìm phòng vũng tàu một đêm",
+        has_reel=False,
+    )
+    assert out.day_ref == "none"
+
+
+def test_day_after_tomorrow_question():
+    answer, _, _ = ask("ngày mốt là ngày mấy", intent="clarify")
+    assert answer.text == "Ngày mốt là thứ Bảy, 28/11."

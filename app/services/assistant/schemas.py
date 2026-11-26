@@ -236,6 +236,12 @@ class Understanding(WireModel):
         "saturday",
         "sunday",
         "yesterday",
+        "day_after_tomorrow",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
     ] = "none"
     nights: int | None = Field(default=None, ge=0, le=30)
     # True when the user means the reel the chat was opened from ("video này", "ks đó").

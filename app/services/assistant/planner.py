@@ -13,6 +13,7 @@ from app.services.assistant.admission import VIETNAM
 from app.services.assistant.schemas import ChatRequest, Understanding
 
 SATURDAY, SUNDAY = 5, 6
+WEEKDAY_REFS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4}
 WEEKDAYS_VI = ["thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật"]
 MAX_DAYS_AHEAD = 365
 FORECAST_DAYS = 16
@@ -40,8 +41,12 @@ def start_day(understood: Understanding, today: date) -> date | None:
         return today
     if ref == "tomorrow":
         return today + timedelta(days=1)
+    if ref == "day_after_tomorrow":
+        return today + timedelta(days=2)
     if ref == "yesterday":
         return today - timedelta(days=1)
+    if ref in WEEKDAY_REFS:  # the coming one; today when today is that weekday
+        return _next_weekday(today, WEEKDAY_REFS[ref])
     if ref in {"this_weekend", "saturday"}:
         # On a Sunday "this weekend" is today; otherwise the coming Saturday.
         if ref == "this_weekend" and today.weekday() == SUNDAY:

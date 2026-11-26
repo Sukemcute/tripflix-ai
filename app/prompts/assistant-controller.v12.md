@@ -203,3 +203,10 @@ Ví dụ ask_date:
 "nay thứ mấy" → {"intent":"ask_date","day_ref":"today"}
 "mai là thứ mấy" → {"intent":"ask_date","day_ref":"tomorrow"}
 "cuối tuần này là ngày nào" → {"intent":"ask_date","day_ref":"this_weekend"}
+"ngày mốt là ngày mấy" → {"intent":"ask_date","day_ref":"day_after_tomorrow"}
+
+<!-- v12: mốt và thứ 2 đến thứ 6. -->
+day_ref bổ sung: "mốt", "ngày mốt", "ngày kia" → day_after_tomorrow; "t2/thứ 2/thứ hai" → monday; "t3/thứ 3/thứ ba" → tuesday; "t4/thứ 4/thứ tư" → wednesday; "t5/thứ 5/thứ năm" → thursday; "t6/thứ 6/thứ sáu" → friday (ngày sắp tới của thứ đó, hôm nay nếu đúng thứ đó). "tuần này" đi kèm một thứ không đổi day_ref.
+Ví dụ:
+"mốt đi được không" (trip.place Vũng Tàu) → {"intent":"weather","place":"Vũng Tàu","day_ref":"day_after_tomorrow"}
+"tìm phòng vũng tàu thứ 6 tuần này" → {"intent":"find_stay","place":"Vũng Tàu","day_ref":"friday"}

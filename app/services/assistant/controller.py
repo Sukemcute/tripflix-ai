@@ -27,12 +27,20 @@ DAY_CUES = {
     "today": r"\b(hom nay|hnay|bua nay|(toi|sang|chieu|trua|dem) nay|bay gio|luc nay)\b",
     "tomorrow": r"\b(mai|ngay mai)\b",
     "yesterday": r"\b(hom qua)\b",
+    # "mốt" folds to "mot": not "một đêm", "một người"...
+    "day_after_tomorrow": r"\b(ngay kia|mot(?! (dem|nguoi|phong|ngay|tuan|thang|khach|can)))\b",
+    "monday": r"\b(t2|thu (2|hai))\b",
+    "tuesday": r"\b(t3|thu (3|ba))\b",
+    "wednesday": r"\b(t4|thu (4|tu))\b",
+    "thursday": r"\b(t5|thu (5|nam))\b",
+    "friday": r"\b(t6|thu (6|sau))\b",
 }
 # "hôm nay là ngày mấy": only the calendar is asked, so code answers and no Skill runs.
 DATE_QUESTION = r"\b(la )?(ngay|thu) (may|nao|bao nhieu)\b"
 ASKED_DAYS = {
     "next_weekend": r"\bcuoi tuan sau\b",
     "this_weekend": r"\bcuoi tuan\b",
+    "day_after_tomorrow": DAY_CUES["day_after_tomorrow"],
     "tomorrow": r"\b(ngay )?mai\b",
     "today": r"\b(hom nay|(?<!tuan )nay)\b",
 }
@@ -237,6 +245,12 @@ class ControllerOutput(BaseModel):
         "saturday",
         "sunday",
         "yesterday",
+        "day_after_tomorrow",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
     ]
     nights: int | None
     adults: int | None
