@@ -35,7 +35,7 @@ from app.services.assistant.admission import (
     guest_identity,
     user_identity,
 )
-from app.services.assistant.planner import today_in_vietnam
+from app.services.assistant.calendar import now_in_vietnam
 from app.services.assistant.responder import respond, split_for_stream
 from app.services.assistant.schemas import TripContext
 from app.services.assistant.turn import DATE_FACT, Turn
@@ -226,6 +226,7 @@ async def run_turn(
             )
         )
 
+    now = now_in_vietnam()  # one clock for the whole turn
     try:
         yield event("status", {"step": "understanding"})
         async with asyncio.timeout_at(deadline):
@@ -237,6 +238,7 @@ async def run_turn(
                 try:
                     parsed, _ = await understand(
                         request,
+                        now=now,
                         max_turns=gate.history_turns(ticket.identity),
                         on_usage=partial(add_usage, "controller"),
                     )
@@ -253,15 +255,16 @@ async def run_turn(
                     llm_status = "invalid_response"
             yield event("status", {"step": "llm", "outcome": llm_status})
             yield event("status", {"step": "searching"})
-            today = today_in_vietnam()
+            today = now.date()
             turn = Turn(
                 request,
                 parsed,
                 core=get_core_client(),
                 weather=get_weather(),
                 today=today,
+                now=now,
                 consult=(
-                    partial(consult, today=today, on_usage=partial(add_usage, "responder"))
+                    partial(consult, today=today, now=now, on_usage=partial(add_usage, "responder"))
                     if is_llm_on
                     else None
                 ),
@@ -299,6 +302,7 @@ async def run_turn(
                             request,
                             answer,
                             today=turn.today,
+                            now=now,
                             on_usage=partial(add_usage, "responder"),
                         )
                 except (

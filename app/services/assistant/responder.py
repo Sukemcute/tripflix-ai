@@ -11,15 +11,16 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from app.clients.llm.base import LlmResult
+from app.services.assistant.calendar import build_calendar, responder_calendar
 from app.services.assistant.schemas import Answer, ChatRequest
 from app.services.assistant.social import is_off_topic_answer, was_said
-from app.services.assistant.understand import get_role_llm
+from app.services.assistant.understand import get_role_llm, resolve_now
 from app.services.assistant.verifier import CARD_REF, MAX_SENTENCES, verify
 from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
@@ -77,10 +78,12 @@ async def respond(
     answer: Answer,
     *,
     today: date | None = None,
+    now: datetime | None = None,
     on_usage: Callable[[LlmResult], None] | None = None,
 ) -> tuple[list[str] | None, LlmResult]:
     """Sentences ready to show, or None to keep the fixed text. Raises on provider errors."""
     facts = build_facts(answer)
+    calendar = build_calendar(resolve_now(now, today))
     question = mask_pii(request.message)
     history = [
         {"role": turn.role, "text": mask_pii(turn.text)[:300]}
@@ -89,6 +92,7 @@ async def respond(
     payload = {
         "question": question,
         "facts": facts,
+        "calendar": responder_calendar(calendar),
         "alreadySaid": answer.lead,
         "editApplied": answer.edit_applied,
         "history": history,
@@ -112,6 +116,7 @@ async def respond(
         today=today,
         extra_grounding=f"{place} {answer.lead or ''}",
         edit_applied=answer.edit_applied,
+        calendar=calendar,
     )
     if dropped:
         logger.info("chat.verifier.dropped", extra={"rules": dict(dropped)})

@@ -10,7 +10,7 @@ import asyncio
 import logging
 import re
 from collections.abc import Awaitable, Callable, Coroutine
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
 import httpx
@@ -18,7 +18,7 @@ from pydantic import ValidationError
 
 from app.clients.places import CorePlaces, PlacesClient
 from app.clients.weather import WeatherClient
-from app.services.assistant import planner, social
+from app.services.assistant import calendar, planner, social
 from app.services.assistant.controller import (
     fix_plan_edit,
     is_harmless_off_topic,
@@ -105,7 +105,8 @@ class Turn:
         *,
         core: httpx.AsyncClient,
         weather: WeatherClient,
-        today: date,
+        today: date | None = None,
+        now: datetime | None = None,
         places: PlacesClient | None = None,
         disabled_skills: frozenset[str] = frozenset(),
         consult: Callable[[ChatRequest, TripContext], Awaitable[tuple[Answer, TravelPrefs]]]
@@ -115,7 +116,10 @@ class Turn:
         self.parsed = parsed
         self.core = core
         self.weather = weather
-        self.today = today
+        # One clock per turn: `today` is always the date of `now` when both are known.
+        self.now = now
+        self.today = today or (now.date() if now else planner.today_in_vietnam())
+        today = self.today
         self.disabled_skills = disabled_skills
         self.consult = consult
         self.learned_prefs: TravelPrefs | None = None
@@ -393,7 +397,9 @@ class Turn:
         return Answer(kind="clarify", text=question)
 
     def _date_info(self, parsed: Understanding) -> Answer:
-        text = planner.date_answer(parsed, self.today)
+        text = calendar.holiday_answer(self.request.message, self.today) or planner.date_answer(
+            parsed, self.today
+        )
         if self.memory.awaiting and self.memory.place:
             text += f" Mình xếp tiếp chuyến {self.memory.place} cho bạn nha?"
         return Answer(kind="answer", text=text, facts=[{"type": DATE_FACT}])

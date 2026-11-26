@@ -210,3 +210,16 @@ day_ref bổ sung: "mốt", "ngày mốt", "ngày kia" → day_after_tomorrow; "
 Ví dụ:
 "mốt đi được không" (trip.place Vũng Tàu) → {"intent":"weather","place":"Vũng Tàu","day_ref":"day_after_tomorrow"}
 "tìm phòng vũng tàu thứ 6 tuần này" → {"intent":"find_stay","place":"Vũng Tàu","day_ref":"friday"}
+
+<!-- v12: lịch thời gian thực và ngày lễ. -->
+Đầu vào "calendar" là lịch thật do code tính: "now" (giờ hiện tại), "days" (14 ngày từ hôm nay, mỗi ngày có "date" dạng YYYY-MM-DD và "label" gồm thứ), "thisWeekend", "nextWeekend", "nextWeek" (thứ Hai đến Chủ nhật tuần sau) và "holidays" (ngày lễ sắp tới, có "from" và "to"; "isLunar" true là lễ âm lịch).
+- Ngày tương đối KHÔNG có trong day_ref ("thứ 6 tuần sau", "thứ 2 tuần sau", "3 ngày nữa", "10 ngày nữa", "đầu tuần sau", "tuần sau"): BẮT BUỘC tra "calendar" rồi ghi start dạng {"day","month"} (và end nếu người dùng nói ngày về hoặc số đêm), day_ref là "none". Đây là ngoại lệ của dòng "Không tự đổi thứ thành ngày": thứ nào có trong day_ref (hôm nay, mai, mốt, t2 đến t7, chủ nhật, cuối tuần) thì vẫn dùng day_ref. "thứ X tuần sau": lấy ngày thứ X trong "nextWeek". "N ngày nữa": lấy ngày thứ N trong "days" (hôm nay là phần tử 0). "đầu tuần sau": thứ Hai trong "nextWeek". Có tên nơi thì intent theo nơi đó (weather, find_stay, search…), không phải consult.
+- Dịp lễ ("dịp 30/4", "nghỉ Tết", "Giỗ Tổ", "Quốc khánh", "nghỉ lễ 2/9"): lấy "from" làm start và "to" làm end của lễ đó trong "holidays", day_ref "none". "năm sau" thì lấy lễ năm sau. Lễ không có trong "holidays" thì để start/end null.
+- Cách ghi start/end từ một ngày "YYYY-MM-DD" của calendar: day là DD và month là MM, bỏ năm. "2026-12-04" → {"day":4,"month":12}. Không bao giờ ghi năm vào day.
+- KHÔNG BAO GIỜ tự tính thứ hay cộng ngày trong đầu: luôn tra "calendar.days".
+Ví dụ (today 2026-11-26, thứ Năm):
+"thứ 6 tuần sau đi vũng tàu được không" → {"intent":"weather","place":"Vũng Tàu","day_ref":"none","start":{"day":4,"month":12},"end":null}
+"3 ngày nữa mình bay ra hà nội" → {"intent":"find_flight","to_city":"Hà Nội","day_ref":"none","start":{"day":29,"month":11}}
+"dịp 30/4 năm sau đi đâu" → {"intent":"consult","day_ref":"none","start":{"day":30,"month":4},"end":{"day":1,"month":5},"query":"gợi ý nơi đi dịp 30/4"}
+"nghỉ Tết đi Đà Lạt" → {"intent":"search","place":"Đà Lạt","day_ref":"none","start":{"day":5,"month":2},"end":{"day":9,"month":2},"query":"Đà Lạt dịp Tết"}
+"Tết năm nay ngày mấy" → {"intent":"ask_date","day_ref":"none"}

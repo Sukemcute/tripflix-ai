@@ -178,7 +178,7 @@ def test_sse_refusal_uses_fixed_text(monkeypatch):
     published: list[UsageEvent] = []
     conversation_id = uuid4()
 
-    async def refuse(request, *, max_turns, on_usage):
+    async def refuse(request, *, max_turns, on_usage, now):
         result = LlmResult(output="", model_name="test", input_tokens=10, output_tokens=5)
         on_usage(result)
         return Understanding(intent="refusal"), result

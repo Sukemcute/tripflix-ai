@@ -49,6 +49,7 @@ REF = re.compile(r"\[(r\d+)\]")
 # "thẻ [r1]" must not become "thẻ thẻ bên dưới" (Expo Web report T24).
 CARD_REF = re.compile(r"(?:thẻ\s+)?\[(r\d+)\]", re.IGNORECASE)
 NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 DATE = re.compile(r"\b(\d{1,2})/(\d{1,2})(?:/\d{2,4})?\b")
 SCARCITY = re.compile(r"\b(sap het|chi con|nhanh tay|con it|chay hang|hot nhat|gia soc)\b")
 # "Cheapest" is true only when r1 is the cheapest, i.e. the cards are sorted that way (TF31).
@@ -123,14 +124,27 @@ def verify(
     today: date | None = None,
     extra_grounding: str = "",
     edit_applied: bool = False,
+    calendar: dict | None = None,
 ) -> tuple[list[str], Counter[str]]:
     facts_text = json.dumps(facts, ensure_ascii=False)
+    # The calendar grounds dates and holiday names but is not a fact shown to the user.
+    calendar_text = json.dumps(calendar, ensure_ascii=False) if calendar else ""
+    calendar_dates = {(int(day), int(month)) for _, month, day in ISO_DATE.findall(calendar_text)}
+    calendar_years = {year for year, _, _ in ISO_DATE.findall(calendar_text)}
+    for holiday in (calendar or {}).get("holidays", []):  # every day of a holiday, not its ends
+        first, last = date.fromisoformat(holiday["from"]), date.fromisoformat(holiday["to"])
+        calendar_dates |= {
+            ((first + timedelta(days=n)).day, (first + timedelta(days=n)).month)
+            for n in range((last - first).days + 1)
+        }
     grounded_words = (
-        set(normalize_text(f"{facts_text} {question} {extra_grounding}").split())
+        set(normalize_text(f"{facts_text} {question} {extra_grounding} {calendar_text}").split())
         | ALWAYS_ALLOWED_WORDS
     )
     outside = any(f.get("offTopic") for f in facts)
-    allowed_numbers = _numbers(facts_text) | (set() if outside else _numbers(question))
+    allowed_numbers = (
+        _numbers(facts_text) | (set() if outside else _numbers(question)) | calendar_years
+    )
     availability = [f.get("available") for f in facts if isinstance(f.get("available"), bool)]
     weather_days = _weather_days(facts, today)
     allowed_superlatives = {
@@ -154,6 +168,7 @@ def verify(
             weather_days,
             today,
             allowed_superlatives,
+            calendar_dates,
         )
         if CODE_SHAPE.search(sentence):
             rule = "V10_code_shape"
@@ -204,11 +219,16 @@ def _broken_rule(
     weather_days: dict[date, set[str]],
     today: date | None,
     allowed_superlatives: set[str],
+    calendar_dates: set[tuple[int, int]],
 ) -> str | None:
     if any(ref not in refs for ref in REF.findall(sentence)):
         return "V1_unknown_ref"
     without_refs = REF.sub(" ", sentence)
-    if not _numbers(without_refs) <= allowed_numbers:
+    # A day/month the calendar holds ("28/11") is grounded; any other number must be a fact.
+    undated = DATE.sub(
+        lambda m: " " if (int(m[1]), int(m[2])) in calendar_dates else m[0], without_refs
+    )
+    if not _numbers(undated) <= allowed_numbers:
         return "V2_ungrounded_number"
     for name in _names(without_refs):
         words = normalize_text(name).split()

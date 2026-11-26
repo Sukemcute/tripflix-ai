@@ -10,11 +10,11 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
 from app.services.assistant.admission import VIETNAM
+from app.services.assistant.calendar import WEEKDAYS_VI, next_weekday, weekend_start
 from app.services.assistant.schemas import ChatRequest, Understanding
 
 SATURDAY, SUNDAY = 5, 6
 WEEKDAY_REFS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4}
-WEEKDAYS_VI = ["thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật"]
 MAX_DAYS_AHEAD = 365
 FORECAST_DAYS = 16
 PLAN_FIRST_CUE = r"\b(chua biet|khong biet|cu (len|xep)(?: lich| lo trinh)? truoc|len truoc)\b"
@@ -24,10 +24,6 @@ SHORT_STAY_DATES = re.compile(r"(?:(?:ngày|ngay)\s+)?([0-9]{1,2})\s+([0-9]{1,2}
 
 def today_in_vietnam(now: datetime | None = None) -> date:
     return (now or datetime.now(UTC)).astimezone(VIETNAM).date()
-
-
-def _next_weekday(today: date, weekday: int) -> date:
-    return today + timedelta(days=(weekday - today.weekday()) % 7)
 
 
 def start_day(understood: Understanding, today: date) -> date | None:
@@ -46,16 +42,15 @@ def start_day(understood: Understanding, today: date) -> date | None:
     if ref == "yesterday":
         return today - timedelta(days=1)
     if ref in WEEKDAY_REFS:  # the coming one; today when today is that weekday
-        return _next_weekday(today, WEEKDAY_REFS[ref])
-    if ref in {"this_weekend", "saturday"}:
-        # On a Sunday "this weekend" is today; otherwise the coming Saturday.
-        if ref == "this_weekend" and today.weekday() == SUNDAY:
-            return today
-        return _next_weekday(today, SATURDAY)
+        return next_weekday(today, WEEKDAY_REFS[ref])
+    if ref == "this_weekend":  # on a Sunday it is today
+        return weekend_start(today, is_next=False)
+    if ref == "saturday":
+        return next_weekday(today, SATURDAY)
     if ref == "sunday":
-        return _next_weekday(today, SUNDAY)
+        return next_weekday(today, SUNDAY)
     if ref == "next_weekend":
-        return _next_weekday(today, SATURDAY) + timedelta(days=7)
+        return weekend_start(today, is_next=True)
     return None
 
 

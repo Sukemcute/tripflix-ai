@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.services.assistant.calendar import holiday_cue, relative_dates
 from app.services.assistant.destinations import destinations_by_id
 from app.services.assistant.planner import PLAN_FIRST_CUE
 from app.services.assistant.schemas import Awaiting, TripContext, Understanding
@@ -119,7 +120,8 @@ DURATION_ONLY = (
 DATE_WORDS = (
     r"\b(\d{1,2}\s*[/.-]\s*\d{1,2}|ngay \d{1,2}(?!\s*d)|thang \d{1,2}"
     r"|thu (2|3|4|5|6|7|hai|ba|tu|nam|sau|bay)"
-    r"|t[2-7]|chu nhat|cn|mai|ngay mot(?! dem)|hom nay|cuoi tuan|tuan (nay|sau))\b"
+    r"|t[2-7]|chu nhat|cn|mai|ngay mot(?! dem)|hom nay|cuoi tuan|tuan (nay|sau)"
+    r"|\d+ (ngay|tuan) (nua|sau|toi)|dau tuan|giua tuan|dip|tet|gio to|quoc khanh)\b"
 )
 # Live eval of v7 (17/11): the model put unsafe asks and travel questions in off_topic.
 UNSAFE_CUE = (
@@ -632,6 +634,7 @@ def apply_guards(
     in_plan: bool = False,
     has_booking: bool = False,
     awaiting: Awaiting | None = None,
+    today: date | None = None,
 ) -> ControllerOutput:
     """Drop or fix what the model said that the message does not support [ĐỀ XUẤT]."""
     text = normalize_text(message)
@@ -661,14 +664,20 @@ def apply_guards(
     if re.fullmatch(ACK_ONLY, text):
         return out.model_copy(update={"intent": "ack"})
     asked_day = next((ref for ref, cue in ASKED_DAYS.items() if re.search(cue, text)), None)
+    holiday = holiday_cue(text)
     if (
-        asked_day
+        (asked_day or holiday)
         and re.search(DATE_QUESTION, text)
         and not named_place(text)
         and not re.search(rf"{STAY_CUE}|{FLIGHT_CUE}|{WEATHER_CUE}|{NOT_CALENDAR_CUE}", text)
     ):
         return out.model_copy(
-            update={"intent": "ask_date", "day_ref": asked_day, "start": None, "end": None}
+            update={
+                "intent": "ask_date",
+                "day_ref": "none" if holiday else asked_day,
+                "start": None,
+                "end": None,
+            }
         )
     if out.intent == "ask_date":  # the model saw a date question the message does not hold
         out = out.model_copy(update={"intent": "clarify"})
@@ -968,6 +977,17 @@ def apply_guards(
         # typed date also wins over a start the model added: it wrote 26/11 to 28/11, today
         # plus "2 ngày", for "cuối tuần này 2 ngày 1 đêm" (live test 2026-11-26).
         fixed |= {"start": None, "end": None}
+    named_days = (
+        relative_dates(message, today) if today and (not typed_date or not out.start) else None
+    )
+    if named_days and intent not in {"post_itinerary", "post_reviews"}:
+        # "3 ngày nữa", "thứ 6 tuần sau", "dịp Tết": the calendar gives the date, not the model.
+        first, last = named_days
+        fixed |= {
+            "start": DayMonth(day=first.day, month=first.month),
+            "end": DayMonth(day=last.day, month=last.month) if last else None,
+            "day_ref": "none",
+        }
     if intent == "plan_trip" and not out.meals_only and re.search(MEALS_CUE, text):
         fixed["meals_only"] = True
     if intent == "plan_trip" and out.pace is None:

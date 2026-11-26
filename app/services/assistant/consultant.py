@@ -8,15 +8,16 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from pydantic import BaseModel
 
 from app.clients.llm.base import LlmResult
+from app.services.assistant.calendar import build_calendar
 from app.services.assistant.destinations import Destination, destinations_by_id, merge_prefs
 from app.services.assistant.schemas import Answer, ChatRequest, TravelPrefs, TripContext
-from app.services.assistant.understand import get_role_llm
+from app.services.assistant.understand import get_role_llm, resolve_now
 from app.services.assistant.verifier import verify
 from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
@@ -100,14 +101,17 @@ async def consult(
     trip: TripContext,
     *,
     today: date,
+    now: datetime | None = None,
     on_usage: Callable[[LlmResult], None] | None = None,
 ) -> tuple[Answer, TravelPrefs]:
     """The reply and the preferences understood this turn. Raises on provider errors, broken
     JSON or a cut output: the caller then uses the fixed fallback."""
     catalog = [_catalog_entry(d) for d in destinations_by_id().values()]
     question = mask_pii(request.message)
+    calendar = build_calendar(resolve_now(now, today))
     payload = {
         "today": today.isoformat(),
+        "calendar": calendar,
         "currentMonth": today.month,
         "message": question,
         "history": [
@@ -135,7 +139,11 @@ async def consult(
     prefs_fact = {"prefs": merge_prefs(trip.prefs, output.prefs).model_dump(mode="json")}
     # The whole catalog grounds the words: a sentence may mention a second catalog place.
     facts = [*catalog, prefs_fact]
-    kwargs = {"today": today, "extra_grounding": f"{trip.origin_city} {trip.place}"}
+    kwargs = {
+        "today": today,
+        "extra_grounding": f"{trip.origin_city} {trip.place}",
+        "calendar": calendar,
+    }
     known = " ".join(
         [
             *(f"{entry['name']} {' '.join(entry['highlights'])}" for entry in catalog),

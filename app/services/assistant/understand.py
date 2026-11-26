@@ -7,7 +7,7 @@ own adapter and breaker (Bảo, 2026-11-16: Controller on OpenAI, Responder on D
 import json
 import logging
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime, time
 from functools import cache
 from pathlib import Path
 from typing import Literal
@@ -19,8 +19,9 @@ from app.clients.llm.guarded import GuardedLlmClient
 from app.clients.llm.openai import OpenAILlmClient
 from app.core.breaker import CircuitBreaker
 from app.core.config import get_chat_settings
+from app.services.assistant.admission import VIETNAM
+from app.services.assistant.calendar import WEEKDAYS_VI, build_calendar, now_in_vietnam
 from app.services.assistant.controller import ControllerOutput, apply_guards, to_understanding
-from app.services.assistant.planner import WEEKDAYS_VI, today_in_vietnam
 from app.services.assistant.schemas import ChatRequest, Understanding
 from app.services.assistant.turn import REEL_KINDS
 from app.services.summary.injection import match_injection
@@ -36,14 +37,28 @@ class LlmNotConfiguredError(Exception):
     pass
 
 
+def resolve_now(now: datetime | None, today: date | None) -> datetime:
+    """The turn's clock; a bare `today` (tests, fixed days) means 08:00 that day."""
+    if now is not None:
+        return now
+    return datetime.combine(today, time(8, 0), VIETNAM) if today else now_in_vietnam()
+
+
 def build_understanding_input(
-    request: ChatRequest, *, max_turns: int = 6, today: date | None = None
+    request: ChatRequest,
+    *,
+    max_turns: int = 6,
+    today: date | None = None,
+    now: datetime | None = None,
 ) -> str:
-    today = today or today_in_vietnam()
+    now = resolve_now(now, today)
+    today = now.date()
     trip = request.trip
     return json.dumps(
         {
             "today": f"{today.isoformat()} ({WEEKDAYS_VI[today.weekday()]})",
+            # Real days, weekends and holidays: the model reads dates here, never computes them.
+            "calendar": build_calendar(now),
             # Only whether a reel is in view: its id never reaches the LLM.
             "hasContextPost": request.context_post_id is not None,
             # What Tripi remembers, without ids or user-written titles (trusted fields only).
@@ -133,15 +148,20 @@ def get_role_llm(role: Role) -> GuardedLlmClient:
 
 
 async def understand(
-    request: ChatRequest, *, max_turns: int, on_usage: Callable[[LlmResult], None] | None = None
+    request: ChatRequest,
+    *,
+    max_turns: int,
+    on_usage: Callable[[LlmResult], None] | None = None,
+    now: datetime | None = None,
 ) -> tuple[Understanding, LlmResult]:
     """Raises on provider errors, cut output or invalid JSON: the caller falls back."""
     groups = match_injection(request.message)
     if groups:  # rule names only, never the message
         logger.warning("chat.injection.suspected", extra={"groups": groups})
+    now = resolve_now(now, None)
     result = await get_role_llm("controller").agenerate(
         PROMPT.read_text(encoding="utf-8"),
-        build_understanding_input(request, max_turns=max_turns),
+        build_understanding_input(request, max_turns=max_turns, now=now),
         strict_json_schema(ControllerOutput),
     )
     if on_usage is not None:
@@ -169,5 +189,6 @@ async def understand(
             )
         ),
         awaiting=trip.awaiting if trip else None,
+        today=now.date(),
     )
-    return to_understanding(out, trip, today_in_vietnam(), message=request.message), result
+    return to_understanding(out, trip, now.date(), message=request.message), result

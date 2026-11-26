@@ -171,7 +171,7 @@ def test_guest_ip_is_never_kept_in_clear():
 def chat_client(monkeypatch):
     seen: dict[str, int] = {}
 
-    async def classify(request, *, max_turns, on_usage):
+    async def classify(request, *, max_turns, on_usage, now):
         seen["turns"] = max_turns
         result = LlmResult(output="", model_name="test", input_tokens=300, output_tokens=50)
         on_usage(result)

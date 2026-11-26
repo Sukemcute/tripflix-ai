@@ -39,7 +39,7 @@ def core_client() -> httpx.AsyncClient:
 def run_chat(
     monkeypatch, understanding: Understanding | None = None, **switches
 ) -> tuple[list[tuple[str, dict]], AsyncMock]:
-    async def classify(request, *, max_turns, on_usage):
+    async def classify(request, *, max_turns, on_usage, now):
         result = LlmResult(output="", model_name="test", input_tokens=10, output_tokens=5)
         return understanding or Understanding(intent="search", query="Đà Lạt"), result
 
@@ -120,7 +120,7 @@ def turn_event_client(monkeypatch):
     user_id = uuid4()
     publish = AsyncMock()
 
-    async def classify(request, *, max_turns, on_usage):
+    async def classify(request, *, max_turns, on_usage, now):
         result = LlmResult(
             output="", model_name="test", input_tokens=10, output_tokens=5, latency_ms=17
         )
@@ -184,7 +184,7 @@ def test_guest_does_not_record_a_chat_turn(turn_event_client, monkeypatch):
 def test_llm_calls_share_the_turn_id_and_keep_their_latency(turn_event_client, monkeypatch):
     client, publish, _, _ = turn_event_client
 
-    async def write(request, answer, *, today, on_usage):
+    async def write(request, answer, *, today, now, on_usage):
         result = LlmResult(
             output="", model_name="test", input_tokens=20, output_tokens=10, latency_ms=29
         )
@@ -275,7 +275,7 @@ def test_gate_rejection_does_not_record_a_turn(turn_event_client, monkeypatch, s
 def test_chat_consult_calls_llm_once_no_responder(monkeypatch):
     calls = []
 
-    async def fake_consult(request, trip, *, today, on_usage):
+    async def fake_consult(request, trip, *, today, now, on_usage):
         calls.append(request.message)
         on_usage(LlmResult(output="", model_name="test", input_tokens=50, output_tokens=8))
         answer = Answer(

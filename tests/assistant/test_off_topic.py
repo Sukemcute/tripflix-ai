@@ -361,7 +361,7 @@ def test_no_result_does_not_repeat_latest_pool(kind):
 def test_chat_never_rephrases_dangerous_turn_and_never_answers_four(
     monkeypatch, message, dangerous, intent
 ):
-    async def classify(request, *, max_turns, on_usage):
+    async def classify(request, *, max_turns, on_usage, now):
         return Understanding.model_validate({"intent": intent}), None
 
     async def fake_generate(system, user, schema):
