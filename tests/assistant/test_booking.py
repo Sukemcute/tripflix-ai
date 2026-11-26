@@ -389,9 +389,9 @@ def test_flight_title_only_appends_departure_time_when_missing(monkeypatch, name
     ("origins", "destinations", "routes", "status", "kind", "codes"),
     [
         (["SGN", "VCS"], ["DAD"], [("SGN", "DAD")], 200, "answer", ["SGN", "DAD"]),
-        (["SGN", "VCS"], ["DAD"], [("SGN", "DAD"), ("VCS", "DAD")], 200, "clarify", ["SGN", "VCS"]),
+        (["SGN", "VCS"], ["DAD"], [("SGN", "DAD"), ("VCS", "DAD")], 200, "answer", ["SGN", "DAD"]),
         (["SGN", "VCS"], ["DAD"], [], 200, "no_result", []),
-        (["SGN", "VCS"], ["DAD"], [], 503, "clarify", ["SGN", "VCS"]),
+        (["SGN", "VCS"], ["DAD"], [], 503, "answer", ["SGN", "DAD"]),
         (["SGN", "VCS"], ["DAD", "VDO"], [("SGN", "DAD")], 200, "answer", ["SGN", "DAD"]),
         (["SGN"], ["DAD", "VDO"], [("SGN", "DAD")], 200, "answer", ["SGN", "DAD"]),
         (
@@ -399,8 +399,8 @@ def test_flight_title_only_appends_departure_time_when_missing(monkeypatch, name
             ["DAD", "VDO", "DIN"],
             [("SGN", "DAD"), ("SGN", "VDO")],
             200,
-            "clarify",
-            ["DAD", "VDO"],
+            "answer",
+            ["SGN", "DAD"],
         ),
     ],
 )
@@ -761,3 +761,48 @@ def test_understand_passes_only_chosen_bookable_parts_to_ack_guard(
     )
     parsed, _ = asyncio.run(understand.understand(request, max_turns=6))
     assert parsed.intent == intent
+
+
+def _airports_core(by_city: dict[str, list[tuple[str, str]]]):
+    def handle(request):
+        if request.url.path == "/api/suggest":
+            airports = by_city.get(request.url.params["q"], [])
+            items = [{"type": "airport", "refId": c, "name": n} for c, n in airports]
+            return httpx.Response(200, json={"items": items})
+        if request.url.path == "/api/flights/routes":
+            return httpx.Response(503)
+        return httpx.Response(200, json=CORE["/api/flights"])
+
+    return httpx.AsyncClient(base_url="https://core.test", transport=httpx.MockTransport(handle))
+
+
+def _search_between(from_city: str, by_city: dict[str, list[tuple[str, str]]]):
+    async def run():
+        async with _airports_core(by_city) as core:
+            return await search_flights(
+                core,
+                Understanding(
+                    intent="find_flight",
+                    from_city=from_city,
+                    to_city="Hà Nội",
+                    flight_date=date(2026, 11, 21),
+                ),
+            )
+
+    return asyncio.run(run())
+
+
+HANOI = [("HAN", "Sân bay Nội Bài")]
+
+
+def test_hcm_defaults_to_sgn():
+    hcm = [("VCS", "Sân bay Côn Đảo"), ("SGN", "Sân bay Tân Sơn Nhất")]
+    answer = _search_between("TP.HCM", {"TP.HCM": hcm, "Hà Nội": HANOI})
+    assert answer.kind == "answer" and answer.cards[0].from_airport == "SGN"
+    assert "bay từ Tân Sơn Nhất (SGN)" in answer.text
+
+
+def test_unknown_multi_airport_city_still_asks():
+    two = [("BMV", "Sân bay Buôn Ma Thuột"), ("TBB", "Sân bay Tuy Hòa")]
+    answer = _search_between("Đắk Lắk", {"Đắk Lắk": two, "Hà Nội": HANOI})
+    assert answer.kind == "clarify" and "BMV" in answer.text and "TBB" in answer.text

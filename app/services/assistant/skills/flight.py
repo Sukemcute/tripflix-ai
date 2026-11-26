@@ -14,6 +14,7 @@ from app.services.assistant.schemas import (
     Flights,
     Understanding,
 )
+from app.services.summary.vi_text import normalize_text
 
 logger = logging.getLogger(__name__)
 # Minutes before departure a traveller needs to reach the airport and check in [HIỆU CHỈNH].
@@ -47,8 +48,28 @@ async def find_airport(core: httpx.AsyncClient, city: str) -> list[dict]:
     return [item for item in response.json().get("items") or [] if item.get("type") == "airport"]
 
 
+# Main airport of a city that Core lists with several (the 2025 province merger gave TP.HCM
+# Côn Đảo as well as Tân Sơn Nhất). Keys are folded city names, values the airport code.
+PRIMARY_AIRPORTS = {
+    **dict.fromkeys(("tp hcm", "tphcm", "hcm", "sg", "sai gon", "ho chi minh"), "SGN"),
+    **dict.fromkeys(("ha noi", "hn"), "HAN"),
+    **dict.fromkeys(("da nang", "dn"), "DAD"),
+    "hai phong": "HPH",
+    "can tho": "VCA",
+    "hue": "HUI",
+    "nha trang": "CXR",
+    "da lat": "DLI",
+}  # fmt: skip
+
+
 async def _airport_or_answer(
-    core: httpx.AsyncClient, code: str | None, city: str, *, airports: list[dict] | None = None
+    core: httpx.AsyncClient,
+    code: str | None,
+    city: str,
+    *,
+    airports: list[dict] | None = None,
+    notes: list[str] | None = None,
+    role: str = "",
 ) -> str | Answer:
     """The code the Controller gave, else the single airport Core finds for the city."""
     if code or not city:
@@ -61,6 +82,14 @@ async def _airport_or_answer(
             text=f"Tripflix chưa có chuyến bay tới hoặc đi từ {city}. "
             "Bạn chọn thành phố có sân bay gần đó nha.",
         )
+    primary = next(
+        (a for a in airports if a.get("refId") == PRIMARY_AIRPORTS.get(normalize_text(city))), None
+    )
+    if len(airports) > 1 and primary is not None:
+        if notes is not None:
+            name = str(primary.get("name") or "").removeprefix("Sân bay ").strip()
+            notes.append(f"{role} {name} ({primary['refId']})" if name else "")
+        return str(primary["refId"])
     if len(airports) > 1:
         names = " hay ".join(f"{a.get('name')} ({a.get('refId')})" for a in airports[:3])
         return Answer(kind="clarify", text=f"Bạn muốn bay {names}?")
@@ -108,13 +137,24 @@ async def search_flights(
                 return Answer(kind="no_result", text=f"Tripflix chưa có tuyến bay {start} – {end}.")
             origins = [a for a in origins if any(a == origin for origin, _ in pairs)]
             destinations = [b for b in destinations if any(b == dest for _, dest in pairs)]
+    notes: list[str] = []
     origin = await _airport_or_answer(
-        core, understood.from_airport, understood.from_city, airports=origins
+        core,
+        understood.from_airport,
+        understood.from_city,
+        airports=origins,
+        notes=notes,
+        role="bay từ",
     )
     if isinstance(origin, Answer):
         return origin
     destination = await _airport_or_answer(
-        core, understood.to_airport, understood.to_city, airports=destinations
+        core,
+        understood.to_airport,
+        understood.to_city,
+        airports=destinations,
+        notes=notes,
+        role="bay đến",
     )
     if isinstance(destination, Answer):
         return destination
@@ -126,6 +166,8 @@ async def search_flights(
     # Past days are refused by Turn against the turn's own "today".
     if travel_date is None:
         return Answer(kind="clarify", text="Bạn muốn bay vào ngày nào?")
+    said = " và ".join(note for note in notes if note)
+    airports_said = f" Mình xem chuyến {said}." if said else ""  # a default the user can change
     if understood.adults > 9:
         return Answer(
             kind="clarify", text="Bạn có thể chia nhóm thành tối đa 9 người mỗi lượt tìm không?"
@@ -198,7 +240,8 @@ async def search_flights(
         total, offer, fare = min(priced, key=lambda candidate: candidate[0])
         return Answer(
             kind="answer",
-            text=f"Đây là chuyến có tổng giá thấp nhất cho {understood.adults} người lớn.",
+            text="Đây là chuyến có tổng giá thấp nhất cho "
+            f"{understood.adults} người lớn.{airports_said}",
             cards=[
                 Card(
                     ref="r1",
@@ -222,7 +265,7 @@ async def search_flights(
         )
     return Answer(
         kind="answer",
-        text=f"Đây là các chuyến còn chỗ{window} ngày {travel_date:%d/%m}.",
+        text=f"Đây là các chuyến còn chỗ{window} ngày {travel_date:%d/%m}.{airports_said}",
         cards=[
             Card(
                 ref=f"r{i}",
