@@ -408,6 +408,18 @@
             "title": "Kind",
             "type": "string"
           },
+          "price": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
           "ref": {
             "maxLength": 8,
             "title": "Ref",
@@ -1324,6 +1336,19 @@
             "title": "Mealsonly",
             "type": "boolean"
           },
+          "minStars": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minstars"
+          },
           "ops": {
             "items": {
               "$ref": "#/components/schemas/DraftOp"
@@ -1371,6 +1396,18 @@
               }
             ],
             "title": "Pricemaxpernight"
+          },
+          "priceMinPerNight": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priceminpernight"
           },
           "reelId": {
             "anyOf": [
