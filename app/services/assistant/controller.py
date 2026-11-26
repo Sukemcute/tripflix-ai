@@ -64,7 +64,7 @@ ROUND_TRIP_CUE = r"\b(khu hoi|(2|hai) chieu|chieu ve|round ?trip)\b"
 INFANT_CUE = r"\b(em be|so sinh|infants?)\b"
 STAY_CUE = (
     r"\b(ks|khach san|homestay|resort|nha nghi|villa|hostel|cho o|cho ngu|"
-    r"(con|dat|nhan|tra|thue) phong)\b"
+    r"(con|dat|nhan|tra|thue|tim|kiem|xem|book) phong)\b"
 )
 WEATHER_CUE = (
     r"\b(thoi tiet|du bao|nhiet do|co mua|mua (khong|k|ko)|troi mua|"
@@ -947,8 +947,20 @@ def apply_guards(
         if re.search(REEL_WORD_CUE, text):
             intent = "find_reel"
             fixed["reel_query"] = out.reel_query or out.query
+        elif has_reel and (
+            out.uses_context_post or re.search(rf"{THIS_REEL}|{ITINERARY_DAY}", text)
+        ):
+            # "ngày thứ hai đi đâu" in a reel: day 2 of its itinerary, not Monday (report-R15).
+            intent = "post_itinerary"
+            fixed["day_ref"] = "none"
         elif not origin and (place := named_place(text)):
-            intent = "search"
+            intent = (
+                "find_stay"
+                if re.search(STAY_CUE, text)
+                else "weather"
+                if re.search(WEATHER_CUE, text) and not re.search(PACKING_CUE, text)
+                else "search"
+            )
             fixed |= {"place": place, "query": out.query or message}
     if intent != out.intent:
         fixed["intent"] = intent

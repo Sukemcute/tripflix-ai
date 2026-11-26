@@ -130,6 +130,40 @@ def test_consult_naming_a_place_becomes_search() -> None:
     assert guard("từ sài gòn đi đâu chơi", intent="consult").intent == "consult"
 
 
+def test_tim_phong_with_place_is_find_stay() -> None:
+    message = "Tìm phòng Quy Nhơn"
+    assert guarded(message, intent="search", place="Quy Nhơn") == "find_stay"
+    awaiting = Awaiting(intent="consult", missing="place")
+    got = guarded(message, awaiting=awaiting, intent="search", place="Quy Nhơn")
+    assert got == "find_stay"
+
+
+def test_consult_with_place_and_stay_cue_is_find_stay() -> None:
+    got = guard("muốn đi đâu đó chill, tìm phòng đà lạt giúp mình", intent="consult")
+    assert (got.intent, got.place) == ("find_stay", "Đà Lạt")
+
+
+def test_consult_with_place_and_weather_cue_is_weather() -> None:
+    got = guard("đà lạt cuối tuần có mưa không", intent="consult")
+    assert (got.intent, got.place) == ("weather", "Đà Lạt")
+
+
+def test_reel_open_day_two_is_post_itinerary() -> None:
+    got = guard(
+        "ngay thu hai di dau",
+        has_reel=True,
+        intent="consult",
+        day_ref="monday",
+        uses_context_post=True,
+    )
+    assert (got.intent, got.itinerary_day, got.day_ref) == ("post_itinerary", 2, "none")
+
+
+def test_reel_open_weekend_ideas_stay_consult() -> None:
+    got = guard("cuối tuần này đi đâu", has_reel=True, intent="consult", uses_context_post=False)
+    assert got.intent == "consult"
+
+
 def test_consult_without_place_stays_consult() -> None:
     got = guard("cuối tuần đi đâu chơi", intent="consult", query="gợi ý nơi đi chơi cuối tuần")
     assert (got.intent, got.place) == ("consult", "")
