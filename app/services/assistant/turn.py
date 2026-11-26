@@ -9,7 +9,7 @@ the trip memory, social turns that call no Skill, and the fixes of the Expo Web 
 import asyncio
 import logging
 import re
-from collections.abc import Awaitable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from datetime import date
 from uuid import UUID
 
@@ -26,11 +26,13 @@ from app.services.assistant.controller import (
     is_unspecified_edit,
     off_topic_kind,
 )
+from app.services.assistant.destinations import merge_prefs
 from app.services.assistant.schemas import (
     Answer,
     Awaiting,
     CardRef,
     ChatRequest,
+    TravelPrefs,
     TripContext,
     Understanding,
 )
@@ -48,7 +50,8 @@ SKILL_SECONDS = 3.0
 # Weather is two calls in a row (place, then forecast); a cold TLS start took ~1 s each
 # (live run 2026-11-16).
 # plan: points, forecast and maybe the hotel; 3 s timed out on staging (Vũng Tàu report P2).
-SKILL_SECONDS_BY_NAME = {"weather": 6.0, "plan": 7.0}
+# consult: one LLM call over the whole catalog.
+SKILL_SECONDS_BY_NAME = {"weather": 6.0, "plan": 7.0, "consult": 6.0}
 SKILL_ERRORS = (TimeoutError, httpx.HTTPError, ValidationError, KeyError, ValueError, TypeError)
 LABELS = {
     "content": "kết quả tìm kiếm",
@@ -57,6 +60,7 @@ LABELS = {
     "trip": "reel",
     "weather": "thời tiết",
     "plan": "lộ trình",
+    "consult": "gợi ý điểm đến",
 }
 # Stage B (plan B7): the whole trip and its edits, run by TripPlanner.
 PLAN_INTENTS = {
@@ -102,6 +106,8 @@ class Turn:
         today: date,
         places: PlacesClient | None = None,
         disabled_skills: frozenset[str] = frozenset(),
+        consult: Callable[[ChatRequest, TripContext], Awaitable[tuple[Answer, TravelPrefs]]]
+        | None = None,
     ) -> None:
         self.request = request
         self.parsed = parsed
@@ -109,6 +115,8 @@ class Turn:
         self.weather = weather
         self.today = today
         self.disabled_skills = disabled_skills
+        self.consult = consult
+        self.learned_prefs: TravelPrefs | None = None
         self.degraded: list[str] = []
         self.is_asked = planner.has_asked_before(request)
         self.memory = request.trip or TripContext()
@@ -238,6 +246,8 @@ class Turn:
             return social.refusal_answer(seed=self._seed(), history=self.request.history)
         if parsed is None or self.request.search_mode == "reel":
             return await self._discover()
+        if parsed.intent == "consult":
+            return await self._consult()
         fixed = self._fixed(parsed)
         if fixed is not None:
             return fixed
@@ -314,6 +324,8 @@ class Turn:
         if any(c.kind == "flight" for c in answer.cards):
             memory.pending_flights = draft_flights(answer.cards)
         memory.asked = memory.asked or answer.kind == "clarify"
+        if self.learned_prefs is not None:
+            memory.prefs = merge_prefs(memory.prefs, self.learned_prefs)
         # What Tripi just asked for, so a short reply ("Vũng tàu") finishes it next turn.
         memory.awaiting = (
             self.planned_trip.awaiting
@@ -330,6 +342,12 @@ class Turn:
             memory.awaiting = Awaiting.model_validate(
                 {"intent": parsed.intent, "missing": missing, "nights": parsed.nights}
             )
+        if any(
+            fact.get("type") == "consult" and not fact.get("hasSuggestions")
+            for fact in answer.facts
+        ):
+            # No destination named yet: the next short reply goes on with the consult.
+            memory.awaiting = Awaiting(intent="consult", missing="place")
         return memory
 
     # ---- social turns, refusals and questions: no Skill
@@ -367,6 +385,20 @@ class Turn:
         else:
             question = "Bạn muốn mình tìm gì cho chuyến đi này?"
         return Answer(kind="clarify", text=question)
+
+    # ---- consult: where to go when the user has no destination
+
+    async def _consult(self) -> Answer:
+        # Lazy: consultant imports understand, which imports this module.
+        from app.services.assistant.consultant import fallback_consult_answer
+
+        if self.consult is None:
+            return fallback_consult_answer()
+        result = await self._run_value("consult", self.consult(self.request, self.memory))
+        if result is None:
+            return fallback_consult_answer()
+        answer, self.learned_prefs = result
+        return answer
 
     # ---- discovery, stays, flights
 

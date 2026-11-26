@@ -5,9 +5,10 @@ import json
 import logging
 import re
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from app.clients.llm.base import LlmResult
@@ -19,10 +20,18 @@ from app.services.assistant.consultant import (
 )
 from app.services.assistant.controller import apply_guards
 from app.services.assistant.destinations import destinations_by_id, merge_prefs
-from app.services.assistant.schemas import Awaiting, ChatRequest, TravelPrefs, TripContext
+from app.services.assistant.schemas import (
+    Answer,
+    Awaiting,
+    ChatRequest,
+    TravelPrefs,
+    TripContext,
+    Understanding,
+)
+from app.services.assistant.turn import Turn
 from app.services.assistant.understand import build_understanding_input
 from app.services.summary.schemas import strict_json_schema
-from evals.assistant.run import controller_plan
+from evals.assistant.run import FakeWeather, controller_plan, fake_core
 
 
 def test_catalog_loads_and_is_valid() -> None:
@@ -284,3 +293,97 @@ def test_consult_output_schema_builds_with_nested_prefs() -> None:
         )
     )
     assert parsed.prefs.budget_per_person == 2_000_000
+
+
+# ---- Turn: the consult route and what it remembers
+
+FAKE_PREFS = TravelPrefs(terrain=["beach"])
+
+
+def suggestion_answer(*, has_suggestions: bool) -> Answer:
+    return Answer(
+        kind="answer",
+        text="Bạn thích biển nè.",
+        facts=[{"type": "consult", "hasSuggestions": has_suggestions, "destinationIds": []}],
+    )
+
+
+def run_turn(
+    consult_fn,
+    *,
+    trip: TripContext | None = None,
+    intent: Literal["consult", "find_stay"] = "consult",
+):
+    calls: list[tuple[str, dict]] = []
+
+    async def go():
+        async with fake_core(calls) as core:
+            turn = Turn(
+                ChatRequest(conversation_id=uuid4(), message="đi đâu chill", trip=trip),
+                Understanding(intent=intent),
+                core=core,
+                weather=FakeWeather(),
+                today=TODAY,
+                consult=consult_fn,
+            )
+            answer = await turn.answer()
+            return turn, answer
+
+    turn, answer = asyncio.run(go())
+    return turn, answer, calls
+
+
+def test_turn_routes_consult_without_search() -> None:
+    seen = []
+
+    async def fake_consult(request, trip):
+        seen.append(trip)
+        return suggestion_answer(has_suggestions=True), FAKE_PREFS
+
+    turn, answer, calls = run_turn(fake_consult)
+    assert answer.text == "Bạn thích biển nè." and len(seen) == 1
+    assert calls == [] and turn.degraded == []
+
+
+def test_turn_consult_none_uses_fallback() -> None:
+    turn, answer, _ = run_turn(None)
+    assert answer == fallback_consult_answer() and turn.degraded == []
+
+
+@pytest.mark.parametrize("error", [httpx.ConnectError("down"), ValueError("cut"), TimeoutError()])
+def test_turn_consult_error_degrades(error) -> None:
+    async def broken(request, trip):
+        raise error
+
+    turn, answer, _ = run_turn(broken)
+    assert answer == fallback_consult_answer() and "consult" in turn.degraded
+
+
+def test_next_trip_merges_prefs_and_awaits_consult() -> None:
+    async def fake_consult(request, trip):
+        return suggestion_answer(has_suggestions=False), FAKE_PREFS
+
+    turn, answer, _ = run_turn(fake_consult, trip=TripContext(prefs=TravelPrefs(vibe=["quiet"])))
+    trip = turn.next_trip(answer)
+    assert trip.prefs is not None and trip.prefs.vibe == ["quiet"]
+    assert trip.prefs.terrain == ["beach"]
+    assert trip.awaiting == Awaiting(intent="consult", missing="place")
+    assert trip.asked is False
+
+
+def test_next_trip_no_awaiting_after_suggestion() -> None:
+    async def fake_consult(request, trip):
+        return suggestion_answer(has_suggestions=True), FAKE_PREFS
+
+    turn, answer, _ = run_turn(fake_consult)
+    assert turn.next_trip(answer).awaiting is None
+
+
+def test_stay_after_consult_still_asks_dates() -> None:
+    async def fake_consult(request, trip):
+        return suggestion_answer(has_suggestions=False), FAKE_PREFS
+
+    turn, answer, _ = run_turn(fake_consult)
+    memory = turn.next_trip(answer)
+    _, stay, _ = run_turn(None, trip=memory, intent="find_stay")
+    assert stay.kind == "clarify"

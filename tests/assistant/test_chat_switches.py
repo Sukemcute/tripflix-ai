@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from typing import cast
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -20,7 +21,7 @@ from app.services.assistant.admission import (
     guest_identity,
     user_identity,
 )
-from app.services.assistant.schemas import ChatRequest, Understanding
+from app.services.assistant.schemas import Answer, ChatRequest, TravelPrefs, Understanding
 from app.services.assistant.understand import build_understanding_input
 from app.services.summary.pii import mask_pii
 from app.services.usage_events import ChatTurnEvent, ChatUsage, UsageEvent
@@ -269,3 +270,35 @@ def test_gate_rejection_does_not_record_a_turn(turn_event_client, monkeypatch, s
     response = client.post("/chat", json={"conversationId": str(uuid4()), "message": "Đà Lạt"})
     assert response.status_code == status
     publish.assert_not_awaited()
+
+
+def test_chat_consult_calls_llm_once_no_responder(monkeypatch):
+    calls = []
+
+    async def fake_consult(request, trip, *, today, on_usage):
+        calls.append(request.message)
+        on_usage(LlmResult(output="", model_name="test", input_tokens=50, output_tokens=8))
+        answer = Answer(
+            kind="answer",
+            text="Bạn thích biển hay núi nè?",
+            facts=[{"type": "consult", "fallback": False, "hasSuggestions": False}],
+        )
+        return answer, TravelPrefs()
+
+    monkeypatch.setattr(chat_api.consultant, "consult", fake_consult)
+    events, responder = run_chat(
+        monkeypatch, Understanding(intent="consult"), chat_responder_enabled=True
+    )
+    publish = cast(AsyncMock, chat_api.publish_usage)
+    assert len(calls) == 1 and responder.await_count == 0
+    text = "".join(d["delta"] for name, d in events if name == "text")
+    assert text == "Bạn thích biển hay núi nè?"
+    assert publish.await_args is not None
+    steps = [
+        e.payload.step
+        for e in publish.await_args.args[0]
+        if isinstance(e, UsageEvent) and isinstance(e.payload, ChatUsage)
+    ]
+    assert steps == ["responder"]  # the fake classifier records none; this is the consult call
+    trip = next(data for name, data in events if name == "trip")
+    assert trip["awaiting"]["intent"] == "consult"
