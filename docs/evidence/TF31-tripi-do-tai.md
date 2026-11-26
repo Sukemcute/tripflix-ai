@@ -45,7 +45,7 @@ Một instance ai-service (bản `prod`, 1 process) và core-api local. Tổng 1
 - **Breaker đóng mở liên tục khi tải cao:** log có 34 lần "breaker chat-controller open for 300s".
   - Nguyên nhân: các lượt đang bay mà thành công thì `record_success` đặt lại bộ đếm, nên breaker đóng sau vài giây chứ không giữ 300 giây như cấu hình.
   - Breaker cũng coi 429 (bị giới hạn tốc độ) giống như nhà cung cấp sập.
-  - Chưa sửa ở task này, xem mục việc còn lại.
+  - Đã sửa, xem mục "Sửa 429 và breaker" bên dưới.
 - **Quy đổi:** 4 lượt/giây ứng với khoảng **160 người đang chat cùng lúc** trên một instance, nếu mỗi người gửi một tin khoảng 40 giây một lần (giả định, chưa đo trên app thật).
 
 ### Giới hạn của bài đo
