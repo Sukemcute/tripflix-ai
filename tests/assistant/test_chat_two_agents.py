@@ -327,7 +327,7 @@ def test_responder_replaces_refs_and_drops_invented_prices(monkeypatch):
     monkeypatch.setattr(responder, "get_role_llm", lambda role: llm)
     request = ChatRequest(conversation_id=uuid4(), message="san may da lat")
     sentences, result = asyncio.run(responder.respond(request, VIDEO_ANSWER))
-    assert sentences == ["Xem Săn mây Đà Lạt nè ☁️", "Bấm thẻ để xem nha."]
+    assert sentences == ["Xem nè ☁️", "Bấm thẻ để xem nha."]
     assert result.input_tokens == 900
 
 
@@ -481,3 +481,32 @@ def test_room_question_without_a_hotel_name_checks_the_reel_hotel():
 
     answer = asyncio.run(run())
     assert answer.cards[0].kind == "stay" and answer.kind == "no_result"  # sold out, said so
+
+
+def reel_answer(title: str, kind: str = "video") -> Answer:
+    card = VIDEO_ANSWER.cards[0].model_copy(update={"title": title, "kind": kind})
+    return VIDEO_ANSWER.model_copy(update={"cards": [card]})
+
+
+def respond_to(monkeypatch, sentences, answer):
+    monkeypatch.setattr(responder, "get_role_llm", lambda role: ScriptedLlm(sentences))
+    request = ChatRequest(conversation_id=uuid4(), message="chan qua muon di dau do")
+    return asyncio.run(responder.respond(request, answer))[0]
+
+
+def test_video_ref_is_dropped_not_replaced_by_title(monkeypatch):
+    title = "Săn mây Đà Lạt 4h sáng và trải nghiệm nghỉ dưỡng tại Dalat Palace"
+    got = respond_to(
+        monkeypatch, ["Có cảnh săn mây Đà Lạt lúc bình minh [r1] nè."], reel_answer(title)
+    )
+    assert got == ["Có cảnh săn mây Đà Lạt lúc bình minh nè."]
+
+
+def test_stay_ref_still_named(monkeypatch):
+    got = respond_to(monkeypatch, ["Thử [r1] nha."], reel_answer("Seaview Hotel", kind="stay"))
+    assert got == ["Thử Seaview Hotel nha."]
+
+
+def test_lone_video_pointer_does_not_become_the_whole_answer(monkeypatch):
+    got = respond_to(monkeypatch, ["Bạn xem mấy video bên dưới nha."], reel_answer("Săn mây"))
+    assert got and got[0] == VIDEO_ANSWER.text
