@@ -20,6 +20,7 @@ from app.clients.places import CorePlaces, PlacesClient
 from app.clients.weather import WeatherClient
 from app.services.assistant import calendar, planner, social
 from app.services.assistant.controller import (
+    date_question_ref,
     fix_plan_edit,
     is_harmless_off_topic,
     is_unsafe,
@@ -250,6 +251,13 @@ class Turn:
             )
         if parsed and parsed.intent == "refusal":
             return social.refusal_answer(seed=self._seed(), history=self.request.history)
+        if parsed is None and self.request.search_mode != "reel":
+            # The Controller failed: a plain calendar question still gets its answer from code.
+            asked_ref = date_question_ref(normalize_text(self.request.message))
+            if asked_ref is not None:
+                return self._date_info(
+                    Understanding.model_validate({"intent": "ask_date", "dayRef": asked_ref})
+                )
         if parsed is None or self.request.search_mode == "reel":
             return await self._discover()
         if parsed.intent == "consult":
@@ -408,8 +416,12 @@ class Turn:
         text = calendar.holiday_answer(self.request.message, self.today) or planner.date_answer(
             parsed, self.today
         )
-        if self.memory.awaiting and self.memory.place:
-            text += f" Mình xếp tiếp chuyến {self.memory.place} cho bạn nha?"
+        awaiting = self.memory.awaiting
+        if awaiting and self.memory.place:
+            if awaiting.intent == "find_stay":
+                text += f" Mình tìm phòng {self.memory.place} tiếp cho bạn nha?"
+            elif awaiting.intent == "plan_trip":
+                text += f" Mình xếp tiếp chuyến {self.memory.place} cho bạn nha?"
         return Answer(kind="answer", text=text, facts=[{"type": DATE_FACT}])
 
     # ---- consult: where to go when the user has no destination
@@ -487,8 +499,21 @@ class Turn:
         answer = await self._run("stay", search_stays(self.core, parsed))
         if is_one_night_assumed and answer.kind in {"answer", "no_result"}:
             start, end = dates
-            answer.lead = f"Tripi tạm tính 1 đêm, nhận {start:%d/%m} trả {end:%d/%m}."
-            answer.text = f"{answer.lead} {answer.text}"
+            # A fact, not a lead: the Responder words it and asks how many nights.
+            if answer.kind == "answer":
+                answer.facts.append(
+                    {
+                        "type": "assumed_stay",
+                        "nights": 1,
+                        "checkIn": f"{start:%d/%m}",
+                        "checkOut": f"{end:%d/%m}",
+                    }
+                )
+            note = (
+                f"Mình xem trước cho 1 đêm {start:%d/%m}–{end:%d/%m} nha, "
+                "bạn ở mấy đêm thì báo để mình lọc lại."
+            )
+            answer.text = f"{note} {answer.text}"
         return answer
 
     async def _named_hotel(self, parsed: Understanding) -> Answer:

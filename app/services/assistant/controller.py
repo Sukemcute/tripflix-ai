@@ -636,6 +636,23 @@ def named_place(text: str) -> str | None:
     return None
 
 
+def date_question_ref(text: str) -> str | None:
+    """The day_ref a pure calendar question asks ("none" for a holiday); None if it is not one.
+
+    `text` is normalized. Shared by apply_guards and by Turn when the Controller failed.
+    """
+    asked_day = next((ref for ref, cue in ASKED_DAYS.items() if re.search(cue, text)), None)
+    holiday = holiday_cue(text)
+    if (
+        (asked_day or holiday)
+        and re.search(DATE_QUESTION, text)
+        and not named_place(text)
+        and not re.search(rf"{STAY_CUE}|{FLIGHT_CUE}|{WEATHER_CUE}|{NOT_CALENDAR_CUE}", text)
+    ):
+        return "none" if holiday else asked_day
+    return None
+
+
 def apply_guards(
     out: ControllerOutput,
     message: str,
@@ -675,21 +692,9 @@ def apply_guards(
         return out.model_copy(update={"intent": "confirm_booking" if has_booking else "ack"})
     if re.fullmatch(ACK_ONLY, text):
         return out.model_copy(update={"intent": "ack"})
-    asked_day = next((ref for ref, cue in ASKED_DAYS.items() if re.search(cue, text)), None)
-    holiday = holiday_cue(text)
-    if (
-        (asked_day or holiday)
-        and re.search(DATE_QUESTION, text)
-        and not named_place(text)
-        and not re.search(rf"{STAY_CUE}|{FLIGHT_CUE}|{WEATHER_CUE}|{NOT_CALENDAR_CUE}", text)
-    ):
+    if (asked_ref := date_question_ref(text)) is not None:
         return out.model_copy(
-            update={
-                "intent": "ask_date",
-                "day_ref": "none" if holiday else asked_day,
-                "start": None,
-                "end": None,
-            }
+            update={"intent": "ask_date", "day_ref": asked_ref, "start": None, "end": None}
         )
     if out.intent == "ask_date":  # the model saw a date question the message does not hold
         out = out.model_copy(update={"intent": "clarify"})

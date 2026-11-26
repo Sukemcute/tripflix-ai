@@ -1,15 +1,18 @@
 """Relative days and date questions, on a fixed Thursday (live test 2026-11-26)."""
 
+import asyncio
 import json
 from datetime import date
+from uuid import uuid4
 
 import pytest
 
 from app.services.assistant import planner
 from app.services.assistant.controller import DayMonth, apply_guards, to_understanding
-from app.services.assistant.schemas import Awaiting, TripContext
+from app.services.assistant.schemas import Awaiting, ChatRequest, TripContext
+from app.services.assistant.turn import Turn
 from evals.assistant.run import controller_plan
-from tests.assistant.test_report_regressions import FakeCore, run_turn
+from tests.assistant.test_report_regressions import FakeCore, FakeWeather, run_turn
 
 THURSDAY = date(2026, 11, 26)
 
@@ -219,3 +222,33 @@ def test_weather_day_does_not_stretch_trip_dates():
                           place="Vũng Tàu", day_ref="none", start=DayMonth(day=5, month=12),
                           nights=1)  # fmt: skip
     assert turn.next_trip(answer).date_to is None  # the old end is before the new start
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("hôm nay là thứ mấy rồi", "Hôm nay là thứ Năm, 26/11/2026."),
+        ("mai là thứ mấy", "Mai là thứ Sáu, 27/11."),
+    ],
+)
+def test_date_question_answered_without_controller(message, expected):
+    core = FakeCore({})
+    request = ChatRequest(conversation_id=uuid4(), message=message)
+
+    async def go():
+        async with core.client() as client:
+            turn = Turn(request, None, core=client, weather=FakeWeather([]), today=THURSDAY)
+            return await turn.answer()
+
+    answer = asyncio.run(go())
+    assert answer.text == expected
+    assert "/api/search" not in core.paths()
+
+
+def test_date_answer_follow_up_matches_pending_stay():
+    trip = TripContext(
+        place="Vũng Tàu", awaiting=Awaiting(intent="find_stay", missing="dates", nights=None)
+    )
+    answer, _, _ = ask("hôm nay là ngày mấy", trip, intent="search")
+    assert answer.text.endswith("Mình tìm phòng Vũng Tàu tiếp cho bạn nha?")
+    assert "xếp tiếp chuyến" not in answer.text
