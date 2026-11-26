@@ -1,5 +1,6 @@
 """Relative days and date questions, on a fixed Thursday (live test 2026-11-26)."""
 
+import json
 from datetime import date
 
 import pytest
@@ -134,3 +135,19 @@ def test_typed_dates_still_beat_the_relative_day():
     out = apply_guards(said, "ks vũng tàu t7 21/12 đến 22/12", has_reel=False)
     parsed = to_understanding(out, None, THURSDAY)
     assert planner.stay_range(parsed, THURSDAY) == (date(2026, 12, 21), date(2026, 12, 22))
+
+
+@pytest.mark.parametrize(
+    ("message", "query", "sent"),
+    [
+        ("chơi gì vậy", "chơi gì", "Vũng Tàu chơi gì"),
+        ("đà lạt thì sao", "đà lạt", "đà lạt"),
+        ("ăn gì ở vũng tàu", "ăn gì ở vũng tàu", "ăn gì ở vũng tàu"),
+    ],
+)
+def test_follow_up_search_keeps_trip_place(message, query, sent):
+    core = FakeCore({"/api/search": {"sections": []}})
+    out = controller_plan(intent="search", query=query)
+    run_turn(out, core, message=message, trip=TripContext(place="Vũng Tàu"), today=THURSDAY)
+    (body,) = [json.loads(raw) for path, raw in core.bodies if path == "/api/search"]
+    assert body == {"q": sent}

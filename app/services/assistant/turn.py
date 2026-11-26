@@ -24,6 +24,7 @@ from app.services.assistant.controller import (
     is_harmless_off_topic,
     is_unsafe,
     is_unspecified_edit,
+    named_place,
     off_topic_kind,
 )
 from app.services.assistant.destinations import merge_prefs
@@ -423,6 +424,13 @@ class Turn:
             )
         else:
             query = parsed.query if parsed and parsed.query else mask_pii(message)
+            place = self.memory.place
+            if (
+                place
+                and normalize_text(place) not in normalize_text(query)
+                and not named_place(normalize_text(f"{message} {query}"))
+            ):
+                query = f"{place} {query}"  # a follow-up ("mốt đi được không") stays on the trip
             reel_request = re.match(
                 r"^(?:(?:tìm|tim|cho mình xem)\s+)?(?:reels?|video)\b\s*", message, re.IGNORECASE
             )
