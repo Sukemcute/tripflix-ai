@@ -77,6 +77,7 @@ DAY_WORDS = {
 }  # fmt: skip
 SOCIAL_INTENTS = {"greeting", "thanks", "ack", "goodbye"}
 MAX_SOCIAL_WORDS = 6
+PACK_ASK_CUE = r"\b(mang|mac|chuan bi|dem) (gi|nhung gi|theo gi)\b"
 IDENTITY_CUE = r"\b(la ai|(lam|giup) (duoc )?(gi|nhung gi)|biet lam gi)\b"
 # Live eval of v4 (16/11): slots the message states plainly but the model sometimes missed.
 FLIGHT_CUE = r"\b(bay|may bay|ve bay|chuyen bay|flight|san bay)\b"  # after "thu bay" is removed
@@ -701,6 +702,10 @@ def apply_guards(
     fixed: dict = {}
     if out.day_ref in DAY_CUES and not re.search(DAY_CUES[out.day_ref], text):
         fixed["day_ref"] = "none"
+    if out.day_ref == "this_weekend" and re.search(r"\bcuoi tuan sau\b", text):
+        fixed["day_ref"] = (
+            "next_weekend"  # stay-02 read "cuối tuần sau" as this weekend 3/3 (26/11)
+        )
     if out.round_trip and not re.search(ROUND_TRIP_CUE, text):
         fixed["round_trip"] = False
     if out.children and not out.infants and re.search(INFANT_CUE, text):
@@ -872,6 +877,21 @@ def apply_guards(
         intent = "weather"  # "Thời tiết Đà Lạt thứ Bảy" while a reel is open
     elif intent == "refusal" and re.search(IDENTITY_CUE, text):
         intent = "identity"  # "ban lam duoc gi" was refused 3/3
+    elif intent == "consult" and not out.place and re.search(IDENTITY_CUE, text):
+        intent = "identity"  # "ban lam duoc gi" was consult 3/3 (live 26/11)
+    elif (
+        intent in {"search", "consult"}
+        and re.search(PACK_ASK_CUE, text)
+        and not re.search(STAY_CUE, text)
+    ):
+        intent = "packing"  # "di vung tau hop thoi khong di bien, mang gi" was search (live 26/11)
+    elif (
+        intent == "change_transport"
+        and not in_plan
+        and (out.to_city or out.to_airport)
+        and re.search(FLIGHT_CUE, re.sub(r"\bthu bay\b", " ", text))
+    ):
+        intent = "find_flight"  # "3 ngày nữa mình bay ra hà nội từ sài gòn", no plan (live 26/11)
     elif (
         intent == "refusal"
         and (out.from_airport or out.from_city)
@@ -1065,6 +1085,17 @@ def apply_guards(
         only = [o for o in out.packing_only if not re.fullmatch(ITEM_LIMIT, normalize_text(o))]
         if only != out.packing_only:
             fixed["packing_only"] = only
+    # The model pastes a prompt example ("gợi ý nơi đi chill") into other turns; search would
+    # follow it. Consult never reads the query, so it is left alone.
+    if (
+        fixed.get("intent", out.intent) != "consult"
+        and "goi y" not in text
+        and out.query
+        and normalize_text(out.query).startswith("goi y noi di")
+    ):
+        fixed["query"] = message
+        if normalize_text(out.reel_query) == normalize_text(out.query):
+            fixed["reel_query"] = message
     if is_unsafe(message) or (off_topic_kind(message) and is_harmless_off_topic(message, out)):
         fixed["intent"] = "refusal"
     return out.model_copy(update=fixed) if fixed else out

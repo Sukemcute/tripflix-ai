@@ -454,3 +454,42 @@ def test_stay_after_consult_still_asks_dates() -> None:
     memory = turn.next_trip(answer)
     _, stay, _ = run_turn(None, trip=memory, intent="find_stay")
     assert stay.kind == "clarify"
+
+
+def test_next_weekend_words_win_over_this_weekend() -> None:
+    message = "homestay da lat cuoi tuan sau"
+    got = guard(message, intent="find_stay", place="Đà Lạt", day_ref="this_weekend")
+    assert got.day_ref == "next_weekend"
+
+
+def test_copied_example_query_is_replaced_by_message() -> None:
+    message = "di vung tau hop thoi khong di bien, mang gi"
+    copied = "gợi ý nơi đi chill"
+    got = guard(message, intent="search", place="Vũng Tàu", query=copied, reel_query=copied)
+    assert (got.query, got.reel_query) == (message, message)
+
+
+def test_real_goi_y_query_is_kept() -> None:
+    got = guard(
+        "gợi ý chỗ đi chill ở đà lạt", intent="search", place="Đà Lạt", query="gợi ý nơi đi chill"
+    )
+    assert got.query == "gợi ý nơi đi chill"
+
+
+def test_what_can_you_do_is_identity_not_consult() -> None:
+    assert (
+        guard("ban lam duoc gi", intent="consult", query="gợi ý nơi đi chill").intent == "identity"
+    )
+
+
+def test_mang_gi_is_packing() -> None:
+    got = guard("di vung tau hop thoi khong di bien, mang gi", intent="search", place="Vũng Tàu")
+    assert (got.intent, got.place) == ("packing", "Vũng Tàu")
+
+
+def test_bay_ra_city_without_plan_is_find_flight() -> None:
+    message = "3 ngày nữa mình bay ra hà nội từ sài gòn"
+    plan = controller_plan(intent="change_transport", from_city="TP.HCM", to_city="Hà Nội")
+    assert apply_guards(plan, message, has_reel=False).intent == "find_flight"
+    planned = apply_guards(plan, message, has_reel=False, in_plan=True)
+    assert planned.intent == "change_transport"
