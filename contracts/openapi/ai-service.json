@@ -14,7 +14,8 @@
               "weather",
               "packing",
               "find_reel",
-              "change_transport"
+              "change_transport",
+              "consult"
             ],
             "title": "Intent",
             "type": "string"
@@ -1240,6 +1241,96 @@
         "title": "ModerateResult",
         "type": "object"
       },
+      "TravelPrefs": {
+        "additionalProperties": false,
+        "description": "What the user likes in a trip, understood in conversation (consult intent).\n\nEvery field is optional; the LLM fills what it learned, code merges it into trip memory.",
+        "properties": {
+          "budgetPerPerson": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budgetperperson"
+          },
+          "companions": {
+            "anyOf": [
+              {
+                "enum": [
+                  "solo",
+                  "couple",
+                  "friends",
+                  "family",
+                  "kids"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Companions"
+          },
+          "mood": {
+            "default": "",
+            "maxLength": 60,
+            "title": "Mood",
+            "type": "string"
+          },
+          "nights": {
+            "anyOf": [
+              {
+                "maximum": 14.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nights"
+          },
+          "terrain": {
+            "items": {
+              "enum": [
+                "beach",
+                "mountain",
+                "island",
+                "city",
+                "countryside",
+                "lake"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "Terrain",
+            "type": "array"
+          },
+          "vibe": {
+            "items": {
+              "enum": [
+                "quiet",
+                "lively",
+                "romantic",
+                "adventure",
+                "healing",
+                "foodie",
+                "nightlife"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "Vibe",
+            "type": "array"
+          }
+        },
+        "title": "TravelPrefs",
+        "type": "object"
+      },
       "TripContext": {
         "additionalProperties": false,
         "description": "What Tripi remembers of the trip being planned (trip memory, v3 \"Trip Draft\" lite).\n\nThe app keeps it and sends it back each turn; the server re-checks everything against\nCore before use, so an edited copy only spoils its own answers (DeepResearch \u00a75.1).\nv2 (Stage B) adds the plan itself: origin city, stay, way there, stops per day, the\noptions on screen and the last edits. Kept small: the app stores the whole chat in 2 KB.",
@@ -1384,6 +1475,16 @@
             "maxLength": 100,
             "title": "Place",
             "type": "string"
+          },
+          "prefs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TravelPrefs"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "priceMaxPerNight": {
             "anyOf": [
