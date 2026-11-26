@@ -50,7 +50,9 @@ REF = re.compile(r"\[(r\d+)\]")
 CARD_REF = re.compile(r"(?:thẻ\s+)?\[(r\d+)\]", re.IGNORECASE)
 NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 DATE = re.compile(r"\b(\d{1,2})/(\d{1,2})(?:/\d{2,4})?\b")
-SCARCITY = re.compile(r"\b(sap het|chi con|nhanh tay|con it|chay hang|hot nhat|re nhat|gia soc)\b")
+SCARCITY = re.compile(r"\b(sap het|chi con|nhanh tay|con it|chay hang|hot nhat|gia soc)\b")
+# "Cheapest" is true only when the cards are sorted by price (TF31); otherwise it is an invention.
+CHEAPEST = re.compile(r"\b(re nhat|dat nhat)\b")
 SAYS_AVAILABLE = re.compile(r"\b(con phong|con cho|con ve)\b")
 SAYS_SOLD_OUT = re.compile(r"\b(het phong|het cho|het ve)\b")
 CONTACT = re.compile(r"https?://|www\.|\b0\d{8,10}\b|\S+@\S+\.\w+", re.IGNORECASE)
@@ -130,6 +132,10 @@ def verify(
     allowed_numbers = _numbers(facts_text) | (set() if outside else _numbers(question))
     availability = [f.get("available") for f in facts if isinstance(f.get("available"), bool)]
     weather_days = _weather_days(facts, today)
+    is_price_sorted = any(
+        f.get("type") == "stay_filter" and f.get("sort") in {"price_asc", "price_desc"}
+        for f in facts
+    )
     kept: list[str] = []
     dropped: Counter[str] = Counter()
     emoji_used = 0
@@ -138,7 +144,14 @@ def verify(
         if not sentence:
             continue
         rule = _broken_rule(
-            sentence, refs, allowed_numbers, grounded_words, availability, weather_days, today
+            sentence,
+            refs,
+            allowed_numbers,
+            grounded_words,
+            availability,
+            weather_days,
+            today,
+            is_price_sorted,
         )
         if CODE_SHAPE.search(sentence):
             rule = "V10_code_shape"
@@ -188,6 +201,7 @@ def _broken_rule(
     availability: list[bool | None],
     weather_days: dict[date, set[str]],
     today: date | None,
+    is_price_sorted: bool = False,
 ) -> str | None:
     if any(ref not in refs for ref in REF.findall(sentence)):
         return "V1_unknown_ref"
@@ -202,7 +216,7 @@ def _broken_rule(
         if any(word not in grounded_words for word in words):
             return "V3_ungrounded_name"
     norm = normalize_text(sentence)
-    if SCARCITY.search(norm):
+    if SCARCITY.search(norm) or (not is_price_sorted and CHEAPEST.search(norm)):
         return "V4_scarcity"
     if SAYS_AVAILABLE.search(norm) and availability and not any(availability):
         return "V5_availability"

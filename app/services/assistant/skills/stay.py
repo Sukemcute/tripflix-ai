@@ -12,6 +12,7 @@ from app.services.assistant.schemas import (
     Understanding,
 )
 
+TITLE_CHARS = 80  # same cut as the Responder's card titles
 STAY_SORT_PARAM = {"price_asc": "price", "price_desc": "price_desc", "stars_desc": "stars"}
 SORT_PHRASE = {
     "price_asc": "xếp từ rẻ đến đắt",
@@ -141,6 +142,28 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
                 observed_at=datetime.now(UTC),
             )
             for i, stay in enumerate(stays, 1)
+        ],
+        facts=[
+            {
+                "ref": f"r{i}",
+                "kind": "stay",
+                "title": stay.name[:TITLE_CHARS],
+                "pricePerNight": int(stay.unitPrice),
+                "priceText": vnd(int(stay.unitPrice)),
+                "stars": stay.stars,
+                "rating": stay.rating,
+            }
+            for i, stay in enumerate(stays, 1)
+        ]
+        + [
+            {
+                "type": "stay_filter",
+                "sort": understood.stay_sort,
+                "priceMin": floor,
+                "priceMax": cap,
+                "minStars": stars,
+                "relative": understood.price_relative,
+            }
         ],
     )
 

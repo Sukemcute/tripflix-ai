@@ -9,6 +9,7 @@ from app.services.assistant.controller import apply_guards, to_understanding
 from app.services.assistant.schemas import CardRef, ChatRequest, TripContext, Understanding
 from app.services.assistant.skills.stay import refine_stay_filters
 from app.services.assistant.understand import build_understanding_input
+from app.services.assistant.verifier import verify
 from evals.assistant.run import TODAY, controller_plan
 from tests.assistant.test_report_regressions import IN_5, PLACE, FakeCore, dm, plan, run_turn
 
@@ -227,3 +228,96 @@ def test_turn_higher_after_capped_search():
     assert answer.kind == "no_result"
     assert "đắt hơn" in answer.text and "450.000đ" in answer.text
     assert answer.suggestions == ["Xem căn rẻ hơn", "Đổi ngày"]
+
+
+def stay_facts(sort: str) -> list[dict]:
+    return [
+        {
+            "ref": "r1",
+            "kind": "stay",
+            "title": "Khách sạn Biển Xanh",
+            "pricePerNight": 450_000,
+            "priceText": "450.000đ",
+            "stars": 3,
+            "rating": 4.2,
+        },
+        {
+            "type": "stay_filter",
+            "sort": sort,
+            "priceMin": None,
+            "priceMax": None,
+            "minStars": None,
+            "relative": "none",
+        },
+    ]
+
+
+def test_stay_answer_facts_have_prices_and_filter():
+    items = [
+        {
+            "hotelId": "h1",
+            "name": "Khách sạn Biển Xanh",
+            "unitPrice": 450_000,
+            "totalPrice": 450_000,
+            "stars": 3,
+            "rating": 4.2,
+        }
+    ]
+    core = FakeCore(PLACE | {"/api/stays": {"items": items}})
+    answer, _ = run_turn(
+        plan(
+            intent="find_stay",
+            place="Nha Trang",
+            start=dm(IN_5),
+            nights=1,
+            stay_sort="price_asc",
+            price_max_per_night=500_000,
+        ),
+        core,
+    )
+    assert answer.facts == [
+        {
+            "ref": "r1",
+            "kind": "stay",
+            "title": "Khách sạn Biển Xanh",
+            "pricePerNight": 450_000,
+            "priceText": "450.000đ",
+            "stars": 3,
+            "rating": 4.2,
+        },
+        {
+            "type": "stay_filter",
+            "sort": "price_asc",
+            "priceMin": None,
+            "priceMax": 500_000,
+            "minStars": None,
+            "relative": "none",
+        },
+    ]
+
+
+@pytest.mark.parametrize("sort", ["price_asc", "price_desc"])
+def test_verifier_allows_cheapest_when_sorted_by_price(sort):
+    sentence = "Căn rẻ nhất là [r1], 450.000đ/đêm nè."
+    kept, dropped = verify([sentence], stay_facts(sort), {"r1"}, "tim phong")
+    assert kept == [sentence] and not dropped
+
+
+def test_verifier_drops_cheapest_without_price_sort():
+    kept, dropped = verify(
+        ["Căn rẻ nhất là [r1], 450.000đ/đêm nè."], stay_facts("none"), {"r1"}, "tim phong"
+    )
+    assert kept == [] and dropped["V4_scarcity"] == 1
+
+
+def test_verifier_drops_invented_price():
+    kept, dropped = verify(
+        ["[r1] chỉ 300.000đ/đêm nè."], stay_facts("price_asc"), {"r1"}, "tim phong"
+    )
+    assert kept == [] and dropped["V2_ungrounded_number"] == 1
+
+
+@pytest.mark.parametrize("sentence", ["[r1] sắp hết phòng rồi.", "Nhanh tay đặt [r1] nha."])
+def test_verifier_still_drops_scarcity_words(sentence):
+    kept, dropped = verify([sentence], stay_facts("price_asc"), {"r1"}, "tim phong")
+    assert kept == [] and dropped["V4_scarcity"] == 1

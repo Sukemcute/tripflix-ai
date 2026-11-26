@@ -348,7 +348,8 @@ class Answer(WireModel):
     kind: Literal["answer", "clarify", "refusal", "no_result", "fallback"]
     text: str  # fixed template: what the user sees when the Responder is off or fails
     cards: list[Card] = Field(default_factory=list)
-    # What the Responder may talk about: short fields only, never prices (Verifier V2).
+    # What the Responder may talk about: short fields only. Prices appear only as a stay's
+    # checked pricePerNight/priceText; Verifier V2 drops any number not found here.
     facts: list[dict] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     # A code-made sentence that answers the question itself ("Ngày 2: ..."). It always goes

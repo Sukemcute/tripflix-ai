@@ -26,7 +26,7 @@ from app.services.summary.schemas import strict_json_schema
 from app.services.summary.vi_text import normalize_text
 
 logger = logging.getLogger(__name__)
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-responder.v4.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-responder.v5.md"
 # The last messages, so "tại sao…" and small talk read the conversation (v3, 17/11).
 HISTORY_MESSAGES = 4
 TITLE_CHARS = 80  # titles are user-written: keep them short in the prompt
@@ -41,7 +41,7 @@ class ResponderOutput(BaseModel):
 def build_facts(answer: Answer) -> list[dict]:
     if answer.facts:
         return answer.facts
-    # Search cards: name, kind and ref only; never the price.
+    # Search cards: name, kind and ref only; a skill that may name prices sets answer.facts.
     return [{"ref": c.ref, "kind": c.kind, "title": c.title[:TITLE_CHARS]} for c in answer.cards]
 
 
