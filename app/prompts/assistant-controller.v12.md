@@ -181,9 +181,9 @@ Ví dụ (trip.place Nha Trang, trip.lastCards có thẻ stay, planDays 0):
 <!-- v12 (2026-11-26): consult. -->
 Đầu vào "trip" có thêm "prefs": sở thích Tripi đã học khi tư vấn (vibe, terrain, companions, budgetPerPerson, nights, mood), null khi chưa có. Chỉ để hiểu ngữ cảnh, không cần chép lại.
 - consult: người dùng muốn đi chơi hoặc du lịch nhưng CHƯA có nơi đến: xin ý tưởng ("cuối tuần đi đâu chơi", "đi đâu chill chill", "vậy đi biển đâu cho chill"), hoặc kể tâm trạng kèm ý muốn đi đâu đó ("tôi vừa thất nghiệp, buồn quá, muốn đi đâu đó cuối tuần"), hoặc trả lời cộc lốc cho câu tư vấn của Tripi khi trip.awaiting.intent là "consult" ("chill thôi", "đi với bạn gái", "tầm 2 củ"). Để place là "" và missing là "none"; nếu có ngày thì vẫn điền day_ref hoặc start như thường.
-  Phân biệt:
-  - Có nơi đến cụ thể thì theo intent cũ: "đà lạt cuối tuần chơi gì" → search.
-  - Nói rõ chỉ muốn xem reel hoặc video thì vẫn là find_reel: "tìm reel cuối tuần đi đâu".
+  Phân biệt (hai luật này thắng mọi dấu hiệu của consult):
+  - Câu có chữ "reel", "video" hoặc "clip" là find_reel, kể cả khi không có nơi đến: "tìm reel cuối tuần đi đâu" → find_reel, không phải consult.
+  - Câu có tên một nơi, dù viết thường hay không dấu ("da lat", "đà lạt", "vung tau") thì KHÔNG BAO GIỜ là consult: điền place và dùng intent bình thường. "chơi gì / đi đâu ở X" là search: "đà lạt cuối tuần chơi gì" → search, place "Đà Lạt".
   - Chuyện buồn, chán mà không nhắc đi chơi vẫn là off_topic: "chán quá à".
   - Khi trip.awaiting.intent là "consult" mà người dùng nêu một nơi cụ thể ("đà lạt đi") thì theo intent của nơi đó (search), không phải consult.
 Ví dụ consult:
@@ -191,6 +191,7 @@ Ví dụ consult:
 "tôi vừa thất nghiệp, buồn quá, muốn đi đâu đó cuối tuần" → {"intent":"consult","day_ref":"this_weekend","query":"gợi ý nơi đi xả stress cuối tuần"}
 "đi đâu chill chill" → {"intent":"consult","query":"gợi ý nơi đi chill"}
 "chill thôi" (trip.awaiting {"intent":"consult","missing":"place"}) → {"intent":"consult","query":"đi chill"}
-"tìm reel cuối tuần đi đâu" → {"intent":"find_reel","day_ref":"this_weekend","query":"cuối tuần đi đâu"}
-"đà lạt cuối tuần chơi gì" → {"intent":"search","place":"Đà Lạt","day_ref":"this_weekend","query":"chơi gì ở Đà Lạt"}
+"tìm reel cuối tuần đi đâu" → {"intent":"find_reel","day_ref":"this_weekend","reel_query":"cuối tuần đi đâu"} (không phải consult: có chữ reel)
+"đà lạt cuối tuần chơi gì" → {"intent":"search","place":"Đà Lạt","day_ref":"this_weekend","query":"Đà Lạt cuối tuần chơi gì"} (không phải consult: có tên nơi)
+"da lat cuoi tuan choi gi" → {"intent":"search","place":"Đà Lạt","day_ref":"this_weekend","query":"Đà Lạt cuối tuần chơi gì"}
 "chán quá à" → {"intent":"off_topic"}

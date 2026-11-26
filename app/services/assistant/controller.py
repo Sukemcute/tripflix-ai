@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.services.assistant.destinations import destinations_by_id
 from app.services.assistant.planner import PLAN_FIRST_CUE
 from app.services.assistant.schemas import Awaiting, TripContext, Understanding
 from app.services.summary.injection import match_injection
@@ -163,6 +164,8 @@ CITY_NAMES = {
     "dn": "Đà Nẵng", "hai phong": "Hải Phòng", "can tho": "Cần Thơ", "hue": "Huế",
     "nha trang": "Nha Trang", "da lat": "Đà Lạt", "vung tau": "Vũng Tàu",
 }  # fmt: skip
+# A reel word makes a reel ask, never a consult (live eval 26/11).
+REEL_WORD_CUE = r"\b(reels?|video|clip)\b"
 
 
 class DayMonth(BaseModel):
@@ -585,6 +588,16 @@ def to_understanding(
     return fix_plan_edit(understood, message, trip)
 
 
+def named_place(text: str) -> str | None:
+    """The catalog or city name the folded message says, longest first; None when it names none."""
+    names = {normalize_text(d.name): d.name for d in destinations_by_id().values()}
+    names |= {key: name for key, name in CITY_NAMES.items() if key not in names}
+    for key in sorted(names, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(key)}\b", text):
+            return names[key]
+    return None
+
+
 def apply_guards(
     out: ControllerOutput,
     message: str,
@@ -871,6 +884,14 @@ def apply_guards(
                 intent = "plan_trip"
             elif re.search(TRAVEL_CUE, text):
                 intent = "search"
+    if intent == "consult":
+        # Consult is only for "where to go": a reel word or a place name leaves it (live 26/11).
+        if re.search(REEL_WORD_CUE, text):
+            intent = "find_reel"
+            fixed["reel_query"] = out.reel_query or out.query
+        elif not origin and (place := named_place(text)):
+            intent = "search"
+            fixed |= {"place": place, "query": out.query or message}
     if intent != out.intent:
         fixed["intent"] = intent
         if out.missing == "dates" and intent in {"find_stay", "weather"}:

@@ -108,6 +108,33 @@ def test_reel_request_stays_find_reel() -> None:
     assert guarded("tìm reel cuối tuần đi đâu", intent="find_reel") == "find_reel"
 
 
+def guard(message: str, *, has_reel: bool = False, **said):
+    return apply_guards(controller_plan(**said), message, has_reel=has_reel)
+
+
+def test_consult_with_reel_word_becomes_find_reel() -> None:
+    got = guard(
+        "tìm reel cuối tuần đi đâu",
+        intent="consult",
+        query="gợi ý nơi đi cuối tuần",
+        reel_query="cuối tuần đi đâu",
+    )
+    assert (got.intent, got.reel_query) == ("find_reel", "cuối tuần đi đâu")
+
+
+def test_consult_naming_a_place_becomes_search() -> None:
+    got = guard("da lat cuoi tuan choi gi", intent="consult", query="da lat cuoi tuan choi gi")
+    assert (got.intent, got.place, got.query) == ("search", "Đà Lạt", "da lat cuoi tuan choi gi")
+    assert guard("đi vũng tàu chơi gì", intent="consult").place == "Vũng Tàu"
+    # an origin city is where they start, not where they want to go
+    assert guard("từ sài gòn đi đâu chơi", intent="consult").intent == "consult"
+
+
+def test_consult_without_place_stays_consult() -> None:
+    got = guard("cuối tuần đi đâu chơi", intent="consult", query="gợi ý nơi đi chơi cuối tuần")
+    assert (got.intent, got.place) == ("consult", "")
+
+
 def test_mood_without_travel_wish_stays_off_topic() -> None:
     assert guarded("chán quá à", intent="off_topic") == "off_topic"
 
