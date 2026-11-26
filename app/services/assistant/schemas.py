@@ -26,6 +26,8 @@ class CardRef(WireModel):
     kind: str = Field(max_length=20)
     id: str = Field(max_length=100)
     title: str = Field(default="", max_length=200)
+    # Per-night price of a stay card, so "đắt hơn" has something to compare with.
+    price: int | None = Field(default=None, ge=0)
 
 
 class DraftStop(WireModel):
@@ -115,6 +117,8 @@ class TripContext(WireModel):
     children: int = Field(default=0, ge=0, le=9)
     infants: int = Field(default=0, ge=0, le=9)
     price_max_per_night: int | None = Field(default=None, ge=0)
+    price_min_per_night: int | None = Field(default=None, ge=0)
+    min_stars: int | None = Field(default=None, ge=1, le=5)
     reel_id: UUID | None = None
     last_cards: list[CardRef] = Field(default_factory=list, max_length=5)
     # A clarifying question was already asked: works even when the app sends no kind.
@@ -215,6 +219,10 @@ class Understanding(WireModel):
     infants: int = Field(default=0, ge=0, le=9)
     round_trip: bool = False
     price_max_per_night: int | None = Field(default=None, ge=0)
+    price_min_per_night: int | None = Field(default=None, ge=0)
+    stay_sort: Literal["none", "price_asc", "price_desc", "stars_desc"] = "none"
+    price_relative: Literal["none", "higher", "lower"] = "none"
+    min_stars: int | None = Field(default=None, ge=1, le=5)
     depart_after: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     depart_before: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     hotel_name: str = Field(default="", max_length=100)
@@ -340,7 +348,8 @@ class Answer(WireModel):
     kind: Literal["answer", "clarify", "refusal", "no_result", "fallback"]
     text: str  # fixed template: what the user sees when the Responder is off or fails
     cards: list[Card] = Field(default_factory=list)
-    # What the Responder may talk about: short fields only, never prices (Verifier V2).
+    # What the Responder may talk about: short fields only. Prices appear only as a stay's
+    # checked pricePerNight/priceText; Verifier V2 drops any number not found here.
     facts: list[dict] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     # A code-made sentence that answers the question itself ("Ngày 2: ..."). It always goes
@@ -362,6 +371,8 @@ class Stay(BaseModel):
     name: str = Field(min_length=1)
     unitPrice: float = Field(ge=0, allow_inf_nan=False)
     totalPrice: float = Field(ge=0, allow_inf_nan=False)
+    stars: int | None = None
+    rating: float | None = None
 
 
 class Stays(BaseModel):

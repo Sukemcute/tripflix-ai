@@ -252,6 +252,11 @@ class ControllerOutput(BaseModel):
     pace: Literal["relaxed", "packed"] | None
     meals_only: bool
     is_rude: bool
+    # TF31 stay filters; defaults keep older fixtures valid (the LLM schema drops defaults).
+    price_min_per_night: int | None = None
+    stay_sort: Literal["none", "price_asc", "price_desc", "stars_desc"] = "none"
+    price_relative: Literal["none", "higher", "lower"] = "none"
+    min_stars: int | None = None
 
 
 def is_harmless_off_topic(
@@ -541,6 +546,14 @@ def to_understanding(
             if out.price_max_per_night and out.price_max_per_night > 0
             else trip.price_max_per_night
         ),
+        price_min_per_night=(
+            out.price_min_per_night
+            if out.price_min_per_night and out.price_min_per_night > 0
+            else trip.price_min_per_night
+        ),
+        stay_sort=out.stay_sort,
+        price_relative=out.price_relative,
+        min_stars=_count(out.min_stars, 1, 5) or trip.min_stars,
         depart_after=_time(out.depart_after),
         depart_before=_time(out.depart_before),
         hotel_name=out.hotel_name.strip()[:100],

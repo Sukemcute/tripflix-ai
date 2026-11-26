@@ -35,10 +35,12 @@ def core_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(base_url="https://core.test", transport=httpx.MockTransport(handle))
 
 
-def run_chat(monkeypatch, **switches) -> tuple[list[tuple[str, dict]], AsyncMock]:
+def run_chat(
+    monkeypatch, understanding: Understanding | None = None, **switches
+) -> tuple[list[tuple[str, dict]], AsyncMock]:
     async def classify(request, *, max_turns, on_usage):
         result = LlmResult(output="", model_name="test", input_tokens=10, output_tokens=5)
-        return Understanding(intent="search", query="Đà Lạt"), result
+        return understanding or Understanding(intent="search", query="Đà Lạt"), result
 
     responder = AsyncMock(return_value=(["Xem Săn mây Đà Lạt nè."], None))
     monkeypatch.setattr(chat_api, "understand", classify)
@@ -69,6 +71,18 @@ def test_responder_runs_when_switched_on(monkeypatch):
     events, responder = run_chat(monkeypatch)
     assert responder.await_count == 1
     assert any(name == "cards" and data["items"] for name, data in events)
+
+
+def test_responder_rewrites_clarify_and_never_refusal(monkeypatch):
+    clarify = Understanding(intent="clarify", missing="place")
+    events, responder = run_chat(monkeypatch, clarify, chat_responder_enabled=True)
+    assert responder.await_count == 1
+    assert events[-1][1]["kind"] == "clarify"
+    assert "".join(d["delta"] for name, d in events if name == "text") == "Xem Săn mây Đà Lạt nè."
+    events, responder = run_chat(
+        monkeypatch, Understanding(intent="refusal"), chat_responder_enabled=True
+    )
+    assert responder.await_count == 0 and events[-1][1]["kind"] == "refusal"
 
 
 def test_responder_off_keeps_cards_and_fixed_text(monkeypatch):

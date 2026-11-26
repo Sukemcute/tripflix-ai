@@ -264,8 +264,13 @@ async def run_turn(
                 is_llm_on
                 and settings.chat_responder_enabled
                 and parsed is not None
-                and answer.kind in {"answer", "no_result"}
-                and (social.is_off_topic_answer(answer) or answer.cards or answer.facts)
+                and answer.kind in {"answer", "no_result", "clarify"}
+                and (
+                    social.is_off_topic_answer(answer)
+                    or answer.cards
+                    or answer.facts
+                    or answer.kind in {"clarify", "no_result"}
+                )
                 and remaining >= RESPONDER_MIN_SECONDS
             ):
                 yield event("status", {"step": "writing"})

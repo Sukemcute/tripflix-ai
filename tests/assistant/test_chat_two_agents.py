@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import date
+from typing import Literal
 from uuid import uuid4
 
 import httpx
@@ -339,6 +340,43 @@ def test_responder_cut_output_falls_back_to_fixed_text(monkeypatch):
     assert sentences is None
     assert usage == [result]
     assert responder.split_for_stream(VIDEO_ANSWER.text) == ["Tripi tìm được 1 video phù hợp."]
+
+
+def fixed_reply(
+    monkeypatch,
+    sentences,
+    text="Bạn muốn đi đâu?",
+    kind: Literal["clarify", "no_result"] = "clarify",
+):
+    monkeypatch.setattr(responder, "get_role_llm", lambda role: ScriptedLlm(sentences))
+    request = ChatRequest(conversation_id=uuid4(), message="giup minh voi")
+    return asyncio.run(responder.respond(request, Answer(kind=kind, text=text)))[0]
+
+
+def test_clarify_is_rewritten(monkeypatch):
+    sentences = fixed_reply(monkeypatch, ["Bạn đang tính đi đâu chơi nè?"])
+    assert sentences == ["Bạn đang tính đi đâu chơi nè?"]
+    facts = responder.build_facts(Answer(kind="clarify", text="Bạn muốn đi đâu?"))
+    assert facts == [{"type": "fixed", "answerKind": "clarify", "fallback": "Bạn muốn đi đâu?"}]
+
+
+def test_clarify_rewrite_without_question_mark_falls_back(monkeypatch):
+    assert fixed_reply(monkeypatch, ["Mình tìm cho bạn nha."]) is None
+
+
+def test_clarify_rewrite_with_new_place_falls_back(monkeypatch):
+    # V3 (grounded names): the place is in neither the fallback nor the question.
+    assert fixed_reply(monkeypatch, ["Bạn muốn đi Phú Quốc không?"]) is None
+
+
+def test_fixed_rewrite_keeps_at_most_two_sentences(monkeypatch):
+    sentences = fixed_reply(
+        monkeypatch,
+        ["Mình chưa thấy kết quả nè.", "Bạn đổi từ khóa thử nha.", "Hoặc tìm nơi gần đó."],
+        text="Mình chưa tìm thấy kết quả phù hợp.",
+        kind="no_result",
+    )
+    assert sentences == ["Mình chưa thấy kết quả nè.", "Bạn đổi từ khóa thử nha."]
 
 
 def test_controller_records_usage_even_when_output_is_invalid(monkeypatch):
