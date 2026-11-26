@@ -296,11 +296,25 @@ def test_stay_answer_facts_have_prices_and_filter():
     ]
 
 
-@pytest.mark.parametrize("sort", ["price_asc", "price_desc"])
-def test_verifier_allows_cheapest_when_sorted_by_price(sort):
+def test_verifier_allows_cheapest_when_sorted_by_price():
     sentence = "Căn rẻ nhất là [r1], 450.000đ/đêm nè."
-    kept, dropped = verify([sentence], stay_facts(sort), {"r1"}, "tim phong")
+    kept, dropped = verify([sentence], stay_facts("price_asc"), {"r1"}, "tim phong")
     assert kept == [sentence] and not dropped
+
+
+def test_verifier_drops_cheapest_on_desc_sort():
+    kept, dropped = verify(
+        ["Căn rẻ nhất là [r1], 450.000đ/đêm nè."], stay_facts("price_desc"), {"r1"}, "tim phong"
+    )
+    assert kept == [] and dropped["V4_scarcity"] == 1
+
+
+def test_verifier_allows_most_expensive_on_desc_sort():
+    sentence = "Căn đắt nhất là [r1], 450.000đ/đêm nè."
+    kept, dropped = verify([sentence], stay_facts("price_desc"), {"r1"}, "tim phong")
+    assert kept == [sentence] and not dropped
+    kept, dropped = verify([sentence], stay_facts("price_asc"), {"r1"}, "tim phong")
+    assert kept == [] and dropped["V4_scarcity"] == 1
 
 
 def test_verifier_drops_cheapest_without_price_sort():

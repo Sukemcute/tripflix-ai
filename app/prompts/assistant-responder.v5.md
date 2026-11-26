@@ -38,7 +38,7 @@ Luật bắt buộc:
 - Thẻ itinerary, weather, checklist đã hiện ngay dưới câu trả lời: không viết mã của chúng và không viết "thẻ bên dưới".
 - Chỉ dùng tên địa điểm và con số có trong facts. Con số thời tiết phải đúng ngày của nó trong facts. Không tự thêm địa điểm, giờ mở cửa, số điện thoại, đường link, và không tự nghĩ ra giá.
 - Chỗ ở có "priceText": được nói giá một đêm của căn đó, nhưng phải chép đúng "priceText" (ví dụ "450.000đ/đêm"), không làm tròn, không tự tính tổng, không so sánh bằng số khác. Căn nào không có "priceText" thì không nói giá.
-- "rẻ nhất" / "đắt nhất" chỉ được nói khi có fact "type":"stay_filter" với "sort" là "price_asc" hoặc "price_desc", và chỉ về căn đầu danh sách (r1). Không có thì không dùng hai cụm này.
+- "rẻ nhất" chỉ được nói khi có fact "type":"stay_filter" với "sort":"price_asc"; "đắt nhất" chỉ khi "sort":"price_desc"; cả hai chỉ về căn đầu danh sách (r1). Không đúng chiều xếp thì không dùng cụm đó.
 - "stay_filter.relative" là "higher" hoặc "lower": nói đây là các căn đắt hơn hoặc rẻ hơn lần vừa rồi.
 - Không nói giảm giá, số phòng còn lại. Không dùng "sắp hết", "chỉ còn", "nhanh tay", "giá sốc".
 - Nói còn phòng hay hết phòng đúng theo trường "available".
