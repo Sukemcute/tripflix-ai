@@ -1,0 +1,60 @@
+# Domestic destinations Tripi may suggest when the user has no place in mind (consult intent).
+#
+# Reference data like transport.v1.yaml and packing.v2.yaml, not a business entity. Source:
+# general knowledge only, no live data. Only what changes slowly: where it is, what kind of
+# place it is, the months that are usually pleasant, and a few well-known features. No prices,
+# opening hours or dated events (a digit in a highlight is rejected by the loader). Names are
+# written the way Core and transport.v1.yaml write them, so a suggestion can be searched as is.
+# Content is a draft: chờ Bảo duyệt nội dung (months and vibes are rules of thumb, not forecasts).
+# Fields: region = bac | trung | nam | tay-nguyen; terrain and vibe use the values of
+# TravelPrefs (schemas.py); good_months = months usually good for the trip, 1-12.
+attribution: Tham khảo, kiến thức chung
+destinations:
+  # Miền Bắc
+  - {id: ha-noi, name: Hà Nội, region: bac, terrain: [city], vibe: [foodie, romantic, lively], good_months: [3, 4, 9, 10, 11], highlights: [phố cổ, cà phê trứng, ẩm thực đường phố, hồ Hoàn Kiếm]}
+  - {id: sa-pa, name: Sa Pa, region: bac, terrain: [mountain], vibe: [adventure, healing, quiet], good_months: [3, 4, 5, 9, 10, 11], highlights: [săn mây, ruộng bậc thang, bản làng, chinh phục Fansipan]}
+  - {id: ha-giang, name: Hà Giang, region: bac, terrain: [mountain], vibe: [adventure, quiet], good_months: [3, 4, 9, 10, 11], highlights: [cung đường đèo Mã Pí Lèng, cao nguyên đá, phượt xe máy, hoa tam giác mạch]}
+  - {id: dong-van, name: Đồng Văn, region: bac, terrain: [mountain], vibe: [adventure, quiet], good_months: [3, 4, 9, 10, 11], highlights: [cao nguyên đá, phố cổ, cột cờ Lũng Cú]}
+  - {id: ninh-binh, name: Ninh Bình, region: bac, terrain: [countryside, mountain], vibe: [quiet, healing, romantic], good_months: [3, 4, 5, 6, 9, 10, 11], highlights: [Tràng An, Tam Cốc ngồi thuyền, chùa Bái Đính, hang Múa]}
+  - {id: ha-long, name: Hạ Long, region: bac, terrain: [beach, island], vibe: [romantic, lively, healing], good_months: [3, 4, 5, 9, 10, 11], highlights: [vịnh đá vôi, du thuyền ngủ đêm, chèo kayak, hang động]}
+  - {id: cat-ba, name: Cát Bà, region: bac, terrain: [island, beach], vibe: [lively, adventure, healing], good_months: [4, 5, 6, 7, 8, 9], highlights: [vịnh Lan Hạ, vườn quốc gia, hải sản, chèo kayak]}
+  - {id: quan-lan, name: Quan Lạn, region: bac, terrain: [island, beach], vibe: [quiet, healing], good_months: [5, 6, 7, 8], highlights: [bãi biển hoang sơ, đảo yên tĩnh, hải sản tươi]}
+  - {id: co-to, name: Cô Tô, region: bac, terrain: [island, beach], vibe: [quiet, healing, romantic], good_months: [5, 6, 7, 8, 9], highlights: [bãi biển nước trong, ngắm bình minh, hải sản, ngọn hải đăng]}
+  - {id: moc-chau, name: Mộc Châu, region: bac, terrain: [mountain, countryside], vibe: [healing, romantic, quiet], good_months: [1, 2, 3, 10, 11, 12], highlights: [đồi chè, mùa hoa mận, hoa cải trắng, sữa bò tươi]}
+  - {id: mai-chau, name: Mai Châu, region: bac, terrain: [mountain, countryside], vibe: [quiet, healing], good_months: [3, 4, 5, 9, 10, 11], highlights: [bản người Thái, nhà sàn, cánh đồng lúa, thung lũng]}
+  - {id: pu-luong, name: Pù Luông, region: bac, terrain: [mountain, countryside], vibe: [healing, quiet, adventure], good_months: [5, 6, 9, 10], highlights: [ruộng bậc thang, guồng nước, trekking nhẹ, homestay giữa rừng]}
+  - {id: tam-dao, name: Tam Đảo, region: bac, terrain: [mountain], vibe: [healing, quiet, romantic], good_months: [4, 5, 6, 7, 8, 9], highlights: [khí hậu mát mẻ, săn mây, thị trấn trong sương]}
+  - {id: mu-cang-chai, name: Mù Cang Chải, region: bac, terrain: [mountain, countryside], vibe: [adventure, quiet], good_months: [5, 6, 9, 10], highlights: [ruộng bậc thang, mùa lúa chín, bay dù lượn]}
+  - {id: cao-bang, name: Cao Bằng, region: bac, terrain: [mountain, countryside], vibe: [adventure, quiet], good_months: [8, 9, 10, 11], highlights: [thác Bản Giốc, động Ngườm Ngao, hồ Thang Hen]}
+  - {id: ba-be, name: Hồ Ba Bể, region: bac, terrain: [lake, mountain], vibe: [quiet, healing], good_months: [4, 5, 9, 10, 11], highlights: [hồ nước ngọt trên núi, đi thuyền, bản làng người Tày]}
+  # Miền Trung
+  - {id: sam-son, name: Sầm Sơn, region: trung, terrain: [beach], vibe: [lively, foodie], good_months: [5, 6, 7, 8], highlights: [bãi biển dài, hải sản, hòn Trống Mái]}
+  - {id: cua-lo, name: Cửa Lò, region: trung, terrain: [beach], vibe: [lively, foodie], good_months: [5, 6, 7, 8], highlights: [bãi biển, hải sản, đảo Lan Châu]}
+  - {id: phong-nha, name: Phong Nha, region: trung, terrain: [mountain, countryside], vibe: [adventure, quiet], good_months: [2, 3, 4, 5, 6, 7, 8], highlights: [hang động kỳ vĩ, đi thuyền sông Son, vườn quốc gia]}
+  - {id: hue, name: Huế, region: trung, terrain: [city], vibe: [quiet, romantic, foodie], good_months: [2, 3, 4, 5], highlights: [Đại Nội, lăng tẩm, sông Hương, ẩm thực cung đình]}
+  - {id: da-nang, name: Đà Nẵng, region: trung, terrain: [city, beach], vibe: [lively, foodie, nightlife, healing], good_months: [2, 3, 4, 5, 6, 7, 8], highlights: [cầu Rồng, bãi biển Mỹ Khê, bán đảo Sơn Trà, Bà Nà Hills]}
+  - {id: hoi-an, name: Hội An, region: trung, terrain: [city, countryside], vibe: [romantic, foodie, quiet], good_months: [2, 3, 4, 5, 6, 7, 8], highlights: [phố cổ đèn lồng, may áo dài, cao lầu, thả hoa đăng]}
+  - {id: ly-son, name: Lý Sơn, region: trung, terrain: [island, beach], vibe: [adventure, quiet, healing], good_months: [3, 4, 5, 6, 7, 8], highlights: [cổng Tò Vò, đảo núi lửa, ruộng tỏi, lặn ngắm san hô]}
+  - {id: quy-nhon, name: Quy Nhơn, region: trung, terrain: [beach, city], vibe: [quiet, healing, foodie], good_months: [2, 3, 4, 5, 6, 7, 8], highlights: [Eo Gió, Kỳ Co, hải sản, bãi biển hoang sơ]}
+  - {id: phu-yen, name: Phú Yên, region: trung, terrain: [beach, countryside], vibe: [quiet, healing, romantic], good_months: [3, 4, 5, 6, 7, 8], highlights: [Gành Đá Đĩa, bãi Xép, mũi Điện, đồng lúa ven biển]}
+  - {id: nha-trang, name: Nha Trang, region: trung, terrain: [beach, island, city], vibe: [lively, nightlife, foodie], good_months: [2, 3, 4, 5, 6, 7, 8], highlights: [tour đảo, lặn biển, tắm bùn, hải sản]}
+  - {id: phan-thiet, name: Phan Thiết, region: trung, terrain: [beach], vibe: [lively, adventure, foodie], good_months: [11, 12, 1, 2, 3, 4, 5], highlights: [đồi cát bay, lướt ván diều, suối Tiên, hải sản]}
+  # Tây Nguyên
+  - {id: da-lat, name: Đà Lạt, region: tay-nguyen, terrain: [mountain, lake, city], vibe: [romantic, healing, quiet, foodie], good_months: [11, 12, 1, 2, 3, 4], highlights: [săn mây, đồi chè, cà phê view đẹp, đồi thông]}
+  - {id: buon-ma-thuot, name: Buôn Ma Thuột, region: tay-nguyen, terrain: [countryside, city], vibe: [foodie, adventure, quiet], good_months: [11, 12, 1, 2, 3], highlights: [cà phê đặc sản, thác nước, buôn làng Ê Đê, voi]}
+  - {id: pleiku, name: Pleiku, region: tay-nguyen, terrain: [countryside, lake], vibe: [quiet, adventure], good_months: [11, 12, 1, 2, 3, 4], highlights: [Biển Hồ, đồi chè, núi lửa Chư Đăng Ya]}
+  - {id: kon-tum, name: Kon Tum, region: tay-nguyen, terrain: [countryside, mountain], vibe: [quiet, healing], good_months: [11, 12, 1, 2, 3, 4], highlights: [nhà thờ gỗ, nhà rông, cầu treo]}
+  - {id: mang-den, name: Măng Đen, region: tay-nguyen, terrain: [mountain, lake], vibe: [quiet, healing, romantic], good_months: [10, 11, 12, 1, 2, 3, 4], highlights: [rừng thông, hồ Đăk Ke, khí hậu mát mẻ, hoa anh đào]}
+  # Miền Nam
+  - {id: tp-hcm, name: TP.HCM, region: nam, terrain: [city], vibe: [lively, nightlife, foodie], good_months: [12, 1, 2, 3, 4], highlights: [ẩm thực đường phố, nhà thờ Đức Bà, quán cà phê, chợ Bến Thành]}
+  - {id: vung-tau, name: Vũng Tàu, region: nam, terrain: [beach, city], vibe: [lively, foodie, healing], good_months: [11, 12, 1, 2, 3, 4], highlights: [bãi biển, hải sản, tượng Chúa Kitô, ngọn hải đăng]}
+  - {id: ho-tram, name: Hồ Tràm, region: nam, terrain: [beach], vibe: [quiet, healing, romantic], good_months: [11, 12, 1, 2, 3, 4], highlights: [bãi biển yên tĩnh, khu nghỉ dưỡng, rừng ven biển]}
+  - {id: long-hai, name: Long Hải, region: nam, terrain: [beach], vibe: [quiet, foodie, healing], good_months: [11, 12, 1, 2, 3, 4], highlights: [biển gần Sài Gòn, hải sản, suối nước nóng, lễ hội dân gian]}
+  - {id: con-dao, name: Côn Đảo, region: nam, terrain: [island, beach], vibe: [quiet, healing, adventure], good_months: [2, 3, 4, 5, 6, 7], highlights: [di tích lịch sử, lặn ngắm san hô, rùa biển, bãi biển hoang sơ]}
+  - {id: phu-quoc, name: Phú Quốc, region: nam, terrain: [island, beach], vibe: [lively, romantic, nightlife, healing], good_months: [11, 12, 1, 2, 3, 4, 5], highlights: [bãi Sao, cáp treo vượt biển, chợ đêm, hoàng hôn Dinh Cậu]}
+  - {id: ha-tien, name: Hà Tiên, region: nam, terrain: [beach, countryside], vibe: [quiet, foodie, healing], good_months: [11, 12, 1, 2, 3, 4, 5], highlights: [núi đá vôi ven biển, hải sản, chợ đêm, chùa Hang]}
+  - {id: can-tho, name: Cần Thơ, region: nam, terrain: [countryside, city], vibe: [foodie, quiet, lively], good_months: [12, 1, 2, 3, 4], highlights: [chợ nổi Cái Răng, vườn trái cây, bến Ninh Kiều, ẩm thực miền Tây]}
+  - {id: ben-tre, name: Bến Tre, region: nam, terrain: [countryside], vibe: [quiet, healing, foodie], good_months: [12, 1, 2, 3, 4, 5], highlights: [vườn dừa, đi xuồng ba lá, kẹo dừa, homestay miệt vườn]}
+  - {id: ca-mau, name: Cà Mau, region: nam, terrain: [countryside, beach], vibe: [adventure, quiet, foodie], good_months: [12, 1, 2, 3, 4], highlights: [mũi Cà Mau, rừng đước, vườn quốc gia U Minh Hạ, cua biển]}
+  - {id: chau-doc, name: Châu Đốc, region: nam, terrain: [countryside, mountain], vibe: [quiet, foodie, adventure], good_months: [8, 9, 10, 11], highlights: [rừng tràm Trà Sư, núi Sam, miếu Bà Chúa Xứ, mắm đặc sản]}
+  - {id: tay-ninh, name: Tây Ninh, region: nam, terrain: [mountain, countryside], vibe: [adventure, quiet], good_months: [11, 12, 1, 2, 3, 4], highlights: [núi Bà Đen, cáp treo, Tòa Thánh Cao Đài, hồ Dầu Tiếng]}

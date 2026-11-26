@@ -9,8 +9,8 @@ the trip memory, social turns that call no Skill, and the fixes of the Expo Web 
 import asyncio
 import logging
 import re
-from collections.abc import Awaitable, Coroutine
-from datetime import date
+from collections.abc import Awaitable, Callable, Coroutine
+from datetime import date, datetime
 from uuid import UUID
 
 import httpx
@@ -18,19 +18,22 @@ from pydantic import ValidationError
 
 from app.clients.places import CorePlaces, PlacesClient
 from app.clients.weather import WeatherClient
-from app.services.assistant import planner, social
+from app.services.assistant import calendar, planner, social
 from app.services.assistant.controller import (
     fix_plan_edit,
     is_harmless_off_topic,
     is_unsafe,
     is_unspecified_edit,
+    named_place,
     off_topic_kind,
 )
+from app.services.assistant.destinations import merge_prefs
 from app.services.assistant.schemas import (
     Answer,
     Awaiting,
     CardRef,
     ChatRequest,
+    TravelPrefs,
     TripContext,
     Understanding,
 )
@@ -48,7 +51,8 @@ SKILL_SECONDS = 3.0
 # Weather is two calls in a row (place, then forecast); a cold TLS start took ~1 s each
 # (live run 2026-11-16).
 # plan: points, forecast and maybe the hotel; 3 s timed out on staging (Vũng Tàu report P2).
-SKILL_SECONDS_BY_NAME = {"weather": 6.0, "plan": 7.0}
+# consult: one LLM call over the whole catalog.
+SKILL_SECONDS_BY_NAME = {"weather": 6.0, "plan": 7.0, "consult": 6.0}
 SKILL_ERRORS = (TimeoutError, httpx.HTTPError, ValidationError, KeyError, ValueError, TypeError)
 LABELS = {
     "content": "kết quả tìm kiếm",
@@ -57,6 +61,7 @@ LABELS = {
     "trip": "reel",
     "weather": "thời tiết",
     "plan": "lộ trình",
+    "consult": "gợi ý điểm đến",
 }
 # Stage B (plan B7): the whole trip and its edits, run by TripPlanner.
 PLAN_INTENTS = {
@@ -70,6 +75,7 @@ PLAN_INTENTS = {
     "confirm_booking",
 }
 REEL_KINDS = {"video", "plan", "post"}
+DATE_FACT = "date_info"
 DISCOVERY_SUGGESTIONS = ["Thời tiết ở đó", "Cần mang gì?", "Tìm chỗ ở"]
 NEEDS_REEL = Answer(
     kind="no_result",
@@ -99,16 +105,24 @@ class Turn:
         *,
         core: httpx.AsyncClient,
         weather: WeatherClient,
-        today: date,
+        today: date | None = None,
+        now: datetime | None = None,
         places: PlacesClient | None = None,
         disabled_skills: frozenset[str] = frozenset(),
+        consult: Callable[[ChatRequest, TripContext], Awaitable[tuple[Answer, TravelPrefs]]]
+        | None = None,
     ) -> None:
         self.request = request
         self.parsed = parsed
         self.core = core
         self.weather = weather
-        self.today = today
+        # One clock per turn: `today` is always the date of `now` when both are known.
+        self.now = now
+        self.today = today or (now.date() if now else planner.today_in_vietnam())
+        today = self.today
         self.disabled_skills = disabled_skills
+        self.consult = consult
+        self.learned_prefs: TravelPrefs | None = None
         self.degraded: list[str] = []
         self.is_asked = planner.has_asked_before(request)
         self.memory = request.trip or TripContext()
@@ -238,6 +252,10 @@ class Turn:
             return social.refusal_answer(seed=self._seed(), history=self.request.history)
         if parsed is None or self.request.search_mode == "reel":
             return await self._discover()
+        if parsed.intent == "consult":
+            return await self._consult()
+        if parsed.intent == "ask_date":
+            return self._date_info(parsed)
         fixed = self._fixed(parsed)
         if fixed is not None:
             return fixed
@@ -266,6 +284,8 @@ class Turn:
             return TripContext()
         if isinstance(self.short_stay_dates, planner.DateProblem):
             return self.memory
+        if self.parsed is not None and self.parsed.intent == "ask_date":
+            return self.memory  # the plan question still waiting is finished next turn
         # A Stage B step already wrote the plan it changed.
         memory = (self.planned_trip or self.memory).model_copy(deep=True)
         parsed = self.parsed
@@ -284,8 +304,16 @@ class Turn:
                 and not (self.planned_trip is not None and parsed.intent == "plan_trip")
             ):
                 window = planner.day_window(parsed, self.today)
+                kept_end = (
+                    memory.date_to if memory.date_to and memory.date_to >= window.start else None
+                )
                 memory.date_from = window.start
-                memory.date_to = window.end if window.end > window.start else None
+                if parsed.intent in {"weather", "packing"} and not parsed.check_out:
+                    # The forecast span (nights the model copied from earlier turns) is not a
+                    # statement about the trip: asking about one day never stretches it.
+                    memory.date_to = kept_end
+                else:
+                    memory.date_to = window.end if window.end > window.start else None
             memory.adults, memory.children, memory.infants = (
                 parsed.adults,
                 parsed.children,
@@ -314,6 +342,8 @@ class Turn:
         if any(c.kind == "flight" for c in answer.cards):
             memory.pending_flights = draft_flights(answer.cards)
         memory.asked = memory.asked or answer.kind == "clarify"
+        if self.learned_prefs is not None:
+            memory.prefs = merge_prefs(memory.prefs, self.learned_prefs)
         # What Tripi just asked for, so a short reply ("Vũng tàu") finishes it next turn.
         memory.awaiting = (
             self.planned_trip.awaiting
@@ -330,6 +360,12 @@ class Turn:
             memory.awaiting = Awaiting.model_validate(
                 {"intent": parsed.intent, "missing": missing, "nights": parsed.nights}
             )
+        if any(
+            fact.get("type") == "consult" and not fact.get("hasSuggestions")
+            for fact in answer.facts
+        ):
+            # No destination named yet: the next short reply goes on with the consult.
+            memory.awaiting = Awaiting(intent="consult", missing="place")
         return memory
 
     # ---- social turns, refusals and questions: no Skill
@@ -368,6 +404,28 @@ class Turn:
             question = "Bạn muốn mình tìm gì cho chuyến đi này?"
         return Answer(kind="clarify", text=question)
 
+    def _date_info(self, parsed: Understanding) -> Answer:
+        text = calendar.holiday_answer(self.request.message, self.today) or planner.date_answer(
+            parsed, self.today
+        )
+        if self.memory.awaiting and self.memory.place:
+            text += f" Mình xếp tiếp chuyến {self.memory.place} cho bạn nha?"
+        return Answer(kind="answer", text=text, facts=[{"type": DATE_FACT}])
+
+    # ---- consult: where to go when the user has no destination
+
+    async def _consult(self) -> Answer:
+        # Lazy: consultant imports understand, which imports this module.
+        from app.services.assistant.consultant import fallback_consult_answer
+
+        if self.consult is None:
+            return fallback_consult_answer()
+        result = await self._run_value("consult", self.consult(self.request, self.memory))
+        if result is None:
+            return fallback_consult_answer()
+        answer, self.learned_prefs = result
+        return answer
+
     # ---- discovery, stays, flights
 
     async def _discover(self) -> Answer:
@@ -380,6 +438,13 @@ class Turn:
             )
         else:
             query = parsed.query if parsed and parsed.query else mask_pii(message)
+            place = self.memory.place
+            if (
+                place
+                and normalize_text(place) not in normalize_text(query)
+                and not named_place(normalize_text(f"{message} {query}"))
+            ):
+                query = f"{place} {query}"  # a follow-up ("mốt đi được không") stays on the trip
             reel_request = re.match(
                 r"^(?:(?:tìm|tim|cho mình xem)\s+)?(?:reels?|video)\b\s*", message, re.IGNORECASE
             )
@@ -449,7 +514,7 @@ class Turn:
         parsed.flight_date = start
         if re.search(r"\b(?:rẻ nhất|re nhat|cheapest)\b", self.request.message, re.I):
             parsed.cheapest_only = True
-        return await self._run("flight", search_flights(self.core, parsed))
+        return await self._run("flight", search_flights(self.core, parsed, now=self.now))
 
     # ---- the reel in view or picked from the last cards
 
@@ -537,6 +602,7 @@ class Turn:
             places=self.places,
             weather=self.weather,
             today=self.today,
+            now=self.now,
             trip=self.memory.model_copy(deep=True),
         )
         trip_planner.trip.awaiting = None

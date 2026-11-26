@@ -83,6 +83,25 @@ class DraftAction(WireModel):
     stop_id: str = Field(default="", max_length=100)
 
 
+Vibe = Literal["quiet", "lively", "romantic", "adventure", "healing", "foodie", "nightlife"]
+Terrain = Literal["beach", "mountain", "island", "city", "countryside", "lake"]
+Companions = Literal["solo", "couple", "friends", "family", "kids"]
+
+
+class TravelPrefs(WireModel):
+    """What the user likes in a trip, understood in conversation (consult intent).
+
+    Every field is optional; the LLM fills what it learned, code merges it into trip memory.
+    """
+
+    vibe: list[Vibe] = Field(default_factory=list, max_length=3)
+    terrain: list[Terrain] = Field(default_factory=list, max_length=3)
+    companions: Companions | None = None
+    budget_per_person: int | None = Field(default=None, ge=0)
+    nights: int | None = Field(default=None, ge=0, le=14)
+    mood: str = Field(default="", max_length=60)
+
+
 class Awaiting(WireModel):
     """The request Tripi asked a question about and still has to finish."""
 
@@ -95,6 +114,7 @@ class Awaiting(WireModel):
         "packing",
         "find_reel",
         "change_transport",
+        "consult",
     ]
     missing: Literal["place", "dates", "origin", "origin_dates"] = "place"
     nights: int | None = Field(default=None, ge=0, le=30)
@@ -137,6 +157,8 @@ class TripContext(WireModel):
     # ("Vũng tàu") finishes that request; and a plan of food stops only.
     awaiting: Awaiting | None = None
     meals_only: bool = False
+    # v2.2 (2026-11-26): preferences learned while advising where to go; survive a change of place.
+    prefs: TravelPrefs | None = None
 
 
 class ChatRequest(WireModel):
@@ -186,6 +208,10 @@ class Understanding(WireModel):
         # v2.1 (2026-11-17): harmless chit-chat outside travel, "why" about the last reply
         "off_topic",
         "ask_why",
+        # v12 (2026-11-26): wants to go out, no place yet: Tripi advises where (TF31)
+        "consult",
+        # v12: "hôm nay là ngày mấy": answered from the calendar, no Core call
+        "ask_date",
     ]
     query: str = Field(default="", max_length=200)
     missing: Literal["place", "dates", "none"] = "none"
@@ -210,6 +236,12 @@ class Understanding(WireModel):
         "saturday",
         "sunday",
         "yesterday",
+        "day_after_tomorrow",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
     ] = "none"
     nights: int | None = Field(default=None, ge=0, le=30)
     # True when the user means the reel the chat was opened from ("video này", "ks đó").
@@ -366,13 +398,18 @@ class Places(BaseModel):
     items: list[Place]
 
 
+class StayRating(BaseModel):
+    average: float | None = None
+    count: int | None = None
+
+
 class Stay(BaseModel):
     hotelId: str = Field(min_length=1)
     name: str = Field(min_length=1)
     unitPrice: float = Field(ge=0, allow_inf_nan=False)
     totalPrice: float = Field(ge=0, allow_inf_nan=False)
     stars: int | None = None
-    rating: float | None = None
+    rating: StayRating | None = None
 
 
 class Stays(BaseModel):

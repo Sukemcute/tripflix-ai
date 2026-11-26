@@ -261,7 +261,7 @@ def test_stay_answer_facts_have_prices_and_filter():
             "unitPrice": 450_000,
             "totalPrice": 450_000,
             "stars": 3,
-            "rating": 4.2,
+            "rating": {"average": 4.2, "count": 78},
         }
     ]
     core = FakeCore(PLACE | {"/api/stays": {"items": items}})
@@ -364,3 +364,20 @@ def test_higher_text_names_shown_price():
 def test_lower_text_names_shown_price():
     text = relative_answer_text("lower", 300_000)
     assert "rẻ hơn 450.000đ/đêm" in text and "449.999" not in text
+
+
+@pytest.mark.parametrize(("rating", "want"), [({"average": 4.1, "count": 78}, 4.1), (None, None)])
+def test_stays_accept_core_rating_object(rating, want):
+    items = [
+        {
+            "hotelId": "h1",
+            "name": "A",
+            "unitPrice": 450_000,
+            "totalPrice": 450_000,
+            "rating": rating,
+        }
+    ]
+    core = FakeCore(PLACE | {"/api/stays": {"items": items}})
+    answer, _ = run_turn(plan(intent="find_stay", place="Vũng Tàu", start=dm(IN_5), nights=1), core)
+    assert answer.kind == "answer"
+    assert answer.facts[0]["rating"] == want

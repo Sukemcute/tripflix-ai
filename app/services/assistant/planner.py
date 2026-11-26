@@ -10,9 +10,11 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
 from app.services.assistant.admission import VIETNAM
+from app.services.assistant.calendar import WEEKDAYS_VI, next_weekday, weekend_start
 from app.services.assistant.schemas import ChatRequest, Understanding
 
 SATURDAY, SUNDAY = 5, 6
+WEEKDAY_REFS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4}
 MAX_DAYS_AHEAD = 365
 FORECAST_DAYS = 16
 PLAN_FIRST_CUE = r"\b(chua biet|khong biet|cu (len|xep)(?: lich| lo trinh)? truoc|len truoc)\b"
@@ -22,10 +24,6 @@ SHORT_STAY_DATES = re.compile(r"(?:(?:ngày|ngay)\s+)?([0-9]{1,2})\s+([0-9]{1,2}
 
 def today_in_vietnam(now: datetime | None = None) -> date:
     return (now or datetime.now(UTC)).astimezone(VIETNAM).date()
-
-
-def _next_weekday(today: date, weekday: int) -> date:
-    return today + timedelta(days=(weekday - today.weekday()) % 7)
 
 
 def start_day(understood: Understanding, today: date) -> date | None:
@@ -39,18 +37,38 @@ def start_day(understood: Understanding, today: date) -> date | None:
         return today
     if ref == "tomorrow":
         return today + timedelta(days=1)
+    if ref == "day_after_tomorrow":
+        return today + timedelta(days=2)
     if ref == "yesterday":
         return today - timedelta(days=1)
-    if ref in {"this_weekend", "saturday"}:
-        # On a Sunday "this weekend" is today; otherwise the coming Saturday.
-        if ref == "this_weekend" and today.weekday() == SUNDAY:
-            return today
-        return _next_weekday(today, SATURDAY)
+    if ref in WEEKDAY_REFS:  # the coming one; today when today is that weekday
+        return next_weekday(today, WEEKDAY_REFS[ref])
+    if ref == "this_weekend":  # on a Sunday it is today
+        return weekend_start(today, is_next=False)
+    if ref == "saturday":
+        return next_weekday(today, SATURDAY)
     if ref == "sunday":
-        return _next_weekday(today, SUNDAY)
+        return next_weekday(today, SUNDAY)
     if ref == "next_weekend":
-        return _next_weekday(today, SATURDAY) + timedelta(days=7)
+        return weekend_start(today, is_next=True)
     return None
+
+
+def date_answer(understood: Understanding, today: date) -> str:
+    """The calendar answer to "hôm nay là ngày mấy", built from code and never from the LLM."""
+    ref = understood.day_ref
+    start = start_day(understood, today) or today
+    if ref in {"this_weekend", "next_weekend"}:
+        label = "Cuối tuần này" if ref == "this_weekend" else "Cuối tuần sau"
+        if start.weekday() == SUNDAY:
+            return f"{label} là {WEEKDAYS_VI[SUNDAY]} {start:%d/%m}."
+        end = start + timedelta(days=1)
+        saturday, sunday = WEEKDAYS_VI[SATURDAY], WEEKDAYS_VI[SUNDAY]
+        return f"{label} là {saturday} {start:%d/%m} và {sunday} {end:%d/%m}."
+    if ref in {"today", "none"}:
+        return f"Hôm nay là {WEEKDAYS_VI[start.weekday()]}, {start:%d/%m/%Y}."
+    label = {"tomorrow": "Mai", "day_after_tomorrow": "Ngày mốt"}.get(ref, "Hôm đó")
+    return f"{label} là {WEEKDAYS_VI[start.weekday()]}, {start:%d/%m}."
 
 
 @dataclass(frozen=True)

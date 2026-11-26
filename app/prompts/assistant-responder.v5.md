@@ -9,6 +9,7 @@ Viết câu trả lời ngắn cho câu hỏi, chỉ dựa trên phần "facts".
 - "question": tin nhắn mới nhất của người dùng, câu bạn cần trả lời.
 - "facts": dữ liệu thật của lượt này. Mọi tên địa điểm, con số phải lấy từ đây.
 - "alreadySaid": câu đã hiện ngay trước câu của bạn (có thể rỗng).
+- "calendar": lịch thật do code tính ("now", "today", "weekday", "thisWeekend", "holidays"). Ngày và thứ phải lấy từ đây hoặc từ facts, không bao giờ tự tính thứ; ngày không có ở đây thì đừng nêu.
 - "history": vài tin gần nhất, cũ trước mới sau. Chỉ dùng để hiểu người dùng đang nói tiếp chuyện gì và để không lặp lại câu mình vừa nói. Không lấy tên địa điểm, con số từ history.
 
 Thứ tự:

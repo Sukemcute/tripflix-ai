@@ -56,11 +56,12 @@ class FakeCore:
     """Answers by path prefix and keeps (path, params) of each call."""
 
     def __init__(self, routes: Mapping[str, object]):
-        self.routes, self.calls = routes, []
+        self.routes, self.calls, self.bodies = routes, [], []
 
     def client(self) -> httpx.AsyncClient:
         def handle(request: httpx.Request) -> httpx.Response:
             self.calls.append((request.url.path, dict(request.url.params)))
+            self.bodies.append((request.url.path, request.content))
             for prefix, body in self.routes.items():
                 if request.url.path.startswith(prefix):
                     return (

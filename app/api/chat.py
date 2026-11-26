@@ -25,7 +25,7 @@ from app.clients.llm.base import LlmResult
 from app.clients.llm.guarded import LlmUnavailableError
 from app.clients.weather import OpenMeteoWeather
 from app.core.config import ChatSettings, get_chat_settings
-from app.services.assistant import ChatRequest, social
+from app.services.assistant import ChatRequest, consultant, social
 from app.services.assistant.admission import (
     ChatRejectedError,
     Identity,
@@ -35,9 +35,10 @@ from app.services.assistant.admission import (
     guest_identity,
     user_identity,
 )
-from app.services.assistant.planner import today_in_vietnam
+from app.services.assistant.calendar import now_in_vietnam
 from app.services.assistant.responder import respond, split_for_stream
-from app.services.assistant.turn import Turn
+from app.services.assistant.schemas import TripContext
+from app.services.assistant.turn import DATE_FACT, Turn
 from app.services.assistant.understand import LlmNotConfiguredError, understand
 from app.services.summary.pii import mask_pii
 from app.services.usage_events import ChatTurn, ChatTurnEvent, ChatUsage, UsageEvent, publish_usage
@@ -148,6 +149,14 @@ def rejected(error: ChatRejectedError) -> JSONResponse:
     )
 
 
+async def consult(request: ChatRequest, trip: TripContext, **kwargs):
+    """The Consultant, with provider outages seen as a failed skill (Turn then falls back)."""
+    try:
+        return await consultant.consult(request, trip, **kwargs)
+    except (LlmNotConfiguredError, LlmUnavailableError) as exc:
+        raise ValueError("consult LLM unavailable") from exc
+
+
 @router.post(
     "/chat",
     tags=["assistant"],
@@ -217,6 +226,7 @@ async def run_turn(
             )
         )
 
+    now = now_in_vietnam()  # one clock for the whole turn
     try:
         yield event("status", {"step": "understanding"})
         async with asyncio.timeout_at(deadline):
@@ -228,6 +238,7 @@ async def run_turn(
                 try:
                     parsed, _ = await understand(
                         request,
+                        now=now,
                         max_turns=gate.history_turns(ticket.identity),
                         on_usage=partial(add_usage, "controller"),
                     )
@@ -244,12 +255,19 @@ async def run_turn(
                     llm_status = "invalid_response"
             yield event("status", {"step": "llm", "outcome": llm_status})
             yield event("status", {"step": "searching"})
+            today = now.date()
             turn = Turn(
                 request,
                 parsed,
                 core=get_core_client(),
                 weather=get_weather(),
-                today=today_in_vietnam(),
+                today=today,
+                now=now,
+                consult=(
+                    partial(consult, today=today, now=now, on_usage=partial(add_usage, "responder"))
+                    if is_llm_on
+                    else None
+                ),
                 disabled_skills=frozenset(
                     name.strip()
                     for name in settings.chat_skills_disabled.split(",")
@@ -264,6 +282,10 @@ async def run_turn(
                 is_llm_on
                 and settings.chat_responder_enabled
                 and parsed is not None
+                and not any(
+                    fact.get("type") in {consultant.CONSULT_FACT, DATE_FACT}
+                    for fact in answer.facts
+                )
                 and answer.kind in {"answer", "no_result", "clarify"}
                 and (
                     social.is_off_topic_answer(answer)
@@ -280,6 +302,7 @@ async def run_turn(
                             request,
                             answer,
                             today=turn.today,
+                            now=now,
                             on_usage=partial(add_usage, "responder"),
                         )
                 except (

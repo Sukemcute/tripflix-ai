@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.services.assistant.calendar import holiday_cue, relative_dates
+from app.services.assistant.destinations import destinations_by_id
 from app.services.assistant.planner import PLAN_FIRST_CUE
 from app.services.assistant.schemas import Awaiting, TripContext, Understanding
 from app.services.summary.injection import match_injection
@@ -26,7 +28,35 @@ DAY_CUES = {
     "today": r"\b(hom nay|hnay|bua nay|(toi|sang|chieu|trua|dem) nay|bay gio|luc nay)\b",
     "tomorrow": r"\b(mai|ngay mai)\b",
     "yesterday": r"\b(hom qua)\b",
+    # "mốt" folds to "mot": not "một đêm", "một người"...
+    "day_after_tomorrow": r"\b(ngay kia|mot(?! (dem|nguoi|phong|ngay|tuan|thang|khach|can)))\b",
+    "monday": r"\b(t2|thu (2|hai))\b",
+    "tuesday": r"\b(t3|thu (3|ba))\b",
+    "wednesday": r"\b(t4|thu (4|tu))\b",
+    "thursday": r"\b(t5|thu (5|nam))\b",
+    "friday": r"\b(t6|thu (6|sau))\b",
 }
+# "hôm nay là ngày mấy": only the calendar is asked, so code answers and no Skill runs.
+DATE_QUESTION = r"\b(la )?(ngay|thu) (may|nao|bao nhieu)\b"
+ASKED_DAYS = {
+    "next_weekend": r"\bcuoi tuan sau\b",
+    "this_weekend": r"\bcuoi tuan\b",
+    "day_after_tomorrow": DAY_CUES["day_after_tomorrow"],
+    "tomorrow": r"\b(ngay )?mai\b",
+    "today": r"\b(hom nay|(?<!tuan )nay)\b",
+}
+NOT_CALENDAR_CUE = r"\b(reel|video|clip|thoi tiet|du bao)\b"
+SPOKEN_WEEKDAYS = {
+    ref: DAY_CUES[ref] for ref in ("monday", "tuesday", "wednesday", "thursday", "friday")
+} | {"saturday": r"\b(t7|thu (7|bay))\b", "sunday": r"\b(chu nhat|cn)\b"}
+# "mốt" only with its accent (or "ngày mốt/kia"): unaccented "mot" is also "một mình", "một chút".
+SPOKEN_DAYS = SPOKEN_WEEKDAYS | {
+    "today": DAY_CUES["today"],
+    "tomorrow": DAY_CUES["tomorrow"],
+    "day_after_tomorrow": r"(?<!\w)(mốt|ngày mốt|ngày kia)(?!\w)",
+}
+# "đi được không", "có nên đi không": a yes/no about going on a day is a weather question.
+CAN_GO_CUE = r"\b(di|ghe|bay)( co)? (duoc|dc)( khong| k| ko)?\b|\bco nen (di|ghe)\b"
 EXPLICIT_WEATHER_DAYS = {"hom nay": "today", "ngay mai": "tomorrow", "hom qua": "yesterday"}
 CALENDAR_DATE = r"\b\d{1,2}(?:\s*[/.-]\s*|\s+th[aá]ng\s+)\d{1,2}\b"
 GREETING = r"(?:hi+|hell?o+|hey+|(?:xin )?chao(?: ban| tripi)?)"
@@ -101,7 +131,8 @@ DURATION_ONLY = (
 DATE_WORDS = (
     r"\b(\d{1,2}\s*[/.-]\s*\d{1,2}|ngay \d{1,2}(?!\s*d)|thang \d{1,2}"
     r"|thu (2|3|4|5|6|7|hai|ba|tu|nam|sau|bay)"
-    r"|t[2-7]|chu nhat|cn|mai|ngay mot(?! dem)|hom nay|cuoi tuan|tuan (nay|sau))\b"
+    r"|t[2-7]|chu nhat|cn|mai|ngay mot(?! dem)|hom nay|cuoi tuan|tuan (nay|sau)"
+    r"|\d+ (ngay|tuan) (nua|sau|toi)|dau tuan|giua tuan|dip|tet|gio to|quoc khanh)\b"
 )
 # Live eval of v7 (17/11): the model put unsafe asks and travel questions in off_topic.
 UNSAFE_CUE = (
@@ -141,6 +172,8 @@ TRAVEL_CUE = (
     r"|lich trinh|lo trinh)\b"
 )
 SUGGEST_CUE = r"\b(di dau|dau cho|cho nao|o dau|goi y|nen di)\b"
+# No place yet but a wish to go out ("tôi vừa thất nghiệp, buồn quá, muốn đi chơi"): consult.
+CONSULT_CUE = rf"{TRAVEL_CUE}|{SUGGEST_CUE}|\bxa stress\b"
 THANKS_ONLY = r"(cam on|camon|thanks|thank you|thank|tks|thanks ban)( (nha|nhe|ban|tripi|nhieu|a))*"
 # A short "why" right after a reply is about that reply.
 WHY_CUE = r"^(tai sao|sao (vay|the|lai|khong|ko)|vi sao|why|la sao)\b"
@@ -161,6 +194,8 @@ CITY_NAMES = {
     "dn": "Đà Nẵng", "hai phong": "Hải Phòng", "can tho": "Cần Thơ", "hue": "Huế",
     "nha trang": "Nha Trang", "da lat": "Đà Lạt", "vung tau": "Vũng Tàu",
 }  # fmt: skip
+# A reel word makes a reel ask, never a consult (live eval 26/11).
+REEL_WORD_CUE = r"\b(reels?|video|clip)\b"
 
 
 class DayMonth(BaseModel):
@@ -204,6 +239,10 @@ class ControllerOutput(BaseModel):
         "confirm_booking",
         "off_topic",
         "ask_why",
+        # v12 (2026-11-26): wants to go out, no place yet: advise where (TF31)
+        "consult",
+        # v12: "hôm nay là ngày mấy": answered from the calendar, no Core call
+        "ask_date",
     ]
     query: str
     missing: Literal["place", "dates", "origin", "none"]
@@ -219,6 +258,12 @@ class ControllerOutput(BaseModel):
         "saturday",
         "sunday",
         "yesterday",
+        "day_after_tomorrow",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
     ]
     nights: int | None
     adults: int | None
@@ -581,6 +626,16 @@ def to_understanding(
     return fix_plan_edit(understood, message, trip)
 
 
+def named_place(text: str) -> str | None:
+    """The catalog or city name the folded message says, longest first; None when it names none."""
+    names = {normalize_text(d.name): d.name for d in destinations_by_id().values()}
+    names |= {key: name for key, name in CITY_NAMES.items() if key not in names}
+    for key in sorted(names, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(key)}\b", text):
+            return names[key]
+    return None
+
+
 def apply_guards(
     out: ControllerOutput,
     message: str,
@@ -590,6 +645,8 @@ def apply_guards(
     in_plan: bool = False,
     has_booking: bool = False,
     awaiting: Awaiting | None = None,
+    today: date | None = None,
+    trip_place: str = "",
 ) -> ControllerOutput:
     """Drop or fix what the model said that the message does not support [ĐỀ XUẤT]."""
     text = normalize_text(message)
@@ -618,6 +675,24 @@ def apply_guards(
         return out.model_copy(update={"intent": "confirm_booking" if has_booking else "ack"})
     if re.fullmatch(ACK_ONLY, text):
         return out.model_copy(update={"intent": "ack"})
+    asked_day = next((ref for ref, cue in ASKED_DAYS.items() if re.search(cue, text)), None)
+    holiday = holiday_cue(text)
+    if (
+        (asked_day or holiday)
+        and re.search(DATE_QUESTION, text)
+        and not named_place(text)
+        and not re.search(rf"{STAY_CUE}|{FLIGHT_CUE}|{WEATHER_CUE}|{NOT_CALENDAR_CUE}", text)
+    ):
+        return out.model_copy(
+            update={
+                "intent": "ask_date",
+                "day_ref": "none" if holiday else asked_day,
+                "start": None,
+                "end": None,
+            }
+        )
+    if out.intent == "ask_date":  # the model saw a date question the message does not hold
+        out = out.model_copy(update={"intent": "clarify"})
     fixed: dict = {}
     if out.day_ref in DAY_CUES and not re.search(DAY_CUES[out.day_ref], text):
         fixed["day_ref"] = "none"
@@ -732,6 +807,9 @@ def apply_guards(
             "origin": bool(reply_city) or (awaiting.intent == "plan_trip" and has_date),
             "origin_dates": bool(reply_city) or has_date,
         }[awaiting.missing]
+        if awaiting.intent == "consult":
+            # A named place, or a stay/flight/reel ask, leaves the consult: its own intent runs.
+            fills = not out.place and intent in {"search", "clarify"}
         if fills or (awaiting.intent == "plan_trip" and re.search(PLAN_FIRST_CUE, text)):
             intent = awaiting.intent  # the answer to Tripi's question finishes that request
             if awaiting.missing in {"origin", "origin_dates"} and reply_city:
@@ -758,7 +836,7 @@ def apply_guards(
         intent = "ask_why"
     if intent == "ask_why" and not re.search(r"\b(tai sao|vi sao|sao|why)\b", text):
         # "vậy đi biển đâu cho chill" came back as ask_why once (17/11): no "why", no ask_why.
-        intent = "search" if re.search(TRAVEL_CUE, text) or out.place else "clarify"
+        intent = "search" if out.place else "consult" if re.search(CONSULT_CUE, text) else "clarify"
     if intent == "off_topic":
         # Unsafe asks, prompt injection and homework stay refused; travel asks stay travel.
         if is_unsafe(message) or (off_topic_kind(message) and is_harmless_off_topic(message, out)):
@@ -769,8 +847,10 @@ def apply_guards(
             intent = "find_stay"
         elif re.search(WEATHER_CUE, text):
             intent = "weather"
-        elif out.place or re.search(TRAVEL_CUE, text):
+        elif out.place:
             intent = "search"
+        elif re.search(CONSULT_CUE, text):
+            intent = "consult"  # mood plus a wish to go out, no place yet
     if has_options and pick and intent != "select_option":
         intent = "select_option"  # "lấy cái thứ 1" with options on screen was change_stay 3/3
         word = pick.group(1)
@@ -815,14 +895,15 @@ def apply_guards(
     ):
         intent = "find_stay"  # "ks da nang t7 nay" was read as a flight 3/3 with v4
     elif intent in SOCIAL_INTENTS and len(text.split()) > MAX_SOCIAL_WORDS:
-        intent = "search"  # a long message is never only "ok" (review-02)
+        # A long message is never only "ok" (review-02); with no place it asks where to go.
+        intent = "consult" if not out.place and re.search(CONSULT_CUE, text) else "search"
     elif (
         intent == "clarify"
         and not out.place
         and re.search(SUGGEST_CUE, text)
         and re.search(TRAVEL_CUE, text)
     ):
-        intent = "search"  # "vậy đi biển đâu cho chill" asks for ideas, not to be asked back
+        intent = "consult"  # "vậy đi biển đâu cho chill" asks for ideas, not to be asked back
     elif intent in {"search", "clarify"} and out.place and re.search(STAY_CUE, text):
         intent = "find_stay"
     elif (
@@ -861,6 +942,14 @@ def apply_guards(
                 intent = "plan_trip"
             elif re.search(TRAVEL_CUE, text):
                 intent = "search"
+    if intent == "consult":
+        # Consult is only for "where to go": a reel word or a place name leaves it (live 26/11).
+        if re.search(REEL_WORD_CUE, text):
+            intent = "find_reel"
+            fixed["reel_query"] = out.reel_query or out.query
+        elif not origin and (place := named_place(text)):
+            intent = "search"
+            fixed |= {"place": place, "query": out.query or message}
     if intent != out.intent:
         fixed["intent"] = intent
         if out.missing == "dates" and intent in {"find_stay", "weather"}:
@@ -889,11 +978,52 @@ def apply_guards(
         if out.missing == "origin":
             # The origin was said; else to_understanding drops it (v5 gave SGN + missing=origin).
             fixed["missing"] = "none"
-    said_date = re.search(DATE_WORDS, text) or re.search(CALENDAR_DATE, message, re.IGNORECASE)
-    if (out.start or out.end) and not said_date:
+    typed_date = re.search(CALENDAR_DATE, message, re.IGNORECASE) or re.search(
+        r"\b(ngay \d{1,2}(?!\s*d)|thang \d{1,2})\b", text
+    )
+    said_date = re.search(DATE_WORDS, text) or typed_date
+    has_day_ref = fixed.get("day_ref", out.day_ref) != "none"
+    if (out.start or out.end) and (not said_date or (has_day_ref and not typed_date)):
         # "2 ngày 1 đêm" alone got today as the start (Vũng Tàu report P2): no date was said,
-        # so the trip keeps the dates it already had.
+        # so the trip keeps the dates it already had. A relative day ("cuối tuần này") with no
+        # typed date also wins over a start the model added: it wrote 26/11 to 28/11, today
+        # plus "2 ngày", for "cuối tuần này 2 ngày 1 đêm" (live test 2026-11-26).
         fixed |= {"start": None, "end": None}
+    named_days = (
+        relative_dates(message, today) if today and (not typed_date or not out.start) else None
+    )
+    if named_days and intent not in {"post_itinerary", "post_reviews"}:
+        # "3 ngày nữa", "thứ 6 tuần sau", "dịp Tết": the calendar gives the date, not the model.
+        first, last = named_days
+        fixed |= {
+            "start": DayMonth(day=first.day, month=first.month),
+            "end": DayMonth(day=last.day, month=last.month) if last else None,
+            "day_ref": "none",
+        }
+    spoken = [
+        ref
+        for ref, cue in SPOKEN_DAYS.items()
+        if re.search(cue, message.lower() if ref == "day_after_tomorrow" else text)
+    ]
+    if (
+        len(spoken) == 1
+        and not typed_date
+        and not named_days
+        and not re.search(r"\b(cuoi tuan|tuan (sau|toi))\b", text)
+        and fixed.get("day_ref", out.day_ref) != spoken[0]
+    ):
+        # A day said once ("thứ 6 tuần này", "mốt") beats what the model kept: this_weekend,
+        # another day or the dates the trip already remembers.
+        fixed |= {"day_ref": spoken[0], "start": None, "end": None}
+    is_day_said = fixed.get("day_ref", out.day_ref) != "none" or out.start is not None
+    if (
+        intent in {"search", "plan_trip", "clarify", "find_stay"}
+        and is_day_said
+        and (out.place or trip_place)
+        and re.search(CAN_GO_CUE, text)
+        and not re.search(rf"{STAY_CUE}|{FLIGHT_CUE}", text)
+    ):
+        intent = fixed["intent"] = "weather"  # the model said plan_trip or find_stay 3/4 times
     if intent == "plan_trip" and not out.meals_only and re.search(MEALS_CUE, text):
         fixed["meals_only"] = True
     if intent == "plan_trip" and out.pace is None:

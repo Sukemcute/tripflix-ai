@@ -568,19 +568,19 @@ def main() -> int:
     parser.add_argument("--mode", choices=["ci", "live", "chain", "search", "ab"], default="ci")
     parser.add_argument(
         "--cases",
-        choices=["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "all"],
+        choices=["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "all"],
         default="all",
     )
     parser.add_argument("--runs", type=int, default=3)
     args = parser.parse_args()
     if args.mode == "chain":
-        chains = [read_jsonl(f"chains.v{n}.jsonl") for n in (1, 2, 3, 4, 5, 6, 7, 8, 9)]
+        chains = [read_jsonl(f"chains.v{n}.jsonl") for n in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)]
         chains = [chain for group in chains for chain in group]
         return asyncio.run(run_chain(chains, args.runs))
     if args.mode == "search":
         return asyncio.run(run_search(read_jsonl("search.v1.jsonl")))
     versions = (
-        ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"]
+        ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"]
         if args.cases == "all"
         else [args.cases]
     )

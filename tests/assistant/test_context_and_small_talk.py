@@ -235,7 +235,7 @@ def test_lowercase_accented_words_are_not_read_as_names():
         ("làm giúp bài văn tả cảnh biển", {}, "refusal"),
         ("can mang gi", {}, "packing"),
         ("ăn gì ở Huế cho đúng vị", {"place": "Huế"}, "search"),
-        ("cuoi tuan di dau chill duoi 3 cu", {}, "search"),
+        ("cuoi tuan di dau chill duoi 3 cu", {}, "consult"),
         ("hôm qua MU thua đau quá", {}, "off_topic"),
     ],
 )
@@ -264,11 +264,11 @@ def test_a_city_without_points_shows_its_reels_instead_of_a_dead_end():
     assert (answer.lead or "").startswith("Tripflix chưa có đủ điểm ở Hội An")
 
 
-def test_asking_for_ideas_is_a_search_not_a_question_back():
-    assert guard("vậy đi biển đâu cho chill", intent="clarify").intent == "search"
+def test_asking_for_ideas_is_a_consult_not_a_question_back():
+    assert guard("vậy đi biển đâu cho chill", intent="clarify").intent == "consult"
     assert guard("mình muốn đi chơi 3 ngày", intent="clarify").intent == "clarify"
-    assert guard("vậy đi biển đâu cho chill", intent="ask_why").intent == "search"
-    assert guard("vậy đi biển đâu cho chill", intent="clarify", place="null").intent == "search"
+    assert guard("vậy đi biển đâu cho chill", intent="ask_why").intent == "consult"
+    assert guard("vậy đi biển đâu cho chill", intent="clarify", place="null").intent == "consult"
 
 
 def test_a_card_title_already_in_the_sentence_is_not_written_twice():
@@ -353,3 +353,13 @@ def test_a_rude_request_is_answered_with_one_reminder():
 def test_a_rude_message_is_acted_on_only_from_its_own_words(message, parsed, named):
     understood = Understanding(intent="search", is_rude=True, **parsed)
     assert social.names_its_target(message, understood) is named
+
+
+def test_ref_after_partial_title_is_not_doubled():
+    titles = {"r2": "An Homestay Vũng Tàu", "r1": "Gecko Hostel"}
+    said = "Có Gecko Hostel 310.000đ/đêm với An Homestay [r2] 320.000đ/đêm."
+    assert _name_refs(said, titles) == (
+        "Có Gecko Hostel 310.000đ/đêm với An Homestay Vũng Tàu 320.000đ/đêm."
+    )
+    assert _name_refs("Thử An homestay, [r2] nha", titles) == "Thử An Homestay Vũng Tàu nha"
+    assert _name_refs("Xem Vũng Tàu [r2] nha", titles) == "Xem Vũng Tàu An Homestay Vũng Tàu nha"

@@ -11,15 +11,16 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from app.clients.llm.base import LlmResult
+from app.services.assistant.calendar import build_calendar, responder_calendar
 from app.services.assistant.schemas import Answer, ChatRequest
 from app.services.assistant.social import is_off_topic_answer, was_said
-from app.services.assistant.understand import get_role_llm
+from app.services.assistant.understand import get_role_llm, resolve_now
 from app.services.assistant.verifier import CARD_REF, MAX_SENTENCES, verify
 from app.services.summary.pii import mask_pii
 from app.services.summary.schemas import strict_json_schema
@@ -51,14 +52,38 @@ def build_facts(answer: Answer) -> list[dict]:
 
 
 def _name_refs(sentence: str, titles: dict[str, str]) -> str:
-    """[r1] becomes the card's title, unless the sentence already says it ("Săn mây [r1]")."""
+    """[r1] becomes the card's title, unless the sentence already says it ("Săn mây [r1]").
+
+    When the words before the ref are only the start of the title ("An Homestay [r2]" for
+    "An Homestay Vũng Tàu"), those words and the ref become the full title, not a repeat.
+    """
     said = normalize_text(sentence)
-
-    def title(match: re.Match[str]) -> str:
+    out: list[str] = []
+    last = 0
+    for match in CARD_REF.finditer(sentence):
         name = titles[match.group(1)]
-        return "" if name and normalize_text(name) in said else name
-
-    return CARD_REF.sub(title, sentence)
+        words = normalize_text(name).split()
+        before = [
+            (token, normalize_text(token.group()))
+            for token in re.finditer(r"\S+", sentence[last : match.start()])
+        ]
+        prefix = next(
+            (
+                size
+                for size in range(min(len(words) - 1, len(before)), 0, -1)
+                if [folded for _, folded in before[-size:]] == words[:size]
+            ),
+            0,
+        )
+        if name and normalize_text(name) in said:
+            replacement, start = "", match.start()
+        elif prefix:
+            replacement, start = name, last + before[-prefix][0].start()
+        else:
+            replacement, start = name, match.start()
+        out += [sentence[last:start], replacement]
+        last = match.end()
+    return "".join(out) + sentence[last:]
 
 
 def _tidy(sentence: str) -> str:
@@ -77,10 +102,12 @@ async def respond(
     answer: Answer,
     *,
     today: date | None = None,
+    now: datetime | None = None,
     on_usage: Callable[[LlmResult], None] | None = None,
 ) -> tuple[list[str] | None, LlmResult]:
     """Sentences ready to show, or None to keep the fixed text. Raises on provider errors."""
     facts = build_facts(answer)
+    calendar = build_calendar(resolve_now(now, today))
     question = mask_pii(request.message)
     history = [
         {"role": turn.role, "text": mask_pii(turn.text)[:300]}
@@ -89,6 +116,7 @@ async def respond(
     payload = {
         "question": question,
         "facts": facts,
+        "calendar": responder_calendar(calendar),
         "alreadySaid": answer.lead,
         "editApplied": answer.edit_applied,
         "history": history,
@@ -112,6 +140,7 @@ async def respond(
         today=today,
         extra_grounding=f"{place} {answer.lead or ''}",
         edit_applied=answer.edit_applied,
+        calendar=calendar,
     )
     if dropped:
         logger.info("chat.verifier.dropped", extra={"rules": dict(dropped)})

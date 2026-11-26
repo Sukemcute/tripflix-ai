@@ -1,0 +1,54 @@
+# Ngày lễ Việt Nam cho lịch của Tripi (TF31). Dữ liệu tham khảo, chờ Bảo kiểm.
+# Lịch nghỉ bù chính thức do Nhà nước công bố mỗi năm: nhập tay, code không tự cộng ngày nghỉ bù.
+# Khoảng ngày = ngày chính trừ `before` đến ngày chính cộng `after`.
+# Ngày dương của lễ âm lịch (mùng 1 Tết, 10/3 âm lịch) đối chiếu ngày 2026-11-26:
+#   - tính lại bằng thuật toán âm lịch Hồ Ngọc Đức (UTC+7), khớp cả hai loại cho 2026-2030
+#     trừ mùng 1 Tết 2030 (thiết kế ghi 2030-02-03, tính ra và web cho 2030-02-02: đã sửa);
+#   - nguồn web đối chiếu thêm: mùng 1 Tết 2027 (thuvienphapluat.vn), Giỗ Tổ 2027 (vtcnews.vn),
+#     mùng 1 Tết 2030 (lịch vạn niên ngaydep.com, baolamdong.vn).
+# Các ngày chỉ có thuật toán, chưa có nguồn web: ghi "# chưa đối chiếu web".
+fixed:
+  - id: tet-duong-lich
+    name: Tết Dương lịch
+    cue: '\b(tet (duong lich|tay)|1 1)\b'
+    month: 1
+    day: 1
+    before: 0
+    after: 0
+  - id: le-30-4
+    name: Lễ 30/4 – 1/5
+    cue: '\b(30 4|1 5|giai phong|quoc te lao dong)\b'
+    month: 4
+    day: 30
+    before: 0
+    after: 1
+  - id: quoc-khanh
+    name: Quốc khánh
+    cue: '\b(quoc khanh|2 9)\b'
+    month: 9
+    day: 2
+    before: 1
+    after: 0
+lunar:
+  - id: tet
+    name: Tết Nguyên Đán
+    cue: '\btet\b'
+    before: 1
+    after: 3
+    dates:  # mùng 1 Tết
+      - 2026-02-17  # chưa đối chiếu web
+      - 2027-02-06
+      - 2028-01-26  # chưa đối chiếu web
+      - 2029-02-13  # chưa đối chiếu web
+      - 2030-02-02
+  - id: gio-to
+    name: Giỗ Tổ Hùng Vương
+    cue: '\bgio to\b'
+    before: 0
+    after: 0
+    dates:  # 10/3 âm lịch
+      - 2026-04-26  # chưa đối chiếu web
+      - 2027-04-16
+      - 2028-04-04  # chưa đối chiếu web
+      - 2029-04-23  # chưa đối chiếu web
+      - 2030-04-12  # chưa đối chiếu web
