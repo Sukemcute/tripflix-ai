@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from app.services.assistant import planner
-from app.services.assistant.controller import apply_guards, to_understanding
+from app.services.assistant.controller import DayMonth, apply_guards, to_understanding
 from app.services.assistant.schemas import Awaiting, TripContext
 from evals.assistant.run import controller_plan
 from tests.assistant.test_report_regressions import FakeCore, run_turn
@@ -104,3 +104,33 @@ def test_day_cue_drops_mot_when_message_says_one_night():
 def test_day_after_tomorrow_question():
     answer, _, _ = ask("ngày mốt là ngày mấy", intent="clarify")
     assert answer.text == "Ngày mốt là thứ Bảy, 28/11."
+
+
+def test_weekend_plan_dates():
+    # Observed from the live Controller: day_ref this_weekend plus start/end = today and today + 2.
+    message = "xếp lịch trình vũng tàu cuối tuần này 2 ngày 1 đêm"
+    said = controller_plan(
+        intent="plan_trip",
+        place="Vũng Tàu",
+        query="vũng tàu",
+        day_ref="this_weekend",
+        start=DayMonth(day=26, month=11),
+        end=DayMonth(day=28, month=11),
+        nights=1,
+    )
+    out = apply_guards(said, message, has_reel=False)
+    parsed = to_understanding(out, None, THURSDAY, message=message)
+    assert planner.stay_range(parsed, THURSDAY) == (date(2026, 11, 28), date(2026, 11, 29))
+
+
+def test_typed_dates_still_beat_the_relative_day():
+    said = controller_plan(
+        intent="find_stay",
+        place="Vũng Tàu",
+        day_ref="saturday",
+        start=DayMonth(day=21, month=12),
+        end=DayMonth(day=22, month=12),
+    )
+    out = apply_guards(said, "ks vũng tàu t7 21/12 đến 22/12", has_reel=False)
+    parsed = to_understanding(out, None, THURSDAY)
+    assert planner.stay_range(parsed, THURSDAY) == (date(2026, 12, 21), date(2026, 12, 22))

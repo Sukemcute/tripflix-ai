@@ -957,10 +957,16 @@ def apply_guards(
         if out.missing == "origin":
             # The origin was said; else to_understanding drops it (v5 gave SGN + missing=origin).
             fixed["missing"] = "none"
-    said_date = re.search(DATE_WORDS, text) or re.search(CALENDAR_DATE, message, re.IGNORECASE)
-    if (out.start or out.end) and not said_date:
+    typed_date = re.search(CALENDAR_DATE, message, re.IGNORECASE) or re.search(
+        r"\b(ngay \d{1,2}(?!\s*d)|thang \d{1,2})\b", text
+    )
+    said_date = re.search(DATE_WORDS, text) or typed_date
+    has_day_ref = fixed.get("day_ref", out.day_ref) != "none"
+    if (out.start or out.end) and (not said_date or (has_day_ref and not typed_date)):
         # "2 ngày 1 đêm" alone got today as the start (Vũng Tàu report P2): no date was said,
-        # so the trip keeps the dates it already had.
+        # so the trip keeps the dates it already had. A relative day ("cuối tuần này") with no
+        # typed date also wins over a start the model added: it wrote 26/11 to 28/11, today
+        # plus "2 ngày", for "cuối tuần này 2 ngày 1 đêm" (live test 2026-11-26).
         fixed |= {"start": None, "end": None}
     if intent == "plan_trip" and not out.meals_only and re.search(MEALS_CUE, text):
         fixed["meals_only"] = True
