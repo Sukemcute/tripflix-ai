@@ -22,6 +22,8 @@ ab    the TF14 comparison: the same fixed plans written by A (one agent: fixed t
       CHAT_RESPONDER_ENABLED=false serves) and by B (the real Responder through the Verifier).
       Reports how often B is used, sentences the Verifier drops by rule, latency and cost.
       Judging tone is left to people reading the printed answers. It costs money.
+
+Every mode runs on one fixed clock (NOW = TODAY 08:00): "21/11" is ahead, "thứ 6 tuần sau" is 27/11.
 """
 
 import argparse
@@ -31,7 +33,8 @@ import logging
 import sys
 import time
 from collections import Counter
-from datetime import date
+from datetime import date, datetime
+from datetime import time as day_time
 from pathlib import Path
 from uuid import UUID
 
@@ -39,7 +42,7 @@ import httpx
 
 from app.clients.weather import DayWeather, Place
 from app.services.assistant.controller import ControllerOutput, to_understanding
-from app.services.assistant.planner import today_in_vietnam
+from app.services.assistant.planner import VIETNAM
 from app.services.assistant.schemas import ChatRequest, TripContext, Understanding
 from app.services.assistant.schemas import Turn as HistoryTurn
 from app.services.assistant.turn import Turn
@@ -48,6 +51,9 @@ from app.services.summary.vi_text import normalize_text
 HERE = Path(__file__).parent
 REEL = UUID("018d9f20-0000-7000-8000-00000000000a")
 TODAY = date(2026, 11, 16)  # a Monday: fixed so relative days give the same answer
+NOW = datetime.combine(
+    TODAY, day_time(8, 0), VIETNAM
+)  # the clock every mode gives the Controller and Turn
 EMPTY_PLAN = {
     "intent": "search",
     "query": "",
@@ -312,7 +318,12 @@ async def run_ci(cases: list[dict]) -> int:
         async with fake_core(calls, overrides=case.get("core")) as core:
             request = request_of(case)
             turn = Turn(
-                request, plan_of(case, request), core=core, weather=FakeWeather(), today=TODAY
+                request,
+                plan_of(case, request),
+                core=core,
+                weather=FakeWeather(),
+                today=TODAY,
+                now=NOW,
             )
             answer = await turn.answer()
         card = answer.cards[0].kind if answer.cards else None
@@ -350,7 +361,7 @@ async def run_live(cases: list[dict], runs: int) -> int:
         for _ in range(runs):
             started = time.perf_counter()
             try:
-                parsed, result = await understand(request_of(case), max_turns=6)
+                parsed, result = await understand(request_of(case), max_turns=6, now=NOW)
                 tokens += result.input_tokens + result.output_tokens
                 cost += result.cost_usd
                 expect = case["expect"]
@@ -394,7 +405,6 @@ async def run_chain(chains: list[dict], runs: int) -> int:
     """Each turn gets the history and trip of the turn before, as the app sends them."""
     from app.services.assistant.understand import understand  # noqa: PLC0415  # needs .env
 
-    today = today_in_vietnam()
     turns_right = turns_total = chains_stable = 0
     for chain in chains:
         is_stable = True
@@ -415,8 +425,10 @@ async def run_chain(chains: list[dict], runs: int) -> int:
                     expect = step["expect"]
                     answer = None
                     try:
-                        parsed, _ = await understand(request, max_turns=6)
-                        turn = Turn(request, parsed, core=core, weather=FakeWeather(), today=today)
+                        parsed, _ = await understand(request, max_turns=6, now=NOW)
+                        turn = Turn(
+                            request, parsed, core=core, weather=FakeWeather(), today=TODAY, now=NOW
+                        )
                         answer = await turn.answer()
                         next_trip = turn.next_trip(answer)
                         card = answer.cards[0].kind if answer.cards else None
@@ -480,7 +492,7 @@ async def run_search(queries: list[dict]) -> int:
                 }
             )
             try:
-                parsed, _ = await understand(request, max_turns=6)
+                parsed, _ = await understand(request, max_turns=6, now=NOW)
                 q = parsed.query or query["message"]
                 response = await core.post("/api/search", json={"q": q})
                 response.raise_for_status()
@@ -527,14 +539,19 @@ async def run_ab(cases: list[dict]) -> int:
         request = request_of(case)
         async with fake_core() as core:
             turn = Turn(
-                request, plan_of(case, request), core=core, weather=FakeWeather(), today=TODAY
+                request,
+                plan_of(case, request),
+                core=core,
+                weather=FakeWeather(),
+                today=TODAY,
+                now=NOW,
             )
             answer = await turn.answer()
         if answer.kind not in {"answer", "no_result"} or not (answer.cards or answer.facts):
             continue  # A and B say the same: the Responder never runs on these turns
         started = time.perf_counter()
         try:
-            sentences, result = await respond(request, answer, today=TODAY)
+            sentences, result = await respond(request, answer, today=TODAY, now=NOW)
             cost += result.cost_usd
         except Exception:  # noqa: BLE001  # an eval run reports, never stops
             sentences, errors = None, errors + 1
