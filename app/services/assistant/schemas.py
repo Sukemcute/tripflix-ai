@@ -208,6 +208,8 @@ class Understanding(WireModel):
         # v2.1 (2026-11-17): harmless chit-chat outside travel, "why" about the last reply
         "off_topic",
         "ask_why",
+        # v12 (2026-11-26): wants to go out, no place yet: Tripi advises where (TF31)
+        "consult",
     ]
     query: str = Field(default="", max_length=200)
     missing: Literal["place", "dates", "none"] = "none"

@@ -1,9 +1,16 @@
 """Destination catalog and trip preferences (consult intent, TF31)."""
 
+import json
 import re
+from uuid import uuid4
 
+import pytest
+
+from app.services.assistant.controller import apply_guards
 from app.services.assistant.destinations import destinations_by_id, merge_prefs
-from app.services.assistant.schemas import TravelPrefs, TripContext
+from app.services.assistant.schemas import Awaiting, ChatRequest, TravelPrefs, TripContext
+from app.services.assistant.understand import build_understanding_input
+from evals.assistant.run import controller_plan
 
 
 def test_catalog_loads_and_is_valid() -> None:
@@ -53,3 +60,49 @@ def test_trip_context_round_trips_prefs() -> None:
     assert dumped["prefs"]["vibe"] == ["quiet"]
     assert dumped["prefs"]["budgetPerPerson"] == 2_000_000
     assert TripContext.model_validate(dumped) == context
+
+
+def guarded(message: str, *, awaiting: Awaiting | None = None, **said: object) -> str:
+    return apply_guards(controller_plan(**said), message, has_reel=False, awaiting=awaiting).intent
+
+
+@pytest.mark.parametrize("intent", ["off_topic", "ack"])
+def test_long_social_message_without_place_becomes_consult(intent: str) -> None:
+    message = "tôi vừa thất nghiệp buồn quá muốn tìm chỗ đi chơi cuối tuần"
+    assert guarded(message, intent=intent) == "consult"
+
+
+def test_idea_clarify_without_place_becomes_consult() -> None:
+    assert guarded("vậy đi biển đâu cho chill", intent="clarify", place="") == "consult"
+
+
+def test_idea_with_place_stays_search() -> None:
+    assert guarded("đà lạt cuối tuần chơi gì", intent="clarify", place="Đà Lạt") != "consult"
+    assert guarded("đà lạt cuối tuần chơi gì", intent="off_topic", place="Đà Lạt") == "search"
+    long_ack = "ok cảm ơn bạn nhiều nha mình sẽ đi Đà Lạt chơi"
+    assert guarded(long_ack, intent="ack", place="Đà Lạt") == "search"
+
+
+def test_reel_request_stays_find_reel() -> None:
+    assert guarded("tìm reel cuối tuần đi đâu", intent="find_reel") == "find_reel"
+
+
+def test_mood_without_travel_wish_stays_off_topic() -> None:
+    assert guarded("chán quá à", intent="off_topic") == "off_topic"
+
+
+def test_awaiting_consult_short_reply_is_consult() -> None:
+    awaiting = Awaiting(intent="consult", missing="place")
+    assert guarded("chill thôi", awaiting=awaiting, intent="search") == "consult"
+    # naming a place leaves the consult
+    assert guarded("đà lạt đi", awaiting=awaiting, intent="search", place="Đà Lạt") == "search"
+
+
+def test_controller_input_has_prefs() -> None:
+    def trip_of(trip: TripContext) -> dict:
+        request = ChatRequest(conversation_id=uuid4(), message="chill thôi", trip=trip)
+        return json.loads(build_understanding_input(request))["trip"]
+
+    assert trip_of(TripContext())["prefs"] is None
+    prefs = TravelPrefs(vibe=["quiet"], budget_per_person=2_000_000)
+    assert trip_of(TripContext(prefs=prefs))["prefs"]["budgetPerPerson"] == 2_000_000

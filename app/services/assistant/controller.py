@@ -141,6 +141,8 @@ TRAVEL_CUE = (
     r"|lich trinh|lo trinh)\b"
 )
 SUGGEST_CUE = r"\b(di dau|dau cho|cho nao|o dau|goi y|nen di)\b"
+# No place yet but a wish to go out ("tôi vừa thất nghiệp, buồn quá, muốn đi chơi"): consult.
+CONSULT_CUE = rf"{TRAVEL_CUE}|{SUGGEST_CUE}|\bxa stress\b"
 THANKS_ONLY = r"(cam on|camon|thanks|thank you|thank|tks|thanks ban)( (nha|nhe|ban|tripi|nhieu|a))*"
 # A short "why" right after a reply is about that reply.
 WHY_CUE = r"^(tai sao|sao (vay|the|lai|khong|ko)|vi sao|why|la sao)\b"
@@ -204,6 +206,8 @@ class ControllerOutput(BaseModel):
         "confirm_booking",
         "off_topic",
         "ask_why",
+        # v12 (2026-11-26): wants to go out, no place yet: advise where (TF31)
+        "consult",
     ]
     query: str
     missing: Literal["place", "dates", "origin", "none"]
@@ -732,6 +736,9 @@ def apply_guards(
             "origin": bool(reply_city) or (awaiting.intent == "plan_trip" and has_date),
             "origin_dates": bool(reply_city) or has_date,
         }[awaiting.missing]
+        if awaiting.intent == "consult":
+            # A named place, or a stay/flight/reel ask, leaves the consult: its own intent runs.
+            fills = not out.place and intent in {"search", "clarify"}
         if fills or (awaiting.intent == "plan_trip" and re.search(PLAN_FIRST_CUE, text)):
             intent = awaiting.intent  # the answer to Tripi's question finishes that request
             if awaiting.missing in {"origin", "origin_dates"} and reply_city:
@@ -758,7 +765,7 @@ def apply_guards(
         intent = "ask_why"
     if intent == "ask_why" and not re.search(r"\b(tai sao|vi sao|sao|why)\b", text):
         # "vậy đi biển đâu cho chill" came back as ask_why once (17/11): no "why", no ask_why.
-        intent = "search" if re.search(TRAVEL_CUE, text) or out.place else "clarify"
+        intent = "search" if out.place else "consult" if re.search(CONSULT_CUE, text) else "clarify"
     if intent == "off_topic":
         # Unsafe asks, prompt injection and homework stay refused; travel asks stay travel.
         if is_unsafe(message) or (off_topic_kind(message) and is_harmless_off_topic(message, out)):
@@ -769,8 +776,10 @@ def apply_guards(
             intent = "find_stay"
         elif re.search(WEATHER_CUE, text):
             intent = "weather"
-        elif out.place or re.search(TRAVEL_CUE, text):
+        elif out.place:
             intent = "search"
+        elif re.search(CONSULT_CUE, text):
+            intent = "consult"  # mood plus a wish to go out, no place yet
     if has_options and pick and intent != "select_option":
         intent = "select_option"  # "lấy cái thứ 1" with options on screen was change_stay 3/3
         word = pick.group(1)
@@ -815,14 +824,15 @@ def apply_guards(
     ):
         intent = "find_stay"  # "ks da nang t7 nay" was read as a flight 3/3 with v4
     elif intent in SOCIAL_INTENTS and len(text.split()) > MAX_SOCIAL_WORDS:
-        intent = "search"  # a long message is never only "ok" (review-02)
+        # A long message is never only "ok" (review-02); with no place it asks where to go.
+        intent = "consult" if not out.place and re.search(CONSULT_CUE, text) else "search"
     elif (
         intent == "clarify"
         and not out.place
         and re.search(SUGGEST_CUE, text)
         and re.search(TRAVEL_CUE, text)
     ):
-        intent = "search"  # "vậy đi biển đâu cho chill" asks for ideas, not to be asked back
+        intent = "consult"  # "vậy đi biển đâu cho chill" asks for ideas, not to be asked back
     elif intent in {"search", "clarify"} and out.place and re.search(STAY_CUE, text):
         intent = "find_stay"
     elif (

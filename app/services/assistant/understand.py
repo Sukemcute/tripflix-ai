@@ -29,7 +29,7 @@ from app.services.summary.schemas import strict_json_schema
 
 logger = logging.getLogger(__name__)
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v11.md"
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v12.md"
 
 
 class LlmNotConfiguredError(Exception):
@@ -71,6 +71,7 @@ def build_understanding_input(
                 "planStops": [stop.name for day in trip.days for stop in day][:20],
                 "interests": trip.interests,
                 "mealsOnly": trip.meals_only,
+                "prefs": trip.prefs.model_dump(mode="json", by_alias=True) if trip.prefs else None,
                 "pendingCount": len(trip.pending_flights or trip.pending),
                 "hasChosenFlight": bool(trip.transport and trip.transport.flight_id),
                 # What Tripi just asked for: a short reply ("Vũng tàu") finishes this request.
