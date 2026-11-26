@@ -46,6 +46,9 @@ ASKED_DAYS = {
     "today": r"\b(hom nay|(?<!tuan )nay)\b",
 }
 NOT_CALENDAR_CUE = r"\b(reel|video|clip|thoi tiet|du bao)\b"
+SPOKEN_WEEKDAYS = {
+    ref: DAY_CUES[ref] for ref in ("monday", "tuesday", "wednesday", "thursday", "friday")
+} | {"saturday": r"\b(t7|thu (7|bay))\b", "sunday": r"\b(chu nhat|cn)\b"}
 EXPLICIT_WEATHER_DAYS = {"hom nay": "today", "ngay mai": "tomorrow", "hom qua": "yesterday"}
 CALENDAR_DATE = r"\b\d{1,2}(?:\s*[/.-]\s*|\s+th[aá]ng\s+)\d{1,2}\b"
 GREETING = r"(?:hi+|hell?o+|hey+|(?:xin )?chao(?: ban| tripi)?)"
@@ -988,6 +991,16 @@ def apply_guards(
             "end": DayMonth(day=last.day, month=last.month) if last else None,
             "day_ref": "none",
         }
+    spoken = [ref for ref, cue in SPOKEN_WEEKDAYS.items() if re.search(cue, text)]
+    if (
+        len(spoken) == 1
+        and not typed_date
+        and not named_days
+        and not re.search(r"\b(cuoi tuan|tuan (sau|toi))\b", text)
+        and fixed.get("day_ref", out.day_ref) != spoken[0]
+    ):
+        # "thứ 6 tuần này" said once: the model sometimes kept this_weekend or the trip's dates.
+        fixed |= {"day_ref": spoken[0], "start": None, "end": None}
     if intent == "plan_trip" and not out.meals_only and re.search(MEALS_CUE, text):
         fixed["meals_only"] = True
     if intent == "plan_trip" and out.pace is None:

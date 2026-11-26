@@ -151,3 +151,18 @@ def test_follow_up_search_keeps_trip_place(message, query, sent):
     run_turn(out, core, message=message, trip=TripContext(place="Vũng Tàu"), today=THURSDAY)
     (body,) = [json.loads(raw) for path, raw in core.bodies if path == "/api/search"]
     assert body == {"q": sent}
+
+
+@pytest.mark.parametrize("said_ref", ["this_weekend", "none", "saturday"])
+def test_one_spoken_weekday_beats_a_wrong_day_ref_or_remembered_dates(said_ref):
+    said = controller_plan(
+        intent="find_stay",
+        place="Vũng Tàu",
+        day_ref=said_ref,
+        start=DayMonth(day=28, month=11),
+        end=DayMonth(day=29, month=11),
+    )
+    out = apply_guards(said, "tìm phòng vũng tàu thứ 6 tuần này", has_reel=False, today=THURSDAY)
+    parsed = to_understanding(out, None, THURSDAY)
+    assert parsed.day_ref == "friday"
+    assert planner.start_day(parsed, THURSDAY) == date(2026, 11, 27)
