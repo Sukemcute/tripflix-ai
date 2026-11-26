@@ -168,7 +168,7 @@ async def search_stays(core: httpx.AsyncClient, understood: Understanding) -> An
                 "pricePerNight": int(stay.unitPrice),
                 "priceText": vnd(int(stay.unitPrice)),
                 "stars": stay.stars,
-                "rating": stay.rating,
+                "rating": stay.rating.average if stay.rating else None,
             }
             for i, stay in enumerate(stays, 1)
         ]

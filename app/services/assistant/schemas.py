@@ -390,13 +390,18 @@ class Places(BaseModel):
     items: list[Place]
 
 
+class StayRating(BaseModel):
+    average: float | None = None
+    count: int | None = None
+
+
 class Stay(BaseModel):
     hotelId: str = Field(min_length=1)
     name: str = Field(min_length=1)
     unitPrice: float = Field(ge=0, allow_inf_nan=False)
     totalPrice: float = Field(ge=0, allow_inf_nan=False)
     stars: int | None = None
-    rating: float | None = None
+    rating: StayRating | None = None
 
 
 class Stays(BaseModel):
