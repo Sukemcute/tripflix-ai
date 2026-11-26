@@ -353,3 +353,13 @@ def test_a_rude_request_is_answered_with_one_reminder():
 def test_a_rude_message_is_acted_on_only_from_its_own_words(message, parsed, named):
     understood = Understanding(intent="search", is_rude=True, **parsed)
     assert social.names_its_target(message, understood) is named
+
+
+def test_ref_after_partial_title_is_not_doubled():
+    titles = {"r2": "An Homestay Vũng Tàu", "r1": "Gecko Hostel"}
+    said = "Có Gecko Hostel 310.000đ/đêm với An Homestay [r2] 320.000đ/đêm."
+    assert _name_refs(said, titles) == (
+        "Có Gecko Hostel 310.000đ/đêm với An Homestay Vũng Tàu 320.000đ/đêm."
+    )
+    assert _name_refs("Thử An homestay, [r2] nha", titles) == "Thử An Homestay Vũng Tàu nha"
+    assert _name_refs("Xem Vũng Tàu [r2] nha", titles) == "Xem Vũng Tàu An Homestay Vũng Tàu nha"

@@ -52,14 +52,38 @@ def build_facts(answer: Answer) -> list[dict]:
 
 
 def _name_refs(sentence: str, titles: dict[str, str]) -> str:
-    """[r1] becomes the card's title, unless the sentence already says it ("Săn mây [r1]")."""
+    """[r1] becomes the card's title, unless the sentence already says it ("Săn mây [r1]").
+
+    When the words before the ref are only the start of the title ("An Homestay [r2]" for
+    "An Homestay Vũng Tàu"), those words and the ref become the full title, not a repeat.
+    """
     said = normalize_text(sentence)
-
-    def title(match: re.Match[str]) -> str:
+    out: list[str] = []
+    last = 0
+    for match in CARD_REF.finditer(sentence):
         name = titles[match.group(1)]
-        return "" if name and normalize_text(name) in said else name
-
-    return CARD_REF.sub(title, sentence)
+        words = normalize_text(name).split()
+        before = [
+            (token, normalize_text(token.group()))
+            for token in re.finditer(r"\S+", sentence[last : match.start()])
+        ]
+        prefix = next(
+            (
+                size
+                for size in range(min(len(words) - 1, len(before)), 0, -1)
+                if [folded for _, folded in before[-size:]] == words[:size]
+            ),
+            0,
+        )
+        if name and normalize_text(name) in said:
+            replacement, start = "", match.start()
+        elif prefix:
+            replacement, start = name, last + before[-prefix][0].start()
+        else:
+            replacement, start = name, match.start()
+        out += [sentence[last:start], replacement]
+        last = match.end()
+    return "".join(out) + sentence[last:]
 
 
 def _tidy(sentence: str) -> str:
