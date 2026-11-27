@@ -8,15 +8,16 @@ picks the year, checks the range, and merges the turn with what Tripi remembers 
 import re
 import unicodedata
 from datetime import date, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from app.services.assistant.calendar import holiday_cue, relative_dates
+from app.services.assistant.calendar import HOLIDAY_WORD, holiday_cue, relative_dates
 from app.services.assistant.destinations import destinations_by_id
 from app.services.assistant.planner import PLAN_FIRST_CUE
 from app.services.assistant.schemas import Awaiting, TripContext, Understanding
 from app.services.summary.injection import match_injection
+from app.services.summary.schemas import strict_json_schema
 from app.services.summary.vi_text import normalize_text
 
 PAST_WINDOW_DAYS = 7  # "15/11" said on 16/11 means last Monday, not next year
@@ -59,7 +60,8 @@ SPOKEN_DAYS = SPOKEN_WEEKDAYS | {
 CAN_GO_CUE = r"\b(di|ghe|bay)( co)? (duoc|dc)( khong| k| ko)?\b|\bco nen (di|ghe)\b"
 EXPLICIT_WEATHER_DAYS = {"hom nay": "today", "ngay mai": "tomorrow", "hom qua": "yesterday"}
 CALENDAR_DATE = r"\b\d{1,2}(?:\s*[/.-]\s*|\s+th[aá]ng\s+)\d{1,2}\b"
-GREETING = r"(?:hi+|hell?o+|hey+|(?:xin )?chao(?: ban| tripi)?)"
+# The one greeting pattern: Controller guard, social small talk and the pre-LLM shortcut.
+GREETING = r"(?:hi+|hell?o+|he+ ?lo+|hey+|alo+|(?:xin )?chao)(?: ban| tripi| cau| nha| ne)*"
 ROUND_TRIP_CUE = r"\b(khu hoi|(2|hai) chieu|chieu ve|round ?trip)\b"
 INFANT_CUE = r"\b(em be|so sinh|infants?)\b"
 STAY_CUE = (
@@ -141,8 +143,10 @@ DATE_WORDS = (
     r"|\d+ (ngay|tuan) (nua|sau|toi)|dau tuan|giua tuan|dip|tet|gio to|quoc khanh)\b"
 )
 # Live eval of v7 (17/11): the model put unsafe asks and travel questions in off_topic.
+# "sung" alone is also "sung sướng" (happy): a gun needs a weapon word or a buy/sell verb.
 UNSAFE_CUE = (
-    r"\b(thuoc ngu|thuoc (doc|chuot)|ma tuy|can sa|vu khi|sung|dao gam|tu tu|tu sat|trom"
+    r"\b(thuoc ngu|thuoc (doc|chuot)|ma tuy|can sa|vu khi|sung (ngan|truong|luc|hoi|dan|san)"
+    r"|(mua|ban|kiem|tim|lam|che tao|dat) sung(?! suong)|dao gam|tu tu|tu sat|trom"
     r"|an cap|lua dao|hack|lam bom|che tao bom|lam gia|ve gia|giay to gia|tron ve"
     r"|danh bac|ca do|mai dam)\b"
 )  # [HIỆU CHỈNH]
@@ -308,6 +312,71 @@ class ControllerOutput(BaseModel):
     stay_sort: Literal["none", "price_asc", "price_desc", "stars_desc"] = "none"
     price_relative: Literal["none", "higher", "lower"] = "none"
     min_stars: int | None = None
+
+
+EMPTY_OUTPUT: dict[str, object] = {
+    "intent": "search",
+    "query": "",
+    "missing": "none",
+    "place": "",
+    "start": None,
+    "end": None,
+    "day_ref": "none",
+    "nights": None,
+    "adults": None,
+    "children": None,
+    "infants": None,
+    "from_airport": None,
+    "to_airport": None,
+    "from_city": "",
+    "to_city": "",
+    "cheapest_only": False,
+    "round_trip": False,
+    "price_max_per_night": None,
+    "depart_after": None,
+    "depart_before": None,
+    "hotel_name": "",
+    "card_ordinal": None,
+    "reel_query": "",
+    "uses_context_post": False,
+    "itinerary_day": None,
+    "asks_days_count": False,
+    "packing_have": [],
+    "packing_only": [],
+    "packing_limit": None,
+    "is_beach_trip": None,
+    "interests": [],
+    "stop_name": "",
+    "pace": None,
+    "meals_only": False,
+    "is_rude": False,
+}
+
+
+def empty_output(intent: str) -> ControllerOutput:
+    """A Controller output with every field null or empty except the intent."""
+    return ControllerOutput.model_validate(EMPTY_OUTPUT | {"intent": intent})
+
+
+def _drop_titles(node: Any) -> Any:
+    if isinstance(node, dict):
+        return {
+            key: {name: _drop_titles(sub) for name, sub in value.items()}
+            if key in ("properties", "$defs")  # names, not keywords: keep a field called title
+            else _drop_titles(value)
+            for key, value in node.items()
+            if key != "title" or not isinstance(value, str)
+        }
+    if isinstance(node, list):
+        return [_drop_titles(item) for item in node]
+    return node
+
+
+def controller_json_schema() -> dict[str, Any]:
+    """The Controller's strict schema without `title` and the class docstring (input tokens)."""
+    schema = _drop_titles(strict_json_schema(ControllerOutput))
+    schema.pop("description", None)
+    return schema
 
 
 def is_harmless_off_topic(
@@ -657,6 +726,50 @@ def date_question_ref(text: str) -> str | None:
     ):
         return "none" if holiday else asked_day
     return None
+
+
+DATE_EDIT_CUE = r"\b(doi ngay|doi lich|doi (sang|lai)|lui|hoan|day (len|lui)|som hon|muon hon)\b"
+# DATE_WORDS misses these; its "ngay N" also fails "ngay 20 di Da Lat" ("đi" folds to "di").
+EXTRA_DATE_CUE = (
+    r"\b(tuan toi|thang (nay|sau|toi)|cuoi thang|dau thang|nam (sau|toi)|sang nam"
+    r"|ngay \d{1,2}(?!\s*dem))\b"
+)
+
+
+def has_date_cue(message: str, trip: TripContext | None) -> bool:
+    """Whether the turn talks about dates; only then does the Controller get the calendar."""
+    text = normalize_text(message)
+    if (
+        re.search(DATE_WORDS, text)
+        or re.search(EXTRA_DATE_CUE, text)
+        or re.search(HOLIDAY_WORD, text)
+        or re.search(CALENDAR_DATE, message, re.IGNORECASE)
+        or re.search(NIGHTS_CUE, text)
+        or any(re.search(cue, text) for cue in DAY_CUES.values())
+    ):
+        return True
+    if trip is None:
+        return False
+    if trip.awaiting and trip.awaiting.missing in {"dates", "origin_dates"}:
+        return True
+    return trip.date_from is not None and re.search(DATE_EDIT_CUE, text) is not None
+
+
+def rules_intent(message: str) -> str | None:
+    """The intent code forces whatever the LLM says, so the LLM call can be skipped; else None.
+
+    Fullmatch only: "hi, tìm khách sạn Đà Lạt" is a request and still goes to the model.
+    """
+    if is_unsafe(message):
+        return "refusal"
+    text = normalize_text(message)
+    if re.fullmatch(GREETING, text):
+        return "greeting"
+    if re.fullmatch(THANKS_ONLY, text):
+        return "thanks"
+    if re.fullmatch(ACK_ONLY, text):  # CLOSING_ONLY included: apply_guards picks confirm_booking
+        return "ack"
+    return "ask_date" if date_question_ref(text) is not None else None
 
 
 def apply_guards(

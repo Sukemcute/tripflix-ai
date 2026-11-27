@@ -8,7 +8,7 @@ from uuid import uuid4
 from app.services.assistant import calendar
 from app.services.assistant.admission import VIETNAM
 from app.services.assistant.controller import apply_guards, to_understanding
-from app.services.assistant.schemas import ChatRequest
+from app.services.assistant.schemas import Awaiting, ChatRequest, TripContext
 from app.services.assistant.turn import Turn
 from app.services.assistant.understand import build_understanding_input
 from evals.assistant.run import controller_plan
@@ -62,6 +62,34 @@ def test_controller_input_has_calendar():
     sent = json.loads(build_understanding_input(request, now=NOW))
     assert sent["calendar"]["days"][1]["label"] == "T6 27/11"
     assert list(sent)[-1] == "message"
+
+
+def calendar_sent(message: str, trip: TripContext | None = None) -> bool:
+    request = ChatRequest(conversation_id=uuid4(), message=message, trip=trip)
+    return "calendar" in json.loads(build_understanding_input(request, now=NOW))
+
+
+def test_input_has_calendar_only_with_date_cue():
+    assert calendar_sent("homestay đà lạt cuối tuần sau")
+    assert calendar_sent("21/11")
+    assert calendar_sent("đi Đà Lạt dịp Tết 2 đêm")
+    for phrase in ("tuần tới đi Đà Lạt", "cuối tháng này đi Đà Lạt", "tháng sau đi Huế"):
+        assert calendar_sent(phrase)
+    assert calendar_sent("đi Sapa sang năm")
+    assert calendar_sent("ngày 20 đi Đà Lạt")
+    assert not calendar_sent("homestay đà lạt")
+    assert not calendar_sent("hi, tìm khách sạn Đà Lạt")
+    # A short reply to "đi ngày nào?" carries the date words only when the calendar is sent.
+    asked_dates = Awaiting(intent="find_stay", missing="dates")
+    assert calendar_sent("Vũng tàu", TripContext(awaiting=asked_dates))
+    assert not calendar_sent("Vũng tàu", TripContext(awaiting=Awaiting(intent="plan_trip")))
+    # Dates already set: only a message that moves them needs the calendar.
+    dated = TripContext(place="Đà Lạt", date_from=date(2026, 12, 5))
+    assert calendar_sent("lùi lại một tuần", dated)
+    assert calendar_sent("đổi lịch giúp mình", dated)
+    for phrase in ("hoãn 1 tuần", "dời lại 2 hôm", "đẩy lên 2 ngày", "dời sang thứ 7"):
+        assert calendar_sent(phrase, dated)
+    assert not calendar_sent("tìm khách sạn rẻ hơn", dated)
 
 
 def test_date_question_about_tet():

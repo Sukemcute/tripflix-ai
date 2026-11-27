@@ -40,8 +40,13 @@ from uuid import UUID
 
 import httpx
 
+from app.clients.llm.base import LlmResult
 from app.clients.weather import DayWeather, Place
-from app.services.assistant.controller import ControllerOutput, to_understanding
+from app.services.assistant.controller import (
+    EMPTY_OUTPUT,
+    ControllerOutput,
+    to_understanding,
+)
 from app.services.assistant.planner import VIETNAM
 from app.services.assistant.schemas import ChatRequest, TripContext, Understanding
 from app.services.assistant.schemas import Turn as HistoryTurn
@@ -54,43 +59,7 @@ TODAY = date(2026, 11, 16)  # a Monday: fixed so relative days give the same ans
 NOW = datetime.combine(
     TODAY, day_time(8, 0), VIETNAM
 )  # the clock every mode gives the Controller and Turn
-EMPTY_PLAN = {
-    "intent": "search",
-    "query": "",
-    "missing": "none",
-    "place": "",
-    "start": None,
-    "end": None,
-    "day_ref": "none",
-    "nights": None,
-    "adults": None,
-    "children": None,
-    "infants": None,
-    "from_airport": None,
-    "to_airport": None,
-    "from_city": "",
-    "to_city": "",
-    "cheapest_only": False,
-    "round_trip": False,
-    "price_max_per_night": None,
-    "depart_after": None,
-    "depart_before": None,
-    "hotel_name": "",
-    "card_ordinal": None,
-    "reel_query": "",
-    "uses_context_post": False,
-    "itinerary_day": None,
-    "asks_days_count": False,
-    "packing_have": [],
-    "packing_only": [],
-    "packing_limit": None,
-    "is_beach_trip": None,
-    "interests": [],
-    "stop_name": "",
-    "pace": None,
-    "meals_only": False,
-    "is_rude": False,
-}
+EMPTY_PLAN = EMPTY_OUTPUT  # old name, kept for the existing eval code
 
 
 def read_jsonl(name: str) -> list[dict]:
@@ -100,6 +69,47 @@ def read_jsonl(name: str) -> list[dict]:
 
 def load_cases(version: str = "v1") -> list[dict]:
     return read_jsonl(f"cases.{version}.jsonl")
+
+
+def summarize_tokens(results: list[LlmResult]) -> tuple[int, int, int]:
+    """(LLM calls, tokens on those calls, tokens on all turns); a "rules" turn made no call."""
+    calls = [r for r in results if r.model_name != "rules"]
+    return (
+        len(calls),
+        sum(r.input_tokens + r.output_tokens for r in calls),
+        sum(r.input_tokens + r.output_tokens for r in results),
+    )
+
+
+class RecallCounter(logging.Handler):
+    """Counts turns where the Controller was asked again with a missing prompt module."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.turns = self.recalls = 0
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.msg != "chat.controller.modules":  # the logger also warns about injection
+            return
+        self.turns += 1
+        self.recalls += bool(getattr(record, "recalled", False))
+
+
+def watch_recalls() -> RecallCounter:
+    counter = RecallCounter()
+    logger = logging.getLogger("app.services.assistant.understand")
+    logger.setLevel(logging.INFO)
+    logger.addHandler(counter)
+    return counter
+
+
+def print_token_averages(results: list[LlmResult], recalls: RecallCounter) -> None:
+    llm_calls, call_tokens, all_tokens = summarize_tokens(results)
+    llm_calls += recalls.recalls  # a re-called turn is one summed result but made two calls
+    print(f"re-calls (missing module) {recalls.recalls}/{recalls.turns} LLM turns")
+    per_call = call_tokens // llm_calls if llm_calls else 0
+    per_turn = all_tokens // len(results) if results else 0
+    print(f"tokens/LLM call {per_call} ({llm_calls} calls), tokens/turn {per_turn}")
 
 
 def controller_plan(**fields) -> ControllerOutput:
@@ -355,6 +365,8 @@ async def run_live(cases: list[dict], runs: int) -> int:
     by_case: dict[str, list[bool]] = {}
     answers: dict[str, list[str]] = {}
     latencies, tokens, cost = [], 0, 0.0
+    llm_results: list[LlmResult] = []
+    recalls = watch_recalls()
     by_tag: Counter[str] = Counter()
     wrong_by_tag: Counter[str] = Counter()
     for case in cases:
@@ -362,6 +374,7 @@ async def run_live(cases: list[dict], runs: int) -> int:
             started = time.perf_counter()
             try:
                 parsed, result = await understand(request_of(case), max_turns=6, now=NOW)
+                llm_results.append(result)
                 tokens += result.input_tokens + result.output_tokens
                 cost += result.cost_usd
                 expect = case["expect"]
@@ -388,6 +401,7 @@ async def run_live(cases: list[dict], runs: int) -> int:
         f"p95 {latencies[int(len(latencies) * 0.95) - 1]:.2f} s"
     )
     print(f"tokens {tokens}, cost {cost:.5f} USD ({cost / total:.6f} per call)")
+    print_token_averages(llm_results, recalls)
     for tag in sorted(by_tag):
         print(f"  {tag}: {by_tag[tag] - wrong_by_tag[tag]}/{by_tag[tag]}")
     for case_id, results in by_case.items():
@@ -406,6 +420,8 @@ async def run_chain(chains: list[dict], runs: int) -> int:
     from app.services.assistant.understand import understand  # noqa: PLC0415  # needs .env
 
     turns_right = turns_total = chains_stable = 0
+    llm_results: list[LlmResult] = []
+    recalls = watch_recalls()
     for chain in chains:
         is_stable = True
         for _ in range(runs):
@@ -425,7 +441,8 @@ async def run_chain(chains: list[dict], runs: int) -> int:
                     expect = step["expect"]
                     answer = None
                     try:
-                        parsed, _ = await understand(request, max_turns=6, now=NOW)
+                        parsed, result = await understand(request, max_turns=6, now=NOW)
+                        llm_results.append(result)
                         turn = Turn(
                             request, parsed, core=core, weather=FakeWeather(), today=TODAY, now=NOW
                         )
@@ -471,6 +488,7 @@ async def run_chain(chains: list[dict], runs: int) -> int:
         chains_stable += is_stable
     print(f"chain turns right: {turns_right}/{turns_total} = {turns_right / turns_total:.1%}")
     print(f"chains right in all {runs} runs: {chains_stable}/{len(chains)}")
+    print_token_averages(llm_results, recalls)
     return 0
 
 
@@ -585,7 +603,22 @@ def main() -> int:
     parser.add_argument("--mode", choices=["ci", "live", "chain", "search", "ab"], default="ci")
     parser.add_argument(
         "--cases",
-        choices=["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "all"],
+        choices=[
+            "v1",
+            "v2",
+            "v3",
+            "v4",
+            "v5",
+            "v6",
+            "v7",
+            "v8",
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "all",
+        ],
         default="all",
     )
     parser.add_argument("--runs", type=int, default=3)

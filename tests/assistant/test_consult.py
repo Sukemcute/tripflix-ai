@@ -191,7 +191,7 @@ def test_controller_input_has_prefs() -> None:
         request = ChatRequest(conversation_id=uuid4(), message="chill thôi", trip=trip)
         return json.loads(build_understanding_input(request))["trip"]
 
-    assert trip_of(TripContext())["prefs"] is None
+    assert "prefs" not in trip_of(TripContext())
     prefs = TravelPrefs(vibe=["quiet"], budget_per_person=2_000_000)
     assert trip_of(TripContext(prefs=prefs))["prefs"]["budgetPerPerson"] == 2_000_000
 

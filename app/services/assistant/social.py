@@ -15,12 +15,12 @@ from typing import Any
 
 import yaml
 
-from app.services.assistant.controller import CALENDAR_DATE, DATE_WORDS
+from app.services.assistant.controller import CALENDAR_DATE, DATE_WORDS, GREETING
 from app.services.assistant.schemas import Answer, Turn, Understanding
 from app.services.summary.vi_text import normalize_text
 
 LEXICON = Path(__file__).resolve().parents[2] / "lexicons" / "chat" / "abuse.v1.yaml"
-GREETING_TEXT = r"^(?:hi+|hell?o+|hey+|alo+|(?:xin )?chao(?: ban| tripi| cau| nha| ne)*)\W*$"
+GREETING_TEXT = rf"^{GREETING}\W*$"
 REPEAT_AFTER = 2  # the third greeting (or same line) in a row is steered to travel [HIỆU CHỈNH]
 RECENT_USER_TURNS = 6
 # Intents that lead to a Skill and cards. Without a request in the message they run none:

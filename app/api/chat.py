@@ -39,7 +39,7 @@ from app.services.assistant.calendar import now_in_vietnam
 from app.services.assistant.responder import respond, split_for_stream
 from app.services.assistant.schemas import TripContext
 from app.services.assistant.turn import DATE_FACT, Turn
-from app.services.assistant.understand import LlmNotConfiguredError, understand
+from app.services.assistant.understand import RULES_MODEL, LlmNotConfiguredError, understand
 from app.services.summary.pii import mask_pii
 from app.services.usage_events import ChatTurn, ChatTurnEvent, ChatUsage, UsageEvent, publish_usage
 
@@ -49,6 +49,8 @@ router = APIRouter()
 bearer = HTTPBearer(auto_error=False)
 RESPONDER_SECONDS = 4.0
 RESPONDER_MIN_SECONDS = 3.0  # less time left than this: keep the fixed text
+# Social moves decided by code are answered from the pool: a rewrite costs ~5k tokens for nothing.
+RULES_SOCIAL_MOVES = {"greeting", "greeting_intro", "thanks", "ack"}
 
 
 @cache
@@ -236,13 +238,13 @@ async def run_turn(
             elif is_llm_on:
                 yield event("status", {"step": "llm", "outcome": "calling"})
                 try:
-                    parsed, _ = await understand(
+                    parsed, controller_result = await understand(
                         request,
                         now=now,
                         max_turns=gate.history_turns(ticket.identity),
                         on_usage=partial(add_usage, "controller"),
                     )
-                    llm_status = "ok"
+                    llm_status = "rules" if controller_result.model_name == RULES_MODEL else "ok"
                 except LlmNotConfiguredError:
                     llm_status = "missing_config"
                 except LlmUnavailableError:
@@ -285,6 +287,10 @@ async def run_turn(
                 and not any(
                     fact.get("type") in {consultant.CONSULT_FACT, DATE_FACT}
                     for fact in answer.facts
+                )
+                and not (
+                    llm_status == "rules"
+                    and any(fact.get("move") in RULES_SOCIAL_MOVES for fact in answer.facts)
                 )
                 and answer.kind in {"answer", "no_result", "clarify"}
                 and (

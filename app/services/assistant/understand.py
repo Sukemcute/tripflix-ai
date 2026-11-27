@@ -7,10 +7,11 @@ own adapter and breaker (Bảo, 2026-11-16: Controller on OpenAI, Responder on D
 import json
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import date, datetime, time
 from functools import cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from app.clients.llm.base import LlmResult
 from app.clients.llm.deepseek import DeepSeekClient
@@ -21,16 +22,33 @@ from app.core.breaker import CircuitBreaker
 from app.core.config import get_chat_settings
 from app.services.assistant.admission import VIETNAM
 from app.services.assistant.calendar import WEEKDAYS_VI, build_calendar, now_in_vietnam
-from app.services.assistant.controller import ControllerOutput, apply_guards, to_understanding
+from app.services.assistant.controller import (
+    ControllerOutput,
+    apply_guards,
+    controller_json_schema,
+    empty_output,
+    has_date_cue,
+    rules_intent,
+    to_understanding,
+)
+from app.services.assistant.controller_prompt import (
+    build_system_prompt,
+    needed_module,
+    select_modules,
+)
 from app.services.assistant.schemas import ChatRequest, Understanding
 from app.services.assistant.turn import REEL_KINDS
 from app.services.summary.injection import match_injection
 from app.services.summary.pii import mask_pii
-from app.services.summary.schemas import strict_json_schema
 
 logger = logging.getLogger(__name__)
+# Empty trip fields are dropped from the input (tokens); these two are sent whenever set.
+ALWAYS_SENT_TRIP_FIELDS = {"adults", "priceMaxPerNight"}
 Role = Literal["controller", "responder"]
-PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v12.md"
+RULES_MODEL = "rules"  # model_name of a turn that code decided without an LLM call
+# v13 is one block; the per-turn prompt is controller_prompt (core + modules). Kept as the
+# fallback the eval compares against.
+PROMPT = Path(__file__).parents[2] / "prompts" / "assistant-controller.v13.md"
 
 
 class LlmNotConfiguredError(Exception):
@@ -42,6 +60,19 @@ def resolve_now(now: datetime | None, today: date | None) -> datetime:
     if now is not None:
         return now
     return datetime.combine(today, time(8, 0), VIETNAM) if today else now_in_vietnam()
+
+
+def trip_input(fields: dict[str, Any]) -> dict[str, Any]:
+    """Only what is set: null, empty, 0 and false say nothing the model needs."""
+    return {
+        key: value
+        for key, value in fields.items()
+        if (
+            value is not None
+            if key in ALWAYS_SENT_TRIP_FIELDS
+            else value not in (None, [], "", 0, False)
+        )
+    }
 
 
 def build_understanding_input(
@@ -58,39 +89,44 @@ def build_understanding_input(
         {
             "today": f"{today.isoformat()} ({WEEKDAYS_VI[today.weekday()]})",
             # Real days, weekends and holidays: the model reads dates here, never computes them.
-            "calendar": build_calendar(now),
+            # Only when the turn talks about dates (~680 tokens); relative_dates still checks after.
+            **({"calendar": build_calendar(now)} if has_date_cue(request.message, trip) else {}),
             # Only whether a reel is in view: its id never reaches the LLM.
             "hasContextPost": request.context_post_id is not None,
             # What Tripi remembers, without ids or user-written titles (trusted fields only).
             "trip": None
             if trip is None
-            else {
-                "place": trip.place,
-                "dateFrom": trip.date_from.isoformat() if trip.date_from else None,
-                "dateTo": trip.date_to.isoformat() if trip.date_to else None,
-                "adults": trip.adults,
-                "priceMaxPerNight": trip.price_max_per_night,
-                "hasReel": trip.reel_id is not None,
-                "lastCards": [
-                    {"ref": c.ref, "kind": c.kind}
-                    | ({"price": c.price} if c.kind == "stay" and c.price is not None else {})
-                    for c in trip.last_cards
-                ],
-                # Stage B plan: names from Core and OSM, never ids or user-written titles.
-                "originCity": trip.origin_city,
-                "stay": trip.stay.name if trip.stay else None,
-                "planDays": len(trip.days),
-                "planStops": [stop.name for day in trip.days for stop in day][:20],
-                "interests": trip.interests,
-                "mealsOnly": trip.meals_only,
-                "prefs": trip.prefs.model_dump(mode="json", by_alias=True) if trip.prefs else None,
-                "pendingCount": len(trip.pending_flights or trip.pending),
-                "hasChosenFlight": bool(trip.transport and trip.transport.flight_id),
-                # What Tripi just asked for: a short reply ("Vũng tàu") finishes this request.
-                "awaiting": trip.awaiting.model_dump(mode="json", by_alias=True)
-                if trip.awaiting
-                else None,
-            },
+            else trip_input(
+                {
+                    "place": trip.place,
+                    "dateFrom": trip.date_from.isoformat() if trip.date_from else None,
+                    "dateTo": trip.date_to.isoformat() if trip.date_to else None,
+                    "adults": trip.adults,
+                    "priceMaxPerNight": trip.price_max_per_night,
+                    "hasReel": trip.reel_id is not None,
+                    "lastCards": [
+                        {"ref": c.ref, "kind": c.kind}
+                        | ({"price": c.price} if c.kind == "stay" and c.price is not None else {})
+                        for c in trip.last_cards
+                    ],
+                    # Stage B plan: names from Core and OSM, never ids or user-written titles.
+                    "originCity": trip.origin_city,
+                    "stay": trip.stay.name if trip.stay else None,
+                    "planDays": len(trip.days),
+                    "planStops": [stop.name for day in trip.days for stop in day][:20],
+                    "interests": trip.interests,
+                    "mealsOnly": trip.meals_only,
+                    "prefs": trip.prefs.model_dump(mode="json", by_alias=True)
+                    if trip.prefs
+                    else None,
+                    "pendingCount": len(trip.pending_flights or trip.pending),
+                    "hasChosenFlight": bool(trip.transport and trip.transport.flight_id),
+                    # What Tripi just asked for: a short reply ("Vũng tàu") finishes this request.
+                    "awaiting": trip.awaiting.model_dump(mode="json", by_alias=True)
+                    if trip.awaiting
+                    else None,
+                }
+            ),
             # Rules that caught injection in comments (TF44) tag the message; the Controller
             # still only names an intent, so the tag is a hint plus a log line, not a block.
             "suspectedInjection": bool(match_injection(request.message)),
@@ -147,6 +183,20 @@ def get_role_llm(role: Role) -> GuardedLlmClient:
     return GuardedLlmClient(inner, CircuitBreaker(f"chat-{role}"))
 
 
+async def call_controller(
+    system: str, user_input: str, on_usage: Callable[[LlmResult], None] | None
+) -> tuple[LlmResult, ControllerOutput]:
+    result = await get_role_llm("controller").agenerate(
+        system, user_input, controller_json_schema()
+    )
+    if on_usage is not None:
+        on_usage(result)
+    # A cut JSON can still parse into something wrong; never trust it.
+    if result.finish_reason == "length":
+        raise ValueError("controller output was cut")
+    return result, ControllerOutput.model_validate_json(result.output)
+
+
 async def understand(
     request: ChatRequest,
     *,
@@ -159,17 +209,38 @@ async def understand(
     if groups:  # rule names only, never the message
         logger.warning("chat.injection.suspected", extra={"groups": groups})
     now = resolve_now(now, None)
-    result = await get_role_llm("controller").agenerate(
-        PROMPT.read_text(encoding="utf-8"),
-        build_understanding_input(request, max_turns=max_turns, now=now),
-        strict_json_schema(ControllerOutput),
-    )
-    if on_usage is not None:
-        on_usage(result)
-    # A cut JSON can still parse into something wrong; never trust it.
-    if result.finish_reason == "length":
-        raise ValueError("controller output was cut")
-    out = ControllerOutput.model_validate_json(result.output)
+    if (intent := rules_intent(request.message)) is not None:
+        # apply_guards would force this intent anyway: no tokens, no usage event.
+        result = LlmResult(
+            output="",
+            model_name=RULES_MODEL,
+            input_tokens=0,
+            output_tokens=0,
+            finish_reason="stop",
+            latency_ms=0,
+        )
+        out = empty_output(intent)
+    else:
+        user_input = build_understanding_input(request, max_turns=max_turns, now=now)
+        modules = select_modules(request, has_date_cue=has_date_cue(request.message, request.trip))
+        result, out = await call_controller(build_system_prompt(modules), user_input, on_usage)
+        # The model named an intent whose rules are in a module this turn did not load.
+        missing = needed_module(out)
+        is_recalled = missing is not None and missing not in modules
+        if missing is not None and is_recalled:
+            modules = modules | {missing}
+            second, out = await call_controller(build_system_prompt(modules), user_input, on_usage)
+            result = replace(
+                second,
+                input_tokens=result.input_tokens + second.input_tokens,
+                output_tokens=result.output_tokens + second.output_tokens,
+                cost_usd=result.cost_usd + second.cost_usd,
+                latency_ms=(result.latency_ms or 0) + (second.latency_ms or 0),
+            )
+        # Module names only, never the message.
+        logger.info(
+            "chat.controller.modules", extra={"modules": sorted(modules), "recalled": is_recalled}
+        )
     trip = request.trip
     has_reel = bool(
         request.context_post_id
