@@ -588,6 +588,10 @@ def test_reel_named_from_last_cards_is_the_one_opened():
         ("ks trong video này còn phòng cuối tuần không",
          {"intent": "check_room", "hotel_name": "ks trong video này còn phòng cuối tuần không"},
          True, {"hotel_name": ""}),
+        # chain reel-in-view with the modular prompt (27/11): the whole message as hotel_name
+        ("ks trong reel t7 nay con phong k",
+         {"intent": "check_room", "hotel_name": "ks trong reel t7 nay con phong k"},
+         True, {"hotel_name": ""}),
         ("làm giúp bài văn tả cảnh biển", {"intent": "search"}, False, {"intent": "refusal"}),
         ("mình ở sài gòn", {"intent": "plan_trip", "place": "Vũng Tàu"}, False,
          {"intent": "change_transport", "from_city": "TP.HCM"}),

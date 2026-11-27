@@ -736,17 +736,22 @@ EXTRA_DATE_CUE = (
 )
 
 
-def has_date_cue(message: str, trip: TripContext | None) -> bool:
-    """Whether the turn talks about dates; only then does the Controller get the calendar."""
+def says_date(message: str) -> bool:
+    """Whether the message words a day or a date; "3 ngày 2 đêm" is a length, not a date."""
     text = normalize_text(message)
-    if (
+    return bool(
         re.search(DATE_WORDS, text)
         or re.search(EXTRA_DATE_CUE, text)
         or re.search(HOLIDAY_WORD, text)
         or re.search(CALENDAR_DATE, message, re.IGNORECASE)
-        or re.search(NIGHTS_CUE, text)
         or any(re.search(cue, text) for cue in DAY_CUES.values())
-    ):
+    )
+
+
+def has_date_cue(message: str, trip: TripContext | None) -> bool:
+    """Whether the turn talks about dates; only then does the Controller get the calendar."""
+    text = normalize_text(message)
+    if says_date(message):
         return True
     if trip is None:
         return False
@@ -820,6 +825,13 @@ def apply_guards(
     fixed: dict = {}
     if out.day_ref in DAY_CUES and not re.search(DAY_CUES[out.day_ref], text):
         fixed["day_ref"] = "none"
+    if not says_date(message):
+        # Chain eval (27/11): "3 ngày 2 đêm" or "xếp lộ trình 2 ngày" got this_weekend or a start
+        # from the calendar 2 times in 5, the plan was built at once and the follow-up broke.
+        if out.day_ref != "none":
+            fixed["day_ref"] = "none"
+        if out.start is not None or out.end is not None:
+            fixed["start"] = fixed["end"] = None
     if out.day_ref == "this_weekend" and re.search(r"\bcuoi tuan sau\b", text):
         fixed["day_ref"] = (
             "next_weekend"  # stay-02 read "cuối tuần sau" as this weekend 3/3 (26/11)
@@ -846,8 +858,8 @@ def apply_guards(
     name_words = [w for w in normalize_text(out.hotel_name).split() if len(w) > 1]
     if name_words and not all(re.search(rf"\b{re.escape(w)}\b", text) for w in name_words):
         fixed["hotel_name"] = ""
-    if out.hotel_name and re.search(THIS_REEL, normalize_text(out.hotel_name)):
-        fixed["hotel_name"] = ""  # "ks trong video này…" is the reel's hotel, not a name
+    if out.hotel_name and re.search(r"\b(reel|video|clip)\b", normalize_text(out.hotel_name)):
+        fixed["hotel_name"] = ""  # "ks trong reel…" is the reel's hotel, not a name
     if out.reel_query and re.search(THIS_REEL, text):
         # "reel đó", "video này" point at the remembered reel. v5 filled reel_query with the
         # whole sentence, "ngày cuối" or the city (chain reel-6.1, 3/5 on 17/11), and the name
@@ -1012,6 +1024,14 @@ def apply_guards(
         and not re.search(PLAN_CUE, text)
     ):
         intent = "change_transport"  # "mình ở sài gòn" after a plan was plan_trip 3/3 (v5)
+    elif (
+        in_plan
+        and intent in {"plan_trip", "move_stop"}
+        and re.search(r"\b(doi|thay) (chuyen bay|ve bay)\b", text)
+    ):
+        intent = (
+            "change_transport"  # "Doi chuyen bay" without accents was move_stop 2/3 (chain, 27/11)
+        )
     elif intent == "post_itinerary" and re.search(r"\bthoi tiet\b", text):
         intent = "weather"  # "Thời tiết Đà Lạt thứ Bảy" while a reel is open
     elif intent == "refusal" and re.search(IDENTITY_CUE, text):

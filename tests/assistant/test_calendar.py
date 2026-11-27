@@ -149,6 +149,27 @@ def test_guard_fills_start_and_end_from_the_calendar():
     assert (parsed.check_in, parsed.check_out) == (date(2027, 2, 5), date(2027, 2, 9))
 
 
+def test_guard_drops_dates_the_message_never_said():
+    # "3 ngày 2 đêm" is a length: a weekend or calendar date would build the plan at once.
+    said = controller_plan(
+        intent="plan_trip",
+        place="Vũng Tàu",
+        day_ref="this_weekend",
+        start={"day": 21, "month": 11},
+        end={"day": 23, "month": 11},
+    )
+    message = "Lên lịch trình Vũng Tàu 3 ngày 2 đêm, xuất phát từ TP.HCM"
+    out = apply_guards(said, message, has_reel=False, today=THURSDAY)
+    assert (out.day_ref, out.start, out.end) == ("none", None, None)
+    kept = apply_guards(said, "xếp Vũng Tàu cuối tuần 21/11", has_reel=False, today=THURSDAY)
+    assert (kept.day_ref, kept.start) == ("this_weekend", said.start)
+
+
+def test_nights_alone_do_not_send_the_calendar():
+    assert not calendar_sent("Lên lịch trình Vũng Tàu 3 ngày 2 đêm")
+    assert calendar_sent("Lên lịch trình Vũng Tàu 3 ngày 2 đêm cuối tuần này")
+
+
 def test_turn_today_follows_now():
     request = ChatRequest(conversation_id=uuid4(), message="x")
 
@@ -157,3 +178,11 @@ def test_turn_today_follows_now():
             return Turn(request, None, core=client, weather=FakeWeather([]), now=NOW).today
 
     assert asyncio.run(go()) == date(2026, 11, 26)
+
+
+def test_guard_unaccented_flight_change_in_a_plan_is_change_transport():
+    said = controller_plan(intent="move_stop", place="Đà Nẵng")
+    out = apply_guards(said, "Doi chuyen bay", has_reel=False, in_plan=True, today=THURSDAY)
+    assert out.intent == "change_transport"
+    out = apply_guards(said, "Doi chuyen bay", has_reel=False, in_plan=False, today=THURSDAY)
+    assert out.intent == "move_stop"
