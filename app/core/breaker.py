@@ -36,6 +36,10 @@ class CircuitBreaker:
         return max(0.0, self.open_until - self.clock()) if self.is_open() else 0.0
 
     def record_success(self) -> None:
+        if self.is_open():
+            # A call sent before it opened came back late: no sign the provider is back
+            # (load test 26/11: such answers closed it at once, 34 opens in a minute).
+            return
         if self.failures >= self.threshold:
             logger.info("breaker %s closed", self.name)
         self.failures = 0
