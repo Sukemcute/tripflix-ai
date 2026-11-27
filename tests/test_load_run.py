@@ -113,3 +113,10 @@ def test_summarize_splits_done_full_and_failures():
     assert first["degraded"] == {"responder": 1}
     assert first["totalP95"] == 6
     assert (tail["stage"], tail["rate"]) == ("tail", None)
+
+
+def test_summarize_counts_a_code_decided_turn_as_full():
+    results = [turn(0, 1, llm="rules"), turn(1, 4), turn(2, 5, llm="http_429")]
+    (row,) = summarize(results, [(0.05, 60)])
+    assert row["fullPct"] == 66.7
+    assert row["llm"] == {"http_429": 1}

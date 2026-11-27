@@ -229,6 +229,10 @@ def peak_inflight(results: list[TurnResult]) -> int:
     return peak
 
 
+# "rules": code decided the turn, so there was no LLM call to fail.
+LLM_FINE = ("ok", "rules")
+
+
 def summarize(results: list[TurnResult], stages: list[tuple[float, float]]) -> list[dict]:
     rows = []
     names = [str(i + 1) for i in range(len(stages))] + ["tail"]
@@ -237,7 +241,7 @@ def summarize(results: list[TurnResult], stages: list[tuple[float, float]]) -> l
         if not turns:
             continue
         done = [r for r in turns if r.outcome == "done"]
-        full = [r for r in done if r.llm == "ok" and not r.degraded]
+        full = [r for r in done if r.llm in LLM_FINE and not r.degraded]
         first = [r.first_text for r in done if r.first_text is not None]
         totals = [r.total for r in done]
         seconds = stages[i][1] if name != "tail" else None
@@ -256,7 +260,7 @@ def summarize(results: list[TurnResult], stages: list[tuple[float, float]]) -> l
                 "totalP95": percentile(totals, 95),
                 "totalP99": percentile(totals, 99),
                 "failures": dict(Counter(r.outcome for r in turns if r.outcome != "done")),
-                "llm": dict(Counter(r.llm or "-" for r in turns if r.llm != "ok")),
+                "llm": dict(Counter(r.llm or "-" for r in turns if r.llm not in LLM_FINE)),
                 "degraded": dict(Counter(d for r in done for d in r.degraded)),
                 "costUsd": round(sum(r.cost_usd for r in turns), 4),
             }
